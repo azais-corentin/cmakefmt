@@ -20,13 +20,13 @@ pub enum Token {
     #[regex(r"#\[=*\[", bracket_comment_callback, priority = 10)]
     BracketComment,
 
-    #[regex(r"#[^\n]*", priority = 1)]
+    #[token("#", line_comment_callback)]
     LineComment,
 
     #[token("\"", quoted_arg_callback)]
     QuotedArgument,
 
-    #[regex(r#"([^ \t\r\n()#"\\]|\\.)+"#)]
+    #[regex(r#"([^ \t\r\n()#"\\\[]|\\.)([^ \t\r\n()#"\\]|\\.)*"#)]
     UnquotedText,
 }
 
@@ -66,6 +66,30 @@ fn bracket_comment_callback(lex: &mut Lexer<Token>) -> bool {
     } else {
         false
     }
+}
+
+fn line_comment_callback(lex: &mut Lexer<Token>) -> bool {
+    let remainder = lex.remainder();
+    // If `#` is followed by `[=*[`, this is a bracket comment — reject so
+    // the higher-priority BracketComment token can match instead.
+    let bytes = remainder.as_bytes();
+    if bytes.first() == Some(&b'[') {
+        // Check for `[=*[` pattern
+        let mut j = 1;
+        while j < bytes.len() && bytes[j] == b'=' {
+            j += 1;
+        }
+        if j < bytes.len() && bytes[j] == b'[' {
+            return false;
+        }
+    }
+    // Consume to end of line
+    if let Some(nl) = remainder.find('\n') {
+        lex.bump(nl);
+    } else {
+        lex.bump(remainder.len());
+    }
+    true
 }
 
 fn quoted_arg_callback(lex: &mut Lexer<Token>) -> bool {

@@ -1,0 +1,3 @@
+### {"commandCase": "preserve"}
+
+project(Foo)

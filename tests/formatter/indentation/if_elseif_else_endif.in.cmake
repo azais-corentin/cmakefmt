@@ -1,0 +1,10 @@
+
+if(A)
+message("a")
+elseif(B)
+message("b")
+elseif(C)
+message("c")
+else()
+message("other")
+endif()

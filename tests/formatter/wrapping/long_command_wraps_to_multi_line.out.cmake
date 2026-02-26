@@ -1,0 +1,9 @@
+target_link_libraries(
+    my_target
+    PUBLIC
+    libfoo
+    libbar
+    libbaz
+    libanother_lib
+    libyet_another
+)

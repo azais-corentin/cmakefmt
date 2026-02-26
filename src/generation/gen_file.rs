@@ -36,9 +36,10 @@ fn is_block_closer(name: &str) -> bool {
 
 pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems {
     let mut items = PrintItems::new();
-    let mut consecutive_blanks: u8 = 0;
+    let mut pending_blanks: u8 = 0;
     let mut indent_level: u32 = 0;
     let mut first = true;
+    let mut just_opened_block = false;
 
     // Strip trailing blank lines — the formatter adds its own trailing newline
     let elements: &[FileElement] = &file.elements;
@@ -50,21 +51,28 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
     let elements = &elements[..last_content];
 
     for element in elements {
-        match element {
-            FileElement::BlankLine => {
-                // Only emit blank lines between content, not before first content
-                if !first {
-                    consecutive_blanks += 1;
-                    if consecutive_blanks <= config.max_blank_lines {
-                        items.push_signal(Signal::NewLine);
-                    }
-                }
-                continue;
+        if let FileElement::BlankLine = element {
+            if !first && !just_opened_block {
+                pending_blanks = (pending_blanks + 1).min(config.max_blank_lines);
             }
-            _ => {
-                consecutive_blanks = 0;
-            }
+            continue;
         }
+
+        // Suppress blank lines before block closers/middles
+        let is_closer_or_middle = matches!(element, FileElement::Command(cmd) if {
+            let name = cmd.name.text(source);
+            is_block_closer(name) || is_block_middle(name)
+        });
+        if is_closer_or_middle {
+            pending_blanks = 0;
+        }
+
+        // Emit pending blank lines
+        for _ in 0..pending_blanks {
+            items.push_signal(Signal::NewLine);
+        }
+        pending_blanks = 0;
+        just_opened_block = false;
 
         match element {
             FileElement::Command(cmd) => {
@@ -81,7 +89,7 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
                 first = false;
 
                 // Emit indentation
-                let cmd_items = gen_command(cmd, source, config);
+                let cmd_items = gen_command(cmd, source, config, indent_level);
                 if indent_level > 0 {
                     items.extend(ir_helpers::with_indent_times(cmd_items, indent_level));
                 } else {
@@ -91,6 +99,7 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
                 // Adjust indent AFTER emitting for openers/middles
                 if is_block_opener(cmd_name) || is_block_middle(cmd_name) {
                     indent_level += 1;
+                    just_opened_block = true;
                 }
             }
             FileElement::LineComment(span) => {
@@ -98,7 +107,7 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
                     items.push_signal(Signal::NewLine);
                 }
                 first = false;
-                let comment_text = span.text(source);
+                let comment_text = span.text(source).trim_end();
                 let comment_items = ir_helpers::gen_from_raw_string(comment_text);
                 if indent_level > 0 {
                     items.extend(ir_helpers::with_indent_times(comment_items, indent_level));
@@ -124,9 +133,7 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
     }
 
     // Ensure trailing newline
-    if !first {
-        items.push_signal(Signal::NewLine);
-    }
+    items.push_signal(Signal::NewLine);
 
     items
 }

@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use dprint_plugin_cmake::{format_text, Configuration};
+use dprint_plugin_cmake::{CaseStyle, Configuration, format_text};
 
 #[test]
 fn test_formatter_files() {
@@ -29,17 +29,22 @@ fn test_formatter_files() {
         let raw_input = std::fs::read_to_string(in_path).unwrap();
         let expected = std::fs::read_to_string(&out_path).unwrap();
 
-        // Strip ### header line if present
-        let input = if raw_input.starts_with("### ") {
-            match raw_input.find('\n') {
+        // Strip ### header line if present and try to parse config
+        let (input, config) = if raw_input.starts_with("### ") {
+            let header_end = raw_input.find('\n');
+            let header_content = match header_end {
+                Some(pos) => &raw_input[4..pos],
+                None => &raw_input[4..],
+            };
+            let remaining = match header_end {
                 Some(pos) => &raw_input[pos + 1..],
                 None => "",
-            }
+            };
+            let config = parse_config_header(header_content);
+            (remaining, config)
         } else {
-            &raw_input
+            (raw_input.as_str(), Configuration::default())
         };
-
-        let config = Configuration::default();
         let cmake_path = Path::new("CMakeLists.txt");
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -178,4 +183,134 @@ fn simple_diff(expected: &str, actual: &str) -> String {
     }
 
     diff
+}
+
+fn parse_config_header(header: &str) -> Configuration {
+    let mut config = Configuration::default();
+
+    // Try JSON first (camelCase keys like {"commandCase": "preserve"})
+    if let Ok(map) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(header) {
+        for (key, value) in &map {
+            match key.as_str() {
+                "commandCase" => {
+                    if let Some(s) = value.as_str() {
+                        config.command_case = match s {
+                            "upper" => CaseStyle::Upper,
+                            "preserve" => CaseStyle::Preserve,
+                            _ => CaseStyle::Lower,
+                        };
+                    }
+                }
+                "keywordCase" => {
+                    if let Some(s) = value.as_str() {
+                        config.keyword_case = match s {
+                            "lower" => CaseStyle::Lower,
+                            "preserve" => CaseStyle::Preserve,
+                            _ => CaseStyle::Upper,
+                        };
+                    }
+                }
+                "lineWidth" => {
+                    if let Some(n) = value.as_u64() {
+                        config.line_width = n as u32;
+                    }
+                }
+                "indentWidth" => {
+                    if let Some(n) = value.as_u64() {
+                        config.indent_width = n as u8;
+                    }
+                }
+                "useTabs" => {
+                    if let Some(b) = value.as_bool() {
+                        config.use_tabs = b;
+                    }
+                }
+                "sortLists" => {
+                    if let Some(b) = value.as_bool() {
+                        config.sort_lists = b;
+                    }
+                }
+                "closingParenNewline" => {
+                    if let Some(b) = value.as_bool() {
+                        config.closing_paren_newline = b;
+                    }
+                }
+                _ => {}
+            }
+        }
+        return config;
+    }
+
+    // Fall back to gersemi-style {key: value} format
+    let content = header.trim();
+    let content = content.strip_prefix('{').unwrap_or(content);
+    let content = content.strip_suffix('}').unwrap_or(content);
+    let content = content.trim();
+
+    if content.is_empty() {
+        return config;
+    }
+
+    for pair in split_respecting_brackets(content) {
+        let pair = pair.trim();
+        if let Some((key, value)) = pair.split_once(':') {
+            let key = key.trim().trim_matches('"');
+            let value = value.trim().trim_matches('"');
+            match key {
+                "line_length" => {
+                    if let Ok(n) = value.parse::<u32>() {
+                        config.line_width = n;
+                    }
+                }
+                "indent" => {
+                    if value == "tabs" {
+                        config.use_tabs = true;
+                    } else if let Ok(n) = value.parse::<u8>() {
+                        config.indent_width = n;
+                    }
+                }
+                "commandCase" | "command_case" => {
+                    config.command_case = match value {
+                        "upper" => CaseStyle::Upper,
+                        "preserve" => CaseStyle::Preserve,
+                        _ => CaseStyle::Lower,
+                    };
+                }
+                "keywordCase" | "keyword_case" => {
+                    config.keyword_case = match value {
+                        "lower" => CaseStyle::Lower,
+                        "preserve" => CaseStyle::Preserve,
+                        _ => CaseStyle::Upper,
+                    };
+                }
+                "sortLists" | "sort_lists" => {
+                    config.sort_lists = value == "true";
+                }
+                _ => { /* ignore unknown keys for forward compat */ }
+            }
+        }
+    }
+
+    config
+}
+
+fn split_respecting_brackets(s: &str) -> Vec<&str> {
+    let mut results = Vec::new();
+    let mut depth = 0;
+    let mut start = 0;
+    for (i, c) in s.char_indices() {
+        match c {
+            '[' => depth += 1,
+            ']' => depth -= 1,
+            ',' if depth == 0 => {
+                results.push(&s[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    if start < s.len() {
+        results.push(&s[start..]);
+    }
+    results
 }

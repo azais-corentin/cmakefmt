@@ -1,0 +1,5 @@
+foreach(ITEM IN LISTS MY_LIST)
+    if(ITEM)
+        message("found: ${ITEM}")
+    endif()
+endforeach()

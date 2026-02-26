@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use logos::Logos;
 
 use super::ast::{Argument, CommandInvocation, File, FileElement, Span};
@@ -87,10 +87,18 @@ fn parse_file_elements(p: &mut Parser) -> Result<Vec<FileElement>> {
             Some(Token::BracketComment) => {
                 let (_, span) = p.advance().unwrap();
                 elements.push(FileElement::BracketComment(span));
+                // Consume trailing newline — it's the end of the comment, not a blank line
+                if matches!(p.peek(), Some(Token::Newline)) {
+                    p.advance();
+                }
             }
             Some(Token::LineComment) => {
                 let (_, span) = p.advance().unwrap();
                 elements.push(FileElement::LineComment(span));
+                // Consume trailing newline — it's the end of the comment, not a blank line
+                if matches!(p.peek(), Some(Token::Newline)) {
+                    p.advance();
+                }
             }
             Some(Token::UnquotedText) => {
                 // This should be a command invocation: identifier '(' args ')'
@@ -119,9 +127,10 @@ fn parse_command_invocation(p: &mut Parser) -> Result<CommandInvocation> {
     p.skip_spaces();
 
     // Optional space_before_paren handling — just consume '('
-    match p.peek() {
+    let open_paren_span = match p.peek() {
         Some(Token::LParen) => {
-            p.advance();
+            let (_, open_span) = p.advance().unwrap();
+            open_span
         }
         other => {
             bail!(
@@ -131,15 +140,16 @@ fn parse_command_invocation(p: &mut Parser) -> Result<CommandInvocation> {
                 other
             );
         }
-    }
+    };
 
     // Parse arguments
     let arguments = parse_arguments(p)?;
 
     // Expect ')'
-    match p.peek() {
+    let close_paren_span = match p.peek() {
         Some(Token::RParen) => {
-            p.advance();
+            let (_, close_span) = p.advance().unwrap();
+            close_span
         }
         other => {
             bail!(
@@ -149,7 +159,7 @@ fn parse_command_invocation(p: &mut Parser) -> Result<CommandInvocation> {
                 other
             );
         }
-    }
+    };
 
     // Consume optional trailing whitespace + line comment before newline
     p.skip_spaces();
@@ -168,6 +178,8 @@ fn parse_command_invocation(p: &mut Parser) -> Result<CommandInvocation> {
 
     Ok(CommandInvocation {
         name: name_span,
+        open_paren: open_paren_span,
+        close_paren: close_paren_span,
         arguments,
         trailing_comment,
     })
@@ -267,9 +279,9 @@ fn parse_single_argument(p: &mut Parser) -> Result<Argument> {
             Ok(Argument::Unquoted(Span::new(span.start, end)))
         }
         Some(Token::BracketComment) => {
-            // Bracket comment inside argument list — treat like line comment
+            // Bracket comment inside argument list — distinct from line comment
             let (_, span) = p.advance().unwrap();
-            Ok(Argument::LineComment(span))
+            Ok(Argument::BracketComment(span))
         }
         other => {
             bail!("expected argument, got {:?}", other);

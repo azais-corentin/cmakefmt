@@ -29,7 +29,6 @@ pub enum CaseStyle {
     Preserve,
 }
 
-
 impl Default for Configuration {
     fn default() -> Self {
         Self {

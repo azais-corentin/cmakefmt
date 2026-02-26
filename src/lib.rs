@@ -6,5 +6,5 @@ mod parser;
 #[cfg(target_arch = "wasm32")]
 mod wasm_plugin;
 
-pub use configuration::{resolve_config, CaseStyle, Configuration, NewLineKind};
+pub use configuration::{CaseStyle, Configuration, NewLineKind, resolve_config};
 pub use format_text::format_text;

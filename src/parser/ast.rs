@@ -34,6 +34,8 @@ pub enum FileElement {
 #[derive(Debug, Clone)]
 pub struct CommandInvocation {
     pub name: Span,
+    pub open_paren: Span,
+    pub close_paren: Span,
     pub arguments: Vec<Argument>,
     /// Optional line comment after the closing paren on the same line.
     pub trailing_comment: Option<Span>,
@@ -52,4 +54,6 @@ pub enum Argument {
     ParenGroup { arguments: Vec<Argument> },
     /// A line comment inside an argument list (forces line break).
     LineComment(Span),
+    /// A bracket comment inside an argument list (can be inline).
+    BracketComment(Span),
 }

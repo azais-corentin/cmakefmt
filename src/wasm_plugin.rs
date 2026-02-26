@@ -7,7 +7,7 @@ use dprint_core::plugins::{
     PluginResolveConfigurationResult, SyncFormatRequest, SyncHostFormatRequest, SyncPluginHandler,
 };
 
-use crate::configuration::{resolve_config, Configuration};
+use crate::configuration::{Configuration, resolve_config};
 use crate::format_text::format_text;
 
 struct CmakePluginHandler;

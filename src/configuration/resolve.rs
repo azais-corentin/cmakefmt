@@ -1,5 +1,5 @@
 use dprint_core::configuration::{
-    get_unknown_property_diagnostics, get_value, ConfigKeyMap, GlobalConfiguration,
+    ConfigKeyMap, GlobalConfiguration, get_unknown_property_diagnostics, get_value,
 };
 use dprint_core::plugins::{FileMatchingInfo, PluginResolveConfigurationResult};
 

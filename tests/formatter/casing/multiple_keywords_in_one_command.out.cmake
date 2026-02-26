@@ -1,0 +1,9 @@
+target_sources(
+    mylib
+    PUBLIC
+    include/mylib.h
+    PRIVATE
+    src/mylib.cpp
+    INTERFACE
+    include/extra.h
+)

@@ -1,0 +1,2 @@
+
+set(VAR [=[hello world]=])

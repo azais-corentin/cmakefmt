@@ -1,0 +1,2 @@
+
+message() # empty call

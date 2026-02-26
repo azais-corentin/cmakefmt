@@ -1,0 +1,5 @@
+if(CONDITION)
+    message("yes")
+else()
+    message("no")
+endif()
