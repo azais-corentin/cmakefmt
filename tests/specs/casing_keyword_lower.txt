@@ -1,0 +1,23 @@
+~~ keywordCase: lower ~~
+== keywordCase lower: uppercase keywords lowercased ==
+target_link_libraries(foo PUBLIC bar PRIVATE baz)
+[expect]
+target_link_libraries(foo public bar private baz)
+
+== keywordCase lower: already lowercase unchanged ==
+target_link_libraries(foo public bar private baz)
+[expect]
+target_link_libraries(foo public bar private baz)
+
+== keywordCase lower: multiple keywords lowercased ==
+target_sources(mylib public include/mylib.h private src/mylib.cpp interface include/extra.h)
+[expect]
+target_sources(
+  mylib
+  public
+  include/mylib.h
+  private
+  src/mylib.cpp
+  interface
+  include/extra.h
+)

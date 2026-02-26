@@ -1,0 +1,50 @@
+~~ sortLists: true ~~
+== set args not sorted (non-sortable command) ==
+set(VAR c b a)
+[expect]
+set(VAR c b a)
+
+== target_link_libraries single PUBLIC group ==
+target_link_libraries(foo PUBLIC c_lib a_lib b_lib)
+[expect]
+target_link_libraries(foo PUBLIC a_lib b_lib c_lib)
+
+== target_link_libraries multiple groups ==
+target_link_libraries(foo PUBLIC c_lib a_lib b_lib PRIVATE z_lib x_lib)
+[expect]
+target_link_libraries(foo PUBLIC a_lib b_lib c_lib PRIVATE x_lib z_lib)
+
+== target_link_libraries INTERFACE group ==
+target_link_libraries(foo INTERFACE z_lib a_lib m_lib)
+[expect]
+target_link_libraries(foo INTERFACE a_lib m_lib z_lib)
+
+== target_include_directories sorted ==
+target_include_directories(foo PUBLIC include/z include/a include/m)
+[expect]
+target_include_directories(foo PUBLIC include/a include/m include/z)
+
+== target_compile_options sorted ==
+target_compile_options(foo PRIVATE -Wextra -Wall -Werror)
+[expect]
+target_compile_options(foo PRIVATE -Wall -Werror -Wextra)
+
+== target_compile_definitions sorted ==
+target_compile_definitions(foo PUBLIC Z_FLAG A_FLAG M_FLAG)
+[expect]
+target_compile_definitions(foo PUBLIC A_FLAG M_FLAG Z_FLAG)
+
+== case-insensitive ordering ==
+target_link_libraries(foo PUBLIC Blib alib Clib)
+[expect]
+target_link_libraries(foo PUBLIC alib Blib Clib)
+
+== already sorted is idempotent ==
+target_link_libraries(foo PUBLIC a_lib b_lib c_lib PRIVATE x_lib z_lib)
+[expect]
+target_link_libraries(foo PUBLIC a_lib b_lib c_lib PRIVATE x_lib z_lib)
+
+== args before first keyword not sorted ==
+target_link_libraries(foo z_dep a_dep PUBLIC sorted_b sorted_a)
+[expect]
+target_link_libraries(foo z_dep a_dep PUBLIC sorted_a sorted_b)

@@ -1,0 +1,125 @@
+== standalone line comment ==
+# This is a comment
+[expect]
+# This is a comment
+
+== multiple standalone comments ==
+# First comment
+
+# Second comment
+[expect]
+# First comment
+
+# Second comment
+
+== comment between commands ==
+message(STATUS "before")
+# separator comment
+
+message(STATUS "after")
+[expect]
+message(STATUS "before")
+# separator comment
+
+message(STATUS "after")
+
+== trailing comment after command ==
+add_executable(foo main.cpp) # build foo
+[expect]
+add_executable(foo main.cpp) # build foo
+
+== trailing comment normalizes command case ==
+ADD_EXECUTABLE(foo main.cpp) # build foo
+[expect]
+add_executable(foo main.cpp) # build foo
+
+== comment inside argument list forces multi-line ==
+target_link_libraries(foo # libs
+  bar baz)
+[expect]
+target_link_libraries(
+  foo # libs
+  bar
+  baz
+)
+
+== bracket comment at file level ==
+#[[This is a bracket comment]]
+[expect]
+#[[This is a bracket comment]]
+
+== bracket comment between commands ==
+message(STATUS "a")
+#[[block comment]]
+
+message(STATUS "b")
+[expect]
+message(STATUS "a")
+#[[block comment]]
+
+message(STATUS "b")
+
+== comment indented inside if block ==
+if(CONDITION)
+  # comment inside block
+
+  message(STATUS "hello")
+endif()
+[expect]
+if(CONDITION)
+  # comment inside block
+
+  message(STATUS "hello")
+endif()
+
+== comment indented inside nested blocks ==
+if(OUTER)
+  if(INNER)
+    # deeply indented comment
+
+    message(STATUS "nested")
+  endif()
+endif()
+[expect]
+if(OUTER)
+  if(INNER)
+    # deeply indented comment
+
+    message(STATUS "nested")
+  endif()
+endif()
+
+== comment before else stays at if level ==
+if(COND)
+  message(STATUS "yes")
+  # before else
+
+else()
+  message(STATUS "no")
+endif()
+[expect]
+if(COND)
+  message(STATUS "yes")
+  # before else
+
+else()
+  message(STATUS "no")
+endif()
+
+== trailing comment with no args ==
+message() # empty call
+[expect]
+message() # empty call
+
+== comment after long command that wraps ==
+target_link_libraries(mytarget PUBLIC libfoo libbar libbaz liblongname libextra2) # link deps
+[expect]
+target_link_libraries(
+  mytarget
+  PUBLIC
+  libfoo
+  libbar
+  libbaz
+  liblongname
+  libextra2
+) # link deps

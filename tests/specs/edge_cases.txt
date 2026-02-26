@@ -1,0 +1,54 @@
+== empty file ==
+
+[expect]
+
+== already formatted stays unchanged ==
+set(VAR a b c)
+[expect]
+set(VAR a b c)
+
+== bracket argument preserved verbatim ==
+set(VAR [=[hello world]=])
+[expect]
+set(VAR [=[hello world]=])
+
+== nested parentheses in if ==
+if((A AND B))
+  message(STATUS "yes")
+endif()
+[expect]
+if((A AND B))
+  message(STATUS "yes")
+endif()
+
+== generator expression preserved ==
+target_link_libraries(foo $<$<BOOL:${flag}>:bar>)
+[expect]
+target_link_libraries(foo $<$<BOOL:${flag}>:bar>)
+
+== quoted arg with escape sequences ==
+message("hello\nworld")
+[expect]
+message("hello\nworld")
+
+== semicolons in quoted arg preserved ==
+set(VAR "a;b;c")
+[expect]
+set(VAR "a;b;c")
+
+== multiple blank lines collapsed to one ==
+project(MyProject)
+
+
+
+cmake_minimum_required(VERSION 3.20)
+
+
+
+enable_testing()
+[expect]
+project(MyProject)
+
+cmake_minimum_required(VERSION 3.20)
+
+enable_testing()

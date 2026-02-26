@@ -1,0 +1,29 @@
+[package]
+name = "dprint-plugin-cmake"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "CMake formatter plugin for dprint"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "cmakefmt"
+path = "src/bin/cmakefmt.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4.5.60", features = ["derive"] }
+dprint-core = { version = "0.67", features = ["formatting", "wasm"] }
+glob = "0.3.3"
+logos = "0.14"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+
+[dev-dependencies]
+dprint-development = "0.10"
+
+[profile.release]
+lto = true
+opt-level = "s"

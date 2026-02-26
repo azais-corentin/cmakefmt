@@ -1,0 +1,23 @@
+[tasks.build]
+description = "Build the WASM plugin (debug)"
+run = "cargo build --target wasm32-unknown-unknown"
+
+[tasks.release]
+description = "Build optimized WASM plugin"
+run = "cargo build --release --target wasm32-unknown-unknown"
+
+[tasks.test]
+description = "Run all tests on host target"
+run = "cargo test"
+
+[tasks.fmt]
+description = "Format sample files with the plugin"
+run = "dprint fmt --plugins ./target/wasm32-unknown-unknown/release/dprint_plugin_cmake.wasm"
+
+[tasks.check]
+description = "Clippy + rustfmt check"
+run = ["cargo clippy -- -D warnings", "cargo fmt --check"]
+
+[tasks.size]
+description = "Report WASM binary size"
+run = "ls -lh target/wasm32-unknown-unknown/release/*.wasm"

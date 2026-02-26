@@ -1,0 +1,15 @@
+~~ keywordCase: preserve ~~
+== keywordCase preserve: uppercase unchanged ==
+target_link_libraries(foo PUBLIC bar PRIVATE baz)
+[expect]
+target_link_libraries(foo PUBLIC bar PRIVATE baz)
+
+== keywordCase preserve: lowercase unchanged ==
+target_link_libraries(foo public bar private baz)
+[expect]
+target_link_libraries(foo public bar private baz)
+
+== keywordCase preserve: mixed case unchanged ==
+target_link_libraries(foo Public bar Private baz)
+[expect]
+target_link_libraries(foo Public bar Private baz)

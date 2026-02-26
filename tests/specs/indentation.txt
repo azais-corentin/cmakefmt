@@ -1,0 +1,194 @@
+== simple if/endif ==
+if(CONDITION)
+message("hello")
+endif()
+[expect]
+if(CONDITION)
+  message("hello")
+endif()
+
+== if/else/endif ==
+if(CONDITION)
+message("yes")
+else()
+message("no")
+endif()
+[expect]
+if(CONDITION)
+  message("yes")
+else()
+  message("no")
+endif()
+
+== if/elseif/else/endif ==
+if(A)
+message("a")
+elseif(B)
+message("b")
+elseif(C)
+message("c")
+else()
+message("other")
+endif()
+[expect]
+if(A)
+  message("a")
+elseif(B)
+  message("b")
+elseif(C)
+  message("c")
+else()
+  message("other")
+endif()
+
+== already correctly indented if chain (idempotent) ==
+if(A)
+  message("a")
+elseif(B)
+  message("b")
+else()
+  message("other")
+endif()
+[expect]
+if(A)
+  message("a")
+elseif(B)
+  message("b")
+else()
+  message("other")
+endif()
+
+== nested if inside foreach ==
+foreach(ITEM IN LISTS MY_LIST)
+if(ITEM)
+message("found: ${ITEM}")
+endif()
+endforeach()
+[expect]
+foreach(ITEM IN LISTS MY_LIST)
+  if(ITEM)
+    message("found: ${ITEM}")
+  endif()
+endforeach()
+
+== function/endfunction ==
+function(my_func ARG1 ARG2)
+set(RESULT "${ARG1}_${ARG2}")
+message("result: ${RESULT}")
+endfunction()
+[expect]
+function(my_func ARG1 ARG2)
+  set(RESULT "${ARG1}_${ARG2}")
+  message("result: ${RESULT}")
+endfunction()
+
+== macro/endmacro ==
+macro(my_macro ARG)
+set(${ARG}_DONE TRUE)
+message("done: ${ARG}")
+endmacro()
+[expect]
+macro(my_macro ARG)
+  set(${ARG}_DONE TRUE)
+  message("done: ${ARG}")
+endmacro()
+
+== while/endwhile ==
+while(NOT DONE)
+do_step()
+check_done(DONE)
+endwhile()
+[expect]
+while(NOT DONE)
+  do_step()
+  check_done(DONE)
+endwhile()
+
+== deeply nested three levels ==
+if(A)
+foreach(X IN LISTS LIST)
+while(NOT DONE)
+message("deep")
+endwhile()
+endforeach()
+endif()
+[expect]
+if(A)
+  foreach(X IN LISTS LIST)
+    while(NOT DONE)
+      message("deep")
+    endwhile()
+  endforeach()
+endif()
+
+== wrong over-indentation is corrected ==
+if(CONDITION)
+      message("too deep")
+endif()
+[expect]
+if(CONDITION)
+  message("too deep")
+endif()
+
+== block/endblock ==
+block()
+set(X 1)
+message("${X}")
+endblock()
+[expect]
+block()
+  set(X 1)
+  message("${X}")
+endblock()
+
+== comments inside blocks are indented ==
+if(CONDITION)
+# this is a comment
+message("hello")
+# trailing comment
+endif()
+[expect]
+if(CONDITION)
+  # this is a comment
+
+  message("hello")
+  # trailing comment
+
+endif()
+
+== comment between elseif branches ==
+if(A)
+# branch a
+message("a")
+elseif(B)
+# branch b
+message("b")
+endif()
+[expect]
+if(A)
+  # branch a
+
+  message("a")
+elseif(B)
+  # branch b
+
+  message("b")
+endif()
+
+== four-space indent ==
+if(CONDITION)
+message("hello")
+endif()
+[expect]
+if(CONDITION)
+  message("hello")
+endif()
+
+== tab indent ==
+if(CONDITION)
+message("hello")
+endif()
+[expect]
+if(CONDITION)
+  message("hello")
+endif()
