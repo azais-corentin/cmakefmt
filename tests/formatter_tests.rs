@@ -60,6 +60,25 @@ fn test_formatter_files() {
                         simple_diff(&expected, &formatted)
                     ));
                 }
+                // Idempotency: format the output again
+                match format_text(cmake_path, &formatted, &config) {
+                    Ok(None) => { /* Already formatted — pass */ }
+                    Ok(Some(reformatted)) => {
+                        if reformatted != formatted {
+                            failures.push(format!(
+                                "IDEMPOTENCY: {}\nSecond format produced different output\n{}",
+                                in_path.display(),
+                                simple_diff(&formatted, &reformatted)
+                            ));
+                        }
+                    }
+                    Err(e) => {
+                        failures.push(format!(
+                            "IDEMPOTENCY ERROR: {}\nSecond format failed: {e}",
+                            in_path.display()
+                        ));
+                    }
+                }
             }
             Ok(Ok(None)) => {
                 // No change — input already formatted; it should match expected
@@ -69,6 +88,25 @@ fn test_formatter_files() {
                         in_path.display(),
                         simple_diff(&expected, input)
                     ));
+                }
+                // Idempotency: format input again (it was already formatted)
+                match format_text(cmake_path, input, &config) {
+                    Ok(None) => { /* Still formatted — pass */ }
+                    Ok(Some(reformatted)) => {
+                        if reformatted != input {
+                            failures.push(format!(
+                                "IDEMPOTENCY: {}\nRe-formatting already-formatted input changed it\n{}",
+                                in_path.display(),
+                                simple_diff(input, &reformatted)
+                            ));
+                        }
+                    }
+                    Err(e) => {
+                        failures.push(format!(
+                            "IDEMPOTENCY ERROR: {}\nRe-format of unchanged input failed: {e}",
+                            in_path.display()
+                        ));
+                    }
                 }
             }
             Ok(Err(_)) => {
