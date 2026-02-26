@@ -34,7 +34,7 @@ impl Default for Configuration {
     fn default() -> Self {
         Self {
             line_width: 80,
-            indent_width: 2,
+            indent_width: 4,
             use_tabs: false,
             new_line_kind: NewLineKind::Auto,
             command_case: CaseStyle::Lower,

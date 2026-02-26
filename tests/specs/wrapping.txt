@@ -8,13 +8,13 @@ message(hello world)
 target_link_libraries(my_target public libfoo libbar libbaz libanother_lib libyet_another)
 [expect]
 target_link_libraries(
-  my_target
-  PUBLIC
-  libfoo
-  libbar
-  libbaz
-  libanother_lib
-  libyet_another
+    my_target
+    PUBLIC
+    libfoo
+    libbar
+    libbaz
+    libanother_lib
+    libyet_another
 )
 
 == moderate command wraps at narrow line width ==
@@ -31,11 +31,11 @@ list(APPEND MY_LIST alpha beta gamma delta epsilon zeta eta theta iota kappa)
 target_link_libraries(my_target PUBLIC libfoo libbar libbaz libanother_lib libyet_another)
 [expect]
 target_link_libraries(
-  my_target
-  PUBLIC
-  libfoo
-  libbar
-  libbaz
-  libanother_lib
-  libyet_another
+    my_target
+    PUBLIC
+    libfoo
+    libbar
+    libbaz
+    libanother_lib
+    libyet_another
 )

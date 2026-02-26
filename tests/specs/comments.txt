@@ -38,9 +38,9 @@ target_link_libraries(foo # libs
   bar baz)
 [expect]
 target_link_libraries(
-  foo # libs
-  bar
-  baz
+    foo # libs
+    bar
+    baz
 )
 
 == bracket comment at file level ==
@@ -67,9 +67,9 @@ if(CONDITION)
 endif()
 [expect]
 if(CONDITION)
-  # comment inside block
+    # comment inside block
 
-  message(STATUS "hello")
+    message(STATUS "hello")
 endif()
 
 == comment indented inside nested blocks ==
@@ -82,11 +82,11 @@ if(OUTER)
 endif()
 [expect]
 if(OUTER)
-  if(INNER)
-    # deeply indented comment
+    if(INNER)
+        # deeply indented comment
 
-    message(STATUS "nested")
-  endif()
+        message(STATUS "nested")
+    endif()
 endif()
 
 == comment before else stays at if level ==
@@ -99,11 +99,11 @@ else()
 endif()
 [expect]
 if(COND)
-  message(STATUS "yes")
-  # before else
+    message(STATUS "yes")
+    # before else
 
 else()
-  message(STATUS "no")
+    message(STATUS "no")
 endif()
 
 == trailing comment with no args ==
@@ -115,11 +115,11 @@ message() # empty call
 target_link_libraries(mytarget PUBLIC libfoo libbar libbaz liblongname libextra2) # link deps
 [expect]
 target_link_libraries(
-  mytarget
-  PUBLIC
-  libfoo
-  libbar
-  libbaz
-  liblongname
-  libextra2
+    mytarget
+    PUBLIC
+    libfoo
+    libbar
+    libbaz
+    liblongname
+    libextra2
 ) # link deps

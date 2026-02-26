@@ -4,7 +4,7 @@ message("hello")
 endif()
 [expect]
 if(CONDITION)
-  message("hello")
+    message("hello")
 endif()
 
 == if/else/endif ==
@@ -15,9 +15,9 @@ message("no")
 endif()
 [expect]
 if(CONDITION)
-  message("yes")
+    message("yes")
 else()
-  message("no")
+    message("no")
 endif()
 
 == if/elseif/else/endif ==
@@ -32,13 +32,13 @@ message("other")
 endif()
 [expect]
 if(A)
-  message("a")
+    message("a")
 elseif(B)
-  message("b")
+    message("b")
 elseif(C)
-  message("c")
+    message("c")
 else()
-  message("other")
+    message("other")
 endif()
 
 == already correctly indented if chain (idempotent) ==
@@ -51,11 +51,11 @@ else()
 endif()
 [expect]
 if(A)
-  message("a")
+    message("a")
 elseif(B)
-  message("b")
+    message("b")
 else()
-  message("other")
+    message("other")
 endif()
 
 == nested if inside foreach ==
@@ -66,9 +66,9 @@ endif()
 endforeach()
 [expect]
 foreach(ITEM IN LISTS MY_LIST)
-  if(ITEM)
-    message("found: ${ITEM}")
-  endif()
+    if(ITEM)
+        message("found: ${ITEM}")
+    endif()
 endforeach()
 
 == function/endfunction ==
@@ -78,8 +78,8 @@ message("result: ${RESULT}")
 endfunction()
 [expect]
 function(my_func ARG1 ARG2)
-  set(RESULT "${ARG1}_${ARG2}")
-  message("result: ${RESULT}")
+    set(RESULT "${ARG1}_${ARG2}")
+    message("result: ${RESULT}")
 endfunction()
 
 == macro/endmacro ==
@@ -89,8 +89,8 @@ message("done: ${ARG}")
 endmacro()
 [expect]
 macro(my_macro ARG)
-  set(${ARG}_DONE TRUE)
-  message("done: ${ARG}")
+    set(${ARG}_DONE TRUE)
+    message("done: ${ARG}")
 endmacro()
 
 == while/endwhile ==
@@ -100,8 +100,8 @@ check_done(DONE)
 endwhile()
 [expect]
 while(NOT DONE)
-  do_step()
-  check_done(DONE)
+    do_step()
+    check_done(DONE)
 endwhile()
 
 == deeply nested three levels ==
@@ -114,11 +114,11 @@ endforeach()
 endif()
 [expect]
 if(A)
-  foreach(X IN LISTS LIST)
-    while(NOT DONE)
-      message("deep")
-    endwhile()
-  endforeach()
+    foreach(X IN LISTS LIST)
+        while(NOT DONE)
+            message("deep")
+        endwhile()
+    endforeach()
 endif()
 
 == wrong over-indentation is corrected ==
@@ -127,7 +127,7 @@ if(CONDITION)
 endif()
 [expect]
 if(CONDITION)
-  message("too deep")
+    message("too deep")
 endif()
 
 == block/endblock ==
@@ -137,8 +137,8 @@ message("${X}")
 endblock()
 [expect]
 block()
-  set(X 1)
-  message("${X}")
+    set(X 1)
+    message("${X}")
 endblock()
 
 == comments inside blocks are indented ==
@@ -149,10 +149,10 @@ message("hello")
 endif()
 [expect]
 if(CONDITION)
-  # this is a comment
+    # this is a comment
 
-  message("hello")
-  # trailing comment
+    message("hello")
+    # trailing comment
 
 endif()
 
@@ -166,13 +166,13 @@ message("b")
 endif()
 [expect]
 if(A)
-  # branch a
+    # branch a
 
-  message("a")
+    message("a")
 elseif(B)
-  # branch b
+    # branch b
 
-  message("b")
+    message("b")
 endif()
 
 == four-space indent ==
@@ -181,7 +181,7 @@ message("hello")
 endif()
 [expect]
 if(CONDITION)
-  message("hello")
+    message("hello")
 endif()
 
 == tab indent ==
@@ -190,5 +190,5 @@ message("hello")
 endif()
 [expect]
 if(CONDITION)
-  message("hello")
+    message("hello")
 endif()

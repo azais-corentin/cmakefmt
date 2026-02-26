@@ -32,11 +32,11 @@ target_link_libraries(foo PUBLIC bar PRIVATE baz)
 target_sources(mylib public include/mylib.h private src/mylib.cpp interface include/extra.h)
 [expect]
 target_sources(
-  mylib
-  PUBLIC
-  include/mylib.h
-  PRIVATE
-  src/mylib.cpp
-  INTERFACE
-  include/extra.h
+    mylib
+    PUBLIC
+    include/mylib.h
+    PRIVATE
+    src/mylib.cpp
+    INTERFACE
+    include/extra.h
 )

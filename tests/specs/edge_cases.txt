@@ -18,7 +18,7 @@ if((A AND B))
 endif()
 [expect]
 if((A AND B))
-  message(STATUS "yes")
+    message(STATUS "yes")
 endif()
 
 == generator expression preserved ==

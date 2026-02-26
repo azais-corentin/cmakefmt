@@ -28,7 +28,7 @@ struct Cli {
     line_width: u32,
 
     /// Number of spaces per indentation level.
-    #[arg(long, default_value_t = 2)]
+    #[arg(long, default_value_t = 4)]
     indent_width: u8,
 
     /// Use tabs instead of spaces for indentation.

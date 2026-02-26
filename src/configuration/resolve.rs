@@ -21,7 +21,7 @@ pub fn resolve_config(
     let indent_width = get_value(
         &mut config,
         "indentWidth",
-        global_config.indent_width.unwrap_or(2),
+        global_config.indent_width.unwrap_or(4),
         &mut diagnostics,
     );
     let use_tabs = get_value(
