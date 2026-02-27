@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use dprint_plugin_cmake::{CaseStyle, Configuration, format_text};
@@ -9,8 +10,25 @@ fn test_formatter_files() {
     let mut skipped = 0;
     let mut count = 0;
 
-    let mut in_files = walk_cmake_files(&formatter_dir);
+    let mut in_files = walk_cmake_files(&formatter_dir, ".in.cmake");
     in_files.sort();
+    let out_files = walk_cmake_files(&formatter_dir, ".out.cmake");
+
+    let in_stems: HashSet<String> = in_files
+        .iter()
+        .map(|p| p.to_str().unwrap().strip_suffix(".in.cmake").unwrap().to_owned())
+        .collect();
+    let out_stems: HashSet<String> = out_files
+        .iter()
+        .map(|p| p.to_str().unwrap().strip_suffix(".out.cmake").unwrap().to_owned())
+        .collect();
+
+    for stem in in_stems.difference(&out_stems) {
+        failures.push(format!("Missing .out.cmake for {stem}.in.cmake"));
+    }
+    for stem in out_stems.difference(&in_stems) {
+        failures.push(format!("Missing .in.cmake for {stem}.out.cmake"));
+    }
 
     for in_path in &in_files {
         // foo.in.cmake -> foo.out.cmake
@@ -21,10 +39,10 @@ fn test_formatter_files() {
             .expect("expected .in.cmake extension");
         let out_path = PathBuf::from(format!("{stem}.out.cmake"));
 
-        if !out_path.exists() {
-            failures.push(format!("Missing .out.cmake for {}", in_path.display()));
+        if !out_stems.contains(stem) {
             continue;
         }
+
 
         let raw_input = std::fs::read_to_string(in_path).unwrap();
         let expected = std::fs::read_to_string(&out_path).unwrap();
@@ -123,26 +141,28 @@ fn test_formatter_files() {
         count += 1;
     }
 
-    assert!(count > 0, "No formatter test files found");
-
     if !failures.is_empty() {
         panic!(
-            "{}/{count} formatter tests failed:\n\n{}",
+            "{}/{count} formatter tests failed:
+
+{}",
             failures.len(),
             failures.join("\n\n---\n\n")
         );
     }
 
+    assert!(count > 0, "No formatter test files found");
+
     eprintln!("{count} formatter tests passed ({skipped} skipped due to formatter limitations)");
 }
 
-fn walk_cmake_files(dir: &Path) -> Vec<PathBuf> {
+fn walk_cmake_files(dir: &Path, suffix: &str) -> Vec<PathBuf> {
     let mut results = Vec::new();
-    walk_recursive(dir, &mut results);
+    walk_recursive(dir, suffix, &mut results);
     results
 }
 
-fn walk_recursive(dir: &Path, out: &mut Vec<PathBuf>) {
+fn walk_recursive(dir: &Path, suffix: &str, out: &mut Vec<PathBuf>) {
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
         Err(err) => panic!("Failed to read directory {}: {}", dir.display(), err),
@@ -151,11 +171,11 @@ fn walk_recursive(dir: &Path, out: &mut Vec<PathBuf>) {
         let entry = entry.unwrap();
         let path = entry.path();
         if path.is_dir() {
-            walk_recursive(&path, out);
+            walk_recursive(&path, suffix, out);
         } else if path
             .file_name()
             .and_then(|n| n.to_str())
-            .map_or(false, |n| n.ends_with(".in.cmake"))
+            .map_or(false, |n| n.ends_with(suffix))
         {
             out.push(path);
         }

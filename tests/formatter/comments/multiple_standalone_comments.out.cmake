@@ -1,3 +1,0 @@
-# First comment
-
-# Second comment

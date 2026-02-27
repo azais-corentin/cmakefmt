@@ -1,3 +1,0 @@
-### {"commandCase": "upper"}
-
-project(Foo)

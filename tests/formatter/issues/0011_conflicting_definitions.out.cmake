@@ -1,5 +1,0 @@
-poem(
-    LINES
-        "foo"
-        "bar"
-)

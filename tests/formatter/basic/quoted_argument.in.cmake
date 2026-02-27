@@ -1,2 +1,0 @@
-
-message(STATUS "hello world")

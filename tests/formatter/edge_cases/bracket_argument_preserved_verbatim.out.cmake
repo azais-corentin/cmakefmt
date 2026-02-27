@@ -1,1 +1,0 @@
-set(VAR [=[hello world]=])

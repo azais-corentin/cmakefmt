@@ -1,8 +1,0 @@
-
-if(A)
-  message("a")
-elseif(B)
-  message("b")
-else()
-  message("other")
-endif()

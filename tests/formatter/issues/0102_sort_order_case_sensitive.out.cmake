@@ -1,9 +1,0 @@
-issue0102(
-    SORT_ME
-        Awesome
-        Beautiful
-        C
-        arrogant
-        bold
-        c
-)
