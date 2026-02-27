@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::Parser;
-use dprint_plugin_cmake::{CaseStyle, Configuration, NewLineKind, format_text};
+use cmakefmt::{CaseStyle, Configuration, NewLineKind, format_text};
 
 #[derive(Parser)]
 #[command(name = "cmakefmt", about = "Format CMake files", version)]

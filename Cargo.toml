@@ -1,9 +1,9 @@
 [package]
-name = "dprint-plugin-cmake"
+name = "cmakefmt"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-description = "CMake formatter plugin for dprint"
+description = "CMake formatter"
 
 [lib]
 crate-type = ["cdylib", "rlib"]

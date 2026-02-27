@@ -12,7 +12,7 @@ run = "cargo test"
 
 [tasks.fmt]
 description = "Format sample files with the plugin"
-run = "dprint fmt --plugins ./target/wasm32-unknown-unknown/release/dprint_plugin_cmake.wasm"
+run = "dprint fmt --plugins ./target/wasm32-unknown-unknown/release/cmakefmt.wasm"
 
 [tasks.check]
 description = "Clippy + rustfmt check"
