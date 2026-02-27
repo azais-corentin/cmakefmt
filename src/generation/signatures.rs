@@ -3,22 +3,34 @@ pub enum KwType {
     Option,
     OneValue,
     MultiValue,
+    /// A group keyword that starts a nested sub-section with its own sub-keywords.
+    /// (front_positional_count, sub_keywords)
+    Group(usize, &'static [(&'static str, KwType)]),
 }
 
+/// Section definition: (keyword_name, front_positional_count, sub_keywords).
+pub type SectionDef = (&'static str, usize, &'static [(&'static str, KwType)]);
 #[allow(dead_code)]
 pub struct CommandSpec {
     pub front_positional: usize,
     pub back_positional: usize,
     pub keywords: &'static [(&'static str, KwType)],
-    pub sections: &'static [(&'static str, &'static [(&'static str, KwType)])],
+    pub sections: &'static [SectionDef],
     pub command_line_keywords: &'static [&'static str],
     pub pair_keywords: &'static [&'static str],
+    /// Property keywords: first value is the property name (at one indent),
+    /// remaining values are property values (at two indents from keyword).
+    pub property_keywords: &'static [&'static str],
     pub flow_keywords: &'static [&'static str],
     pub flow_positional: bool,
     /// Compound keywords: when keyword A is immediately followed by value B,
     /// they are treated as a single keyword unit "A B" with subsequent args
     /// as its values.
     pub compound_keywords: &'static [(&'static str, &'static str)],
+    /// Once keywords: keywords that should only match once in the argument list.
+    /// After their first occurrence, subsequent case-insensitive matches are
+    /// treated as regular arguments (not uppercased, not keyword-split).
+    pub once_keywords: &'static [&'static str],
 }
 
 pub enum CommandKind {
@@ -49,6 +61,8 @@ macro_rules! spec {
             flow_keywords: $flow,
             flow_positional: false,
             compound_keywords: &[],
+            once_keywords: &[],
+            property_keywords: &[],
         }
     };
     (
@@ -70,6 +84,8 @@ macro_rules! spec {
             flow_keywords: $flow,
             flow_positional: $fp2,
             compound_keywords: &[],
+            once_keywords: &[],
+            property_keywords: &[],
         }
     };
     (
@@ -89,6 +105,8 @@ macro_rules! spec {
             flow_keywords: &[],
             flow_positional: false,
             compound_keywords: &[],
+            once_keywords: &[],
+            property_keywords: &[],
         }
     };
 }
@@ -129,13 +147,13 @@ static TLL_SEC_SUB: &[(&str, KwType)] = &[
     ("general", KwType::OneValue),
 ];
 
-static TARGET_LINK_LIBRARIES_SECTIONS: &[(&str, &[(&str, KwType)])] = &[
-    ("PUBLIC", TLL_SEC_SUB),
-    ("PRIVATE", TLL_SEC_SUB),
-    ("INTERFACE", TLL_SEC_SUB),
-    ("LINK_PUBLIC", TLL_SEC_SUB),
-    ("LINK_PRIVATE", TLL_SEC_SUB),
-    ("LINK_INTERFACE_LIBRARIES", TLL_SEC_SUB),
+static TARGET_LINK_LIBRARIES_SECTIONS: &[SectionDef] = &[
+    ("PUBLIC", 0, TLL_SEC_SUB),
+    ("PRIVATE", 0, TLL_SEC_SUB),
+    ("INTERFACE", 0, TLL_SEC_SUB),
+    ("LINK_PUBLIC", 0, TLL_SEC_SUB),
+    ("LINK_PRIVATE", 0, TLL_SEC_SUB),
+    ("LINK_INTERFACE_LIBRARIES", 0, TLL_SEC_SUB),
 ];
 
 static TARGET_LINK_LIBRARIES_SPEC: CommandSpec = spec! {
@@ -155,17 +173,21 @@ static TARGET_SOURCES_KW: &[(&str, KwType)] = &[
     ("PRIVATE", KwType::MultiValue),
 ];
 
-static TARGET_SOURCES_FILE_SET_SUB: &[(&str, KwType)] = &[
-    ("FILE_SET", KwType::OneValue),
+static TARGET_SOURCES_FILE_SET_GROUP_KW: &[(&str, KwType)] = &[
     ("TYPE", KwType::OneValue),
     ("BASE_DIRS", KwType::MultiValue),
     ("FILES", KwType::MultiValue),
 ];
 
-static TARGET_SOURCES_SECTIONS: &[(&str, &[(&str, KwType)])] = &[
-    ("PUBLIC", TARGET_SOURCES_FILE_SET_SUB),
-    ("PRIVATE", TARGET_SOURCES_FILE_SET_SUB),
-    ("INTERFACE", TARGET_SOURCES_FILE_SET_SUB),
+static TARGET_SOURCES_FILE_SET_SUB: &[(&str, KwType)] = &[(
+    "FILE_SET",
+    KwType::Group(1, TARGET_SOURCES_FILE_SET_GROUP_KW),
+)];
+
+static TARGET_SOURCES_SECTIONS: &[SectionDef] = &[
+    ("PUBLIC", 0, TARGET_SOURCES_FILE_SET_SUB),
+    ("PRIVATE", 0, TARGET_SOURCES_FILE_SET_SUB),
+    ("INTERFACE", 0, TARGET_SOURCES_FILE_SET_SUB),
 ];
 
 static TARGET_SOURCES_SPEC: CommandSpec = spec! {
@@ -591,8 +613,18 @@ static SET_PROPERTY_KW: &[(&str, KwType)] = &[
     ("PROPERTY", KwType::MultiValue),
 ];
 
-static SET_PROPERTY_SPEC: CommandSpec = spec! {
-    front: 0, back: 0, kw: SET_PROPERTY_KW, sections: &[], cmd_line: &[], pair: &["PROPERTY"],
+static SET_PROPERTY_SPEC: CommandSpec = CommandSpec {
+    front_positional: 0,
+    back_positional: 0,
+    keywords: SET_PROPERTY_KW,
+    sections: &[],
+    command_line_keywords: &[],
+    pair_keywords: &[],
+    property_keywords: &["PROPERTY"],
+    flow_keywords: &[],
+    flow_positional: false,
+    compound_keywords: &[],
+    once_keywords: &[],
 };
 
 // ---------------------------------------------------------------------------
@@ -626,17 +658,19 @@ static EXPORT_KW: &[(&str, KwType)] = &[
     ("VERSION", KwType::MultiValue),
 ];
 
-static EXPORT_SECTIONS: &[(&str, &[(&str, KwType)])] = &[
+static EXPORT_SECTIONS: &[SectionDef] = &[
     (
         "PACKAGE_DEPENDENCY",
+        0,
         &[
             ("ENABLED", KwType::OneValue),
             ("EXTRA_ARGS", KwType::MultiValue),
         ],
     ),
-    ("TARGET", &[("XCFRAMEWORK_LOCATION", KwType::OneValue)]),
+    ("TARGET", 0, &[("XCFRAMEWORK_LOCATION", KwType::OneValue)]),
     (
         "VERSION",
+        1,
         &[
             ("COMPAT_VERSION", KwType::OneValue),
             ("VERSION_SCHEMA", KwType::OneValue),
@@ -758,10 +792,10 @@ static STRING_KW: &[(&str, KwType)] = &[
     ("ESCAPE_QUOTES", KwType::Option),
     ("UTC", KwType::Option),
     ("UPPER", KwType::Option),
-    ("TOLOWER", KwType::Option),
-    ("TOUPPER", KwType::Option),
-    ("STRIP", KwType::Option),
-    ("GENEX_STRIP", KwType::Option),
+    ("TOLOWER", KwType::OneValue),
+    ("TOUPPER", KwType::OneValue),
+    ("STRIP", KwType::OneValue),
+    ("GENEX_STRIP", KwType::OneValue),
     ("INCLUDE", KwType::Option),
     ("EXCLUDE", KwType::Option),
     ("FIND", KwType::OneValue),
@@ -785,7 +819,7 @@ static STRING_KW: &[(&str, KwType)] = &[
     ("SHA3_512", KwType::OneValue),
     ("CONFIGURE", KwType::OneValue),
     ("MAKE_C_IDENTIFIER", KwType::OneValue),
-    ("RANDOM", KwType::OneValue),
+    ("RANDOM", KwType::Option),
     ("TIMESTAMP", KwType::OneValue),
     ("UUID", KwType::OneValue),
     ("NAMESPACE", KwType::OneValue),
@@ -802,7 +836,7 @@ static STRING_KW: &[(&str, KwType)] = &[
     ("LESS_EQUAL", KwType::OneValue),
     ("GREATER_EQUAL", KwType::OneValue),
     ("HEX", KwType::OneValue),
-    ("ASCII", KwType::OneValue),
+    ("ASCII", KwType::MultiValue),
     ("JSON", KwType::OneValue),
     ("ERROR_VARIABLE", KwType::OneValue),
     ("GET", KwType::OneValue),
@@ -816,8 +850,23 @@ static STRING_KW: &[(&str, KwType)] = &[
     ("FILTER", KwType::OneValue),
 ];
 
-static STRING_SPEC: CommandSpec = spec! {
-    front: 0, back: 0, kw: STRING_KW, sections: &[], cmd_line: &[], pair: &[],
+static STRING_SPEC: CommandSpec = CommandSpec {
+    front_positional: 0,
+    back_positional: 1,
+    keywords: STRING_KW,
+    sections: &[],
+    command_line_keywords: &[],
+    pair_keywords: &[],
+    flow_keywords: &[],
+    flow_positional: false,
+    compound_keywords: &[
+        ("REGEX", "MATCH"),
+        ("REGEX", "MATCHALL"),
+        ("REGEX", "REPLACE"),
+        ("REGEX", "QUOTE"),
+    ],
+    once_keywords: &[],
+    property_keywords: &[],
 };
 
 // ---------------------------------------------------------------------------
@@ -858,8 +907,12 @@ static LIST_KW: &[(&str, KwType)] = &[
     ("FOR", KwType::MultiValue),
 ];
 
+static LIST_REPLACE_SEC_SUB: &[(&str, KwType)] = &[("REGEX", KwType::OneValue)];
+
+static LIST_SECTIONS: &[SectionDef] = &[("REPLACE", 0, LIST_REPLACE_SEC_SUB)];
+
 static LIST_SPEC: CommandSpec = spec! {
-    front: 0, back: 0, kw: LIST_KW, sections: &[], cmd_line: &[], pair: &[],
+    front: 0, back: 0, kw: LIST_KW, sections: LIST_SECTIONS, cmd_line: &[], pair: &[],
 };
 
 // ---------------------------------------------------------------------------
@@ -894,7 +947,7 @@ static FILE_KW: &[(&str, KwType)] = &[
     ("TIMESTAMP", KwType::OneValue),
     ("WRITE", KwType::OneValue),
     ("APPEND", KwType::OneValue),
-    ("OUTPUT", KwType::OneValue),
+    // OUTPUT removed from keywords to support GENERATE OUTPUT compound keyword
     ("INPUT", KwType::OneValue),
     ("CONTENT", KwType::OneValue),
     ("CONDITION", KwType::OneValue),
@@ -909,9 +962,9 @@ static FILE_KW: &[(&str, KwType)] = &[
     ("SIZE", KwType::OneValue),
     ("READ_SYMLINK", KwType::OneValue),
     ("REAL_PATH", KwType::OneValue),
-    ("RELATIVE_PATH", KwType::OneValue),
-    ("TO_CMAKE_PATH", KwType::OneValue),
-    ("TO_NATIVE_PATH", KwType::OneValue),
+    ("RELATIVE_PATH", KwType::Option),
+    ("TO_CMAKE_PATH", KwType::Option),
+    ("TO_NATIVE_PATH", KwType::Option),
     ("DOWNLOAD", KwType::OneValue),
     ("UPLOAD", KwType::OneValue),
     ("LOCK", KwType::OneValue),
@@ -943,7 +996,7 @@ static FILE_KW: &[(&str, KwType)] = &[
     ("RANGE_START", KwType::OneValue),
     ("RANGE_END", KwType::OneValue),
     ("TLS_VERSION", KwType::OneValue),
-    ("FORMAT", KwType::OneValue),
+    // FORMAT removed from keywords to prevent collision with TIMESTAMP's format arg
     ("COMPRESSION", KwType::OneValue),
     ("COMPRESSION_LEVEL", KwType::OneValue),
     ("MTIME", KwType::OneValue),
@@ -979,26 +1032,36 @@ static FILE_KW: &[(&str, KwType)] = &[
     ("POST_EXCLUDE_REGEXES", KwType::MultiValue),
     ("POST_INCLUDE_FILES", KwType::MultiValue),
     ("POST_EXCLUDE_FILES", KwType::MultiValue),
-    ("REMOVE", KwType::MultiValue),
-    ("REMOVE_RECURSE", KwType::MultiValue),
-    ("TOUCH", KwType::MultiValue),
-    ("TOUCH_NOCREATE", KwType::MultiValue),
+    ("REMOVE", KwType::Option),
+    ("REMOVE_RECURSE", KwType::Option),
+    ("TOUCH", KwType::Option),
+    ("TOUCH_NOCREATE", KwType::Option),
     ("GET_RUNTIME_DEPENDENCIES", KwType::MultiValue),
-    ("MD5", KwType::MultiValue),
-    ("SHA1", KwType::MultiValue),
-    ("SHA224", KwType::MultiValue),
-    ("SHA256", KwType::MultiValue),
-    ("SHA384", KwType::MultiValue),
-    ("SHA512", KwType::MultiValue),
-    ("SHA3_224", KwType::MultiValue),
-    ("SHA3_256", KwType::MultiValue),
-    ("SHA3_384", KwType::MultiValue),
-    ("SHA3_512", KwType::MultiValue),
+    ("MD5", KwType::OneValue),
+    ("SHA1", KwType::OneValue),
+    ("SHA224", KwType::OneValue),
+    ("SHA256", KwType::OneValue),
+    ("SHA384", KwType::OneValue),
+    ("SHA512", KwType::OneValue),
+    ("SHA3_224", KwType::OneValue),
+    ("SHA3_256", KwType::OneValue),
+    ("SHA3_384", KwType::OneValue),
+    ("SHA3_512", KwType::OneValue),
     ("GENERATE", KwType::MultiValue),
 ];
 
-static FILE_SPEC: CommandSpec = spec! {
-    front: 0, back: 0, kw: FILE_KW, sections: &[], cmd_line: &[], pair: &[],
+static FILE_SPEC: CommandSpec = CommandSpec {
+    front_positional: 0,
+    back_positional: 0,
+    keywords: FILE_KW,
+    sections: &[],
+    command_line_keywords: &[],
+    pair_keywords: &[],
+    flow_keywords: &[],
+    flow_positional: false,
+    compound_keywords: &[("GENERATE", "OUTPUT")],
+    once_keywords: &["GLOB", "GLOB_RECURSE"],
+    property_keywords: &[],
 };
 
 // ---------------------------------------------------------------------------
@@ -1055,6 +1118,7 @@ static INSTALL_KW: &[(&str, KwType)] = &[
     ("PRIVATE_HEADER", KwType::MultiValue),
     ("RESOURCE", KwType::MultiValue),
     ("CXX_MODULES_BMI", KwType::MultiValue),
+    ("FILE_SET", KwType::MultiValue),
     ("INCLUDES", KwType::MultiValue),
     ("EXPORT_ANDROID_MK", KwType::MultiValue),
     ("IMPORTED_RUNTIME_ARTIFACTS", KwType::MultiValue),
@@ -1082,23 +1146,43 @@ static INSTALL_ARTIFACT_SEC_SUB: &[(&str, KwType)] = &[
     ("CONFIGURATIONS", KwType::MultiValue),
 ];
 
-static INSTALL_SECTIONS: &[(&str, &[(&str, KwType)])] = &[
-    ("ARCHIVE", INSTALL_ARTIFACT_SEC_SUB),
-    ("LIBRARY", INSTALL_ARTIFACT_SEC_SUB),
-    ("RUNTIME", INSTALL_ARTIFACT_SEC_SUB),
-    ("OBJECTS", INSTALL_ARTIFACT_SEC_SUB),
-    ("FRAMEWORK", INSTALL_ARTIFACT_SEC_SUB),
-    ("BUNDLE", INSTALL_ARTIFACT_SEC_SUB),
-    ("PUBLIC_HEADER", INSTALL_ARTIFACT_SEC_SUB),
-    ("PRIVATE_HEADER", INSTALL_ARTIFACT_SEC_SUB),
-    ("RESOURCE", INSTALL_ARTIFACT_SEC_SUB),
+static INSTALL_PATTERN_SEC_SUB: &[(&str, KwType)] = &[
+    ("EXCLUDE", KwType::Option),
+    ("PERMISSIONS", KwType::MultiValue),
 ];
 
-static INSTALL_SPEC: CommandSpec = spec! {
-    front: 0, back: 0,
-    kw: INSTALL_KW,
+static INSTALL_VERSION_SEC_SUB: &[(&str, KwType)] = &[
+    ("COMPAT_VERSION", KwType::OneValue),
+    ("VERSION_SCHEMA", KwType::OneValue),
+];
+static INSTALL_SECTIONS: &[SectionDef] = &[
+    ("ARCHIVE", 0, INSTALL_ARTIFACT_SEC_SUB),
+    ("LIBRARY", 0, INSTALL_ARTIFACT_SEC_SUB),
+    ("RUNTIME", 0, INSTALL_ARTIFACT_SEC_SUB),
+    ("OBJECTS", 0, INSTALL_ARTIFACT_SEC_SUB),
+    ("FRAMEWORK", 0, INSTALL_ARTIFACT_SEC_SUB),
+    ("BUNDLE", 0, INSTALL_ARTIFACT_SEC_SUB),
+    ("PUBLIC_HEADER", 0, INSTALL_ARTIFACT_SEC_SUB),
+    ("PRIVATE_HEADER", 0, INSTALL_ARTIFACT_SEC_SUB),
+    ("RESOURCE", 0, INSTALL_ARTIFACT_SEC_SUB),
+    ("FILE_SET", 1, INSTALL_ARTIFACT_SEC_SUB),
+    ("PATTERN", 1, INSTALL_PATTERN_SEC_SUB),
+    ("REGEX", 1, INSTALL_PATTERN_SEC_SUB),
+    ("VERSION", 1, INSTALL_VERSION_SEC_SUB),
+];
+
+static INSTALL_SPEC: CommandSpec = CommandSpec {
+    front_positional: 0,
+    back_positional: 0,
+    keywords: INSTALL_KW,
     sections: INSTALL_SECTIONS,
-    cmd_line: &[], pair: &[],
+    command_line_keywords: &[],
+    pair_keywords: &[],
+    flow_keywords: &[],
+    flow_positional: false,
+    compound_keywords: &[("INCLUDES", "DESTINATION")],
+    once_keywords: &[],
+    property_keywords: &[],
 };
 
 // ---------------------------------------------------------------------------
@@ -1326,8 +1410,9 @@ static SET_DIRECTORY_PROPERTIES_SPEC: CommandSpec = spec! {
 
 static SET_PACKAGE_PROPERTIES_KW: &[(&str, KwType)] = &[("PROPERTIES", KwType::MultiValue)];
 
-static SET_PACKAGE_PROPERTIES_SECTIONS: &[(&str, &[(&str, KwType)])] = &[(
+static SET_PACKAGE_PROPERTIES_SECTIONS: &[SectionDef] = &[(
     "PROPERTIES",
+    0,
     &[
         ("URL", KwType::OneValue),
         ("DESCRIPTION", KwType::OneValue),
@@ -1401,6 +1486,7 @@ static GTEST_DISCOVER_TESTS_SPEC: CommandSpec = spec! {
     sections: &[],
     cmd_line: &[],
     pair: &["PROPERTIES"],
+    flow: &["EXTRA_ARGS", "DISCOVERY_EXTRA_ARGS"],
 };
 
 // ---------------------------------------------------------------------------
@@ -1441,6 +1527,8 @@ static CMAKE_HOST_SYSTEM_INFORMATION_SPEC: CommandSpec = CommandSpec {
     flow_keywords: &[],
     flow_positional: false,
     compound_keywords: &[("QUERY", "WINDOWS_REGISTRY")],
+    once_keywords: &[],
+    property_keywords: &[],
 };
 
 // ---------------------------------------------------------------------------
@@ -1477,6 +1565,8 @@ static CMAKE_LANGUAGE_SPEC: CommandSpec = CommandSpec {
     flow_keywords: &[],
     flow_positional: false,
     compound_keywords: &[("EVAL", "CODE")],
+    once_keywords: &[],
+    property_keywords: &[],
 };
 
 // ---------------------------------------------------------------------------
@@ -1523,6 +1613,8 @@ static CMAKE_PATH_SPEC: CommandSpec = CommandSpec {
     flow_keywords: &[],
     flow_positional: false,
     compound_keywords: &[("EXTENSION", "LAST_ONLY"), ("STEM", "LAST_ONLY")],
+    once_keywords: &[],
+    property_keywords: &[],
 };
 
 // ---------------------------------------------------------------------------
@@ -1654,13 +1746,13 @@ static LINK_DIRECTORIES_SPEC: CommandSpec = spec! {
 // 66. link_libraries
 // ---------------------------------------------------------------------------
 
-static LINK_LIBRARIES_SECTIONS: &[(&str, &[(&str, KwType)])] = &[
-    ("PUBLIC", TLL_SEC_SUB),
-    ("PRIVATE", TLL_SEC_SUB),
-    ("INTERFACE", TLL_SEC_SUB),
-    ("LINK_PUBLIC", TLL_SEC_SUB),
-    ("LINK_PRIVATE", TLL_SEC_SUB),
-    ("LINK_INTERFACE_LIBRARIES", TLL_SEC_SUB),
+static LINK_LIBRARIES_SECTIONS: &[SectionDef] = &[
+    ("PUBLIC", 0, TLL_SEC_SUB),
+    ("PRIVATE", 0, TLL_SEC_SUB),
+    ("INTERFACE", 0, TLL_SEC_SUB),
+    ("LINK_PUBLIC", 0, TLL_SEC_SUB),
+    ("LINK_PRIVATE", 0, TLL_SEC_SUB),
+    ("LINK_INTERFACE_LIBRARIES", 0, TLL_SEC_SUB),
 ];
 
 static LINK_LIBRARIES_SPEC: CommandSpec = spec! {
