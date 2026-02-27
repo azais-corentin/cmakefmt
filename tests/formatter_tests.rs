@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use dprint_plugin_cmake::{CaseStyle, Configuration, format_text};
+use cmakefmt::{CaseStyle, Configuration, format_text};
 
 #[test]
 fn test_formatter_files() {
@@ -16,11 +16,23 @@ fn test_formatter_files() {
 
     let in_stems: HashSet<String> = in_files
         .iter()
-        .map(|p| p.to_str().unwrap().strip_suffix(".in.cmake").unwrap().to_owned())
+        .map(|p| {
+            p.to_str()
+                .unwrap()
+                .strip_suffix(".in.cmake")
+                .unwrap()
+                .to_owned()
+        })
         .collect();
     let out_stems: HashSet<String> = out_files
         .iter()
-        .map(|p| p.to_str().unwrap().strip_suffix(".out.cmake").unwrap().to_owned())
+        .map(|p| {
+            p.to_str()
+                .unwrap()
+                .strip_suffix(".out.cmake")
+                .unwrap()
+                .to_owned()
+        })
         .collect();
 
     for stem in in_stems.difference(&out_stems) {
@@ -42,7 +54,6 @@ fn test_formatter_files() {
         if !out_stems.contains(stem) {
             continue;
         }
-
 
         let raw_input = std::fs::read_to_string(in_path).unwrap();
         let expected = std::fs::read_to_string(&out_path).unwrap();
@@ -183,26 +194,87 @@ fn walk_recursive(dir: &Path, suffix: &str, out: &mut Vec<PathBuf>) {
 }
 
 fn simple_diff(expected: &str, actual: &str) -> String {
-    let exp_lines: Vec<&str> = expected.lines().collect();
-    let act_lines: Vec<&str> = actual.lines().collect();
-    let mut diff = String::new();
-    let max = exp_lines.len().max(act_lines.len());
+    use std::fmt;
 
-    for i in 0..max {
-        let e = exp_lines.get(i).copied().unwrap_or("<missing>");
-        let a = act_lines.get(i).copied().unwrap_or("<missing>");
-        if e != a {
-            diff.push_str(&format!("L{}: -{e}\nL{}: +{a}\n", i + 1, i + 1));
+    use imara_diff::{
+        Algorithm, Diff, InternedInput, Interner, Token, UnifiedDiffConfig, UnifiedDiffPrinter,
+    };
+
+    struct ColoredLineDiffPrinter<'a>(&'a Interner<&'a str>);
+
+    impl UnifiedDiffPrinter for ColoredLineDiffPrinter<'_> {
+        fn display_header(
+            &self,
+            mut f: impl fmt::Write,
+            start_before: u32,
+            start_after: u32,
+            len_before: u32,
+            len_after: u32,
+        ) -> fmt::Result {
+            writeln!(
+                f,
+                "\x1b[36m@@ -{},{} +{},{} @@\x1b[0m",
+                start_before + 1,
+                len_before,
+                start_after + 1,
+                len_after
+            )
+        }
+
+        fn display_context_token(&self, mut f: impl fmt::Write, token: Token) -> fmt::Result {
+            let line = self.0[token];
+            write!(f, " {line}")?;
+            if !line.ends_with('\n') {
+                writeln!(f)?;
+            }
+            Ok(())
+        }
+
+        fn display_hunk(
+            &self,
+            mut f: impl fmt::Write,
+            before: &[Token],
+            after: &[Token],
+        ) -> fmt::Result {
+            if let Some(&last) = before.last() {
+                for &token in before {
+                    let line = self.0[token];
+                    write!(f, "\x1b[31m-{line}\x1b[0m")?;
+                }
+                if !self.0[last].ends_with('\n') {
+                    writeln!(f)?;
+                }
+            }
+            if let Some(&last) = after.last() {
+                for &token in after {
+                    let line = self.0[token];
+                    write!(f, "\x1b[32m+{line}\x1b[0m")?;
+                }
+                if !self.0[last].ends_with('\n') {
+                    writeln!(f)?;
+                }
+            }
+            Ok(())
         }
     }
 
-    if diff.is_empty() {
-        if expected.ends_with('\n') != actual.ends_with('\n') {
-            diff.push_str("(trailing newline differs)\n");
-        }
+    let input = InternedInput::new(expected, actual);
+    let mut diff = Diff::compute(Algorithm::Histogram, &input);
+    diff.postprocess_lines(&input);
+
+    let result = diff
+        .unified_diff(
+            &ColoredLineDiffPrinter(&input.interner),
+            UnifiedDiffConfig::default(),
+            &input,
+        )
+        .to_string();
+
+    if result.is_empty() && expected.ends_with('\n') != actual.ends_with('\n') {
+        return "(trailing newline differs)\n".to_string();
     }
 
-    diff
+    result
 }
 
 fn parse_config_header(header: &str) -> Configuration {
