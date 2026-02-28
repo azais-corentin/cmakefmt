@@ -1,3 +1,5 @@
+use std::fmt;
+
 use clap::ValueEnum;
 use serde::Serialize;
 
@@ -33,7 +35,7 @@ impl Default for Configuration {
     fn default() -> Self {
         Self {
             line_width: 80,
-            indent_width: 4,
+            indent_width: 2,
             use_tabs: false,
             new_line_kind: NewLineKind::Auto,
             command_case: CaseStyle::Lower,
@@ -42,6 +44,26 @@ impl Default for Configuration {
             sort_lists: false,
             max_blank_lines: 1,
             space_before_paren: false,
+        }
+    }
+}
+
+impl fmt::Display for NewLineKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            NewLineKind::Auto => write!(f, "auto"),
+            NewLineKind::Lf => write!(f, "lf"),
+            NewLineKind::CrLf => write!(f, "crlf"),
+        }
+    }
+}
+
+impl fmt::Display for CaseStyle {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CaseStyle::Lower => write!(f, "lower"),
+            CaseStyle::Upper => write!(f, "upper"),
+            CaseStyle::Preserve => write!(f, "preserve"),
         }
     }
 }

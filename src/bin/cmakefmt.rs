@@ -22,43 +22,43 @@ struct Cli {
     write: bool,
 
     /// Maximum line width.
-    #[arg(long, default_value_t = 80)]
+    #[arg(long, default_value_t = Configuration::default().line_width)]
     line_width: u32,
 
     /// Number of spaces per indentation level.
-    #[arg(long, default_value_t = 4)]
+    #[arg(long, default_value_t = Configuration::default().indent_width)]
     indent_width: u8,
 
     /// Use tabs instead of spaces for indentation.
-    #[arg(long, default_value_t = false)]
+    #[arg(long, default_value_t = Configuration::default().use_tabs)]
     use_tabs: bool,
 
     /// Newline style.
-    #[arg(long, default_value = "auto")]
+    #[arg(long, default_value_t = Configuration::default().new_line_kind)]
     new_line_kind: NewLineKind,
 
     /// Case style for commands.
-    #[arg(long, default_value = "lower")]
+    #[arg(long, default_value_t = Configuration::default().command_case)]
     command_case: CaseStyle,
 
     /// Case style for keywords.
-    #[arg(long, default_value = "upper")]
+    #[arg(long, default_value_t = Configuration::default().keyword_case)]
     keyword_case: CaseStyle,
 
     /// Place closing paren on a new line in multi-line commands.
-    #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
+    #[arg(long, default_value_t = Configuration::default().closing_paren_newline, action = clap::ArgAction::Set)]
     closing_paren_newline: bool,
 
     /// Sort argument lists alphabetically.
-    #[arg(long, default_value_t = false)]
+    #[arg(long, default_value_t = Configuration::default().sort_lists)]
     sort_lists: bool,
 
     /// Maximum consecutive blank lines to preserve.
-    #[arg(long, default_value_t = 1)]
+    #[arg(long, default_value_t = Configuration::default().max_blank_lines)]
     max_blank_lines: u8,
 
     /// Insert a space before opening parenthesis.
-    #[arg(long, default_value_t = false)]
+    #[arg(long, default_value_t = Configuration::default().space_before_paren)]
     space_before_paren: bool,
 }
 
