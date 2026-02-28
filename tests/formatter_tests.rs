@@ -194,13 +194,17 @@ fn walk_recursive(dir: &Path, suffix: &str, out: &mut Vec<PathBuf>) {
 }
 
 fn simple_diff(expected: &str, actual: &str) -> String {
+    use std::cell::Cell;
     use std::fmt;
 
     use imara_diff::{
         Algorithm, Diff, InternedInput, Interner, Token, UnifiedDiffConfig, UnifiedDiffPrinter,
     };
 
-    struct ColoredLineDiffPrinter<'a>(&'a Interner<&'a str>);
+    struct ColoredLineDiffPrinter<'a> {
+        interner: &'a Interner<&'a str>,
+        has_invisible_hunk: Cell<bool>,
+    }
 
     impl UnifiedDiffPrinter for ColoredLineDiffPrinter<'_> {
         fn display_header(
@@ -222,7 +226,7 @@ fn simple_diff(expected: &str, actual: &str) -> String {
         }
 
         fn display_context_token(&self, mut f: impl fmt::Write, token: Token) -> fmt::Result {
-            let line = self.0[token];
+            let line = self.interner[token];
             write!(f, " {line}")?;
             if !line.ends_with('\n') {
                 writeln!(f)?;
@@ -236,21 +240,40 @@ fn simple_diff(expected: &str, actual: &str) -> String {
             before: &[Token],
             after: &[Token],
         ) -> fmt::Result {
+            let before_text: String = before.iter().map(|&t| self.interner[t]).collect();
+            let after_text: String = after.iter().map(|&t| self.interner[t]).collect();
+            let invisible_only =
+                before_text != after_text && strip_invisible(&before_text) == strip_invisible(&after_text);
+
+            if invisible_only {
+                self.has_invisible_hunk.set(true);
+            }
+
             if let Some(&last) = before.last() {
                 for &token in before {
-                    let line = self.0[token];
-                    write!(f, "\x1b[31m-{line}\x1b[0m")?;
+                    let line = self.interner[token];
+                    let display = if invisible_only {
+                        make_invisible_visible(line)
+                    } else {
+                        line.to_owned()
+                    };
+                    write!(f, "\x1b[31m-{display}\x1b[0m")?;
                 }
-                if !self.0[last].ends_with('\n') {
+                if !self.interner[last].ends_with('\n') {
                     writeln!(f)?;
                 }
             }
             if let Some(&last) = after.last() {
                 for &token in after {
-                    let line = self.0[token];
-                    write!(f, "\x1b[32m+{line}\x1b[0m")?;
+                    let line = self.interner[token];
+                    let display = if invisible_only {
+                        make_invisible_visible(line)
+                    } else {
+                        line.to_owned()
+                    };
+                    write!(f, "\x1b[32m+{display}\x1b[0m")?;
                 }
-                if !self.0[last].ends_with('\n') {
+                if !self.interner[last].ends_with('\n') {
                     writeln!(f)?;
                 }
             }
@@ -262,19 +285,68 @@ fn simple_diff(expected: &str, actual: &str) -> String {
     let mut diff = Diff::compute(Algorithm::Histogram, &input);
     diff.postprocess_lines(&input);
 
+    let printer = ColoredLineDiffPrinter {
+        interner: &input.interner,
+        has_invisible_hunk: Cell::new(false),
+    };
     let result = diff
         .unified_diff(
-            &ColoredLineDiffPrinter(&input.interner),
+            &printer,
             UnifiedDiffConfig::default(),
             &input,
         )
         .to_string();
 
-    if result.is_empty() && expected.ends_with('\n') != actual.ends_with('\n') {
-        return "(trailing newline differs)\n".to_string();
+    if printer.has_invisible_hunk.get() {
+        format!(
+            "(some hunks have invisible-only differences; showing: \u{00B7} = space, \u{2192} = tab, \u{240D} = CR, \u{240A} = LF, \u{237D} = NBSP, <\u{2026}> = other)\n{result}"
+        )
+    } else {
+        result
     }
+}
 
-    result
+/// Returns true for any character with no visible glyph.
+fn is_invisible(c: char) -> bool {
+    c.is_whitespace()
+        || c.is_control()
+        || matches!(
+            c,
+            '\u{200B}' | '\u{200C}' | '\u{200D}' | '\u{FEFF}' | '\u{2060}' | '\u{00AD}'
+        )
+}
+
+fn strip_invisible(s: &str) -> String {
+    s.chars().filter(|c| !is_invisible(*c)).collect()
+}
+
+fn make_invisible_visible(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() * 2);
+    for c in s.chars() {
+        match c {
+            ' ' => out.push('\u{00B7}'),
+            '\t' => out.push('\u{2192}'),
+            '\r' => out.push('\u{240D}'),
+            '\n' => {
+                out.push('\u{240A}');
+                out.push('\n');
+            }
+            '\0' => out.push('\u{2400}'),
+            '\u{00A0}' => out.push('\u{237D}'),
+            '\u{200B}' => out.push_str("<ZWSP>"),
+            '\u{200C}' => out.push_str("<ZWNJ>"),
+            '\u{200D}' => out.push_str("<ZWJ>"),
+            '\u{FEFF}' => out.push_str("<BOM>"),
+            '\u{2060}' => out.push_str("<WJ>"),
+            '\u{00AD}' => out.push_str("<SHY>"),
+            c if c.is_control() => {
+                use std::fmt::Write;
+                let _ = write!(out, "<0x{:02X}>", c as u32);
+            }
+            c => out.push(c),
+        }
+    }
+    out
 }
 
 fn parse_config_header(header: &str) -> Configuration {
@@ -405,4 +477,77 @@ fn split_respecting_brackets(s: &str) -> Vec<&str> {
         results.push(&s[start..]);
     }
     results
+}
+
+#[cfg(test)]
+mod invisible_diff_tests {
+    use super::*;
+
+    #[test]
+    fn test_strip_invisible() {
+        assert_eq!(strip_invisible("hello world"), "helloworld");
+        assert_eq!(strip_invisible("a\tb\nc"), "abc");
+        assert_eq!(strip_invisible("a\r\nb"), "ab");
+        assert_eq!(strip_invisible(""), "");
+        assert_eq!(strip_invisible("abc"), "abc");
+        // Zero-width chars
+        assert_eq!(strip_invisible("a\u{200B}b"), "ab");
+        assert_eq!(strip_invisible("a\u{FEFF}b"), "ab");
+    }
+
+    #[test]
+    fn test_make_invisible_visible() {
+        assert_eq!(make_invisible_visible(" "), "\u{00B7}");
+        assert_eq!(make_invisible_visible("\t"), "\u{2192}");
+        assert_eq!(make_invisible_visible("\r"), "\u{240D}");
+        assert_eq!(make_invisible_visible("\n"), "\u{240A}\n");
+        assert_eq!(make_invisible_visible("\0"), "\u{2400}");
+        assert_eq!(make_invisible_visible("\u{00A0}"), "\u{237D}");
+        assert_eq!(make_invisible_visible("\u{200B}"), "<ZWSP>");
+        assert_eq!(make_invisible_visible("\u{FEFF}"), "<BOM>");
+        assert_eq!(make_invisible_visible("abc"), "abc");
+        assert_eq!(make_invisible_visible("a b"), "a\u{00B7}b");
+    }
+
+    #[test]
+    fn test_simple_diff_invisible_only() {
+        // Tab vs spaces — invisible-only difference
+        let result = simple_diff("a\tb\n", "a  b\n");
+        assert!(
+            result.contains("invisible-only differences"),
+            "expected invisible-only legend, got: {result}"
+        );
+        assert!(result.contains('\u{2192}'), "expected tab symbol in diff");
+        assert!(result.contains('\u{00B7}'), "expected space symbol in diff");
+    }
+
+    #[test]
+    fn test_simple_diff_trailing_newline() {
+        // Trailing newline difference — subsumed by invisible-only detection
+        let result = simple_diff("hello\n", "hello");
+        assert!(
+            result.contains("invisible-only differences"),
+            "expected invisible-only legend for trailing newline diff, got: {result}"
+        );
+    }
+
+    #[test]
+    fn test_simple_diff_visible_differences_unchanged() {
+        // Visible differences should produce normal diff output
+        let result = simple_diff("foo\n", "bar\n");
+        assert!(!result.contains("invisible-only differences"));
+        assert!(result.contains("foo"));
+        assert!(result.contains("bar"));
+    }
+
+    #[test]
+    fn test_simple_diff_trailing_space_shows_invisible() {
+        // A trailing space is invisible — should trigger invisible-only mode
+        let result = simple_diff("PUBLIC main1.cxx\n", "PUBLIC main1.cxx \n");
+        assert!(
+            result.contains("invisible-only differences"),
+            "trailing space diff should trigger invisible-only mode, got: {result}"
+        );
+        assert!(result.contains('\u{00B7}'), "expected middle dot for space in diff");
+    }
 }
