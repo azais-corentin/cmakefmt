@@ -19,9 +19,7 @@ if(NOT CMAKE_BUILD_TYPE)
   )
 endif()
 
-set(CMAKE_USER_MAKE_RULES_OVERRIDE
-  ${CMAKE_CURRENT_SOURCE_DIR}/laf/cmake/c_flag_overrides.cmake
-)
+set(CMAKE_USER_MAKE_RULES_OVERRIDE ${CMAKE_CURRENT_SOURCE_DIR}/laf/cmake/c_flag_overrides.cmake)
 set(CMAKE_USER_MAKE_RULES_OVERRIDE_CXX
   ${CMAKE_CURRENT_SOURCE_DIR}/laf/cmake/cxx_flag_overrides.cmake
 )
@@ -66,7 +64,7 @@ endif()
 
 # This is required for KDE/Qt destop integration, which sets
 # BUILD_SHARED_LIBS to TRUE by default
-set(BUILD_SHARED_LIBS off)
+set(BUILD_SHARED_LIBS OFF)
 
 enable_testing()
 
@@ -74,48 +72,41 @@ enable_testing()
 # Options (these can be specified in cmake command line or modifying
 # CMakeCache.txt)
 
-option(USE_SHARED_CMARK "Use your installed copy of cmark" off)
-option(USE_SHARED_CURL "Use your installed copy of curl" off)
-option(USE_SHARED_GIFLIB "Use your installed copy of giflib" off)
-option(USE_SHARED_ZLIB "Use your installed copy of zlib" off)
-option(USE_SHARED_LIBPNG "Use your installed copy of libpng" off)
-option(USE_SHARED_TINYEXIF "Use your installed copy of TinyEXIF" off)
-option(USE_SHARED_TINYXML "Use your installed copy of tinyxml" off)
-option(USE_SHARED_PIXMAN "Use your installed copy of pixman" off)
-option(USE_SHARED_FREETYPE "Use shared FreeType library" off)
-option(USE_SHARED_HARFBUZZ "Use shared HarfBuzz library" off)
-option(ENABLE_ASEPRITE_EXE "Compile main Aseprite executable" on)
-option(ENABLE_MEMLEAK "Enable memory-leaks detector (only for developers)" off)
-option(ENABLE_NEWS "Enable the news in Home tab" on)
-option(ENABLE_UPDATER "Enable automatic check for updates" on)
-option(ENABLE_SCRIPTING "Compile with scripting support" on)
-option(ENABLE_WEBSOCKET "Compile with websocket support" on)
-option(ENABLE_TESTS "Compile unit tests" off)
-option(ENABLE_BENCHMARKS "Compile benchmarks" off)
-option(ENABLE_TRIAL_MODE "Compile the trial version" off)
-option(ENABLE_DRM
-  "Compile the DRM-enabled version (e.g. for automatic updates)"
-  off
-)
-option(ENABLE_STEAM "Compile with Steam library" off)
-option(ENABLE_DEVMODE "Compile vesion for developers" off)
+option(USE_SHARED_CMARK "Use your installed copy of cmark" OFF)
+option(USE_SHARED_CURL "Use your installed copy of curl" OFF)
+option(USE_SHARED_GIFLIB "Use your installed copy of giflib" OFF)
+option(USE_SHARED_ZLIB "Use your installed copy of zlib" OFF)
+option(USE_SHARED_LIBPNG "Use your installed copy of libpng" OFF)
+option(USE_SHARED_TINYEXIF "Use your installed copy of TinyEXIF" OFF)
+option(USE_SHARED_TINYXML "Use your installed copy of tinyxml" OFF)
+option(USE_SHARED_PIXMAN "Use your installed copy of pixman" OFF)
+option(USE_SHARED_FREETYPE "Use shared FreeType library" OFF)
+option(USE_SHARED_HARFBUZZ "Use shared HarfBuzz library" OFF)
+option(ENABLE_ASEPRITE_EXE "Compile main Aseprite executable" ON)
+option(ENABLE_MEMLEAK "Enable memory-leaks detector (only for developers)" OFF)
+option(ENABLE_NEWS "Enable the news in Home tab" ON)
+option(ENABLE_UPDATER "Enable automatic check for updates" ON)
+option(ENABLE_SCRIPTING "Compile with scripting support" ON)
+option(ENABLE_WEBSOCKET "Compile with websocket support" ON)
+option(ENABLE_TESTS "Compile unit tests" OFF)
+option(ENABLE_BENCHMARKS "Compile benchmarks" OFF)
+option(ENABLE_TRIAL_MODE "Compile the trial version" OFF)
+option(ENABLE_DRM "Compile the DRM-enabled version (e.g. for automatic updates)" OFF)
+option(ENABLE_STEAM "Compile with Steam library" OFF)
+option(ENABLE_DEVMODE "Compile vesion for developers" OFF)
 option(ENABLE_I18N_STRINGS
   "Clone i18n strings repo (https://github.com/aseprite/strings) to bin/data/strings.git"
-  off
+  OFF
 )
-option(FULLSCREEN_PLATFORM "Enable fullscreen by default" off)
-option(ENABLE_CLANG_TIDY "Enable static analysis" off)
-option(ENABLE_CCACHE "Use CCache to improve recompilation speed (optional)" on)
-option(ENABLE_SENTRY "Use Sentry SDK to report crashes" off)
-option(ENABLE_WEBP "Enable support to load/save .webp files" on)
-option(ENABLE_PSD "Enable experimental support for .psd files" off)
-option(ENABLE_DESKTOP_INTEGRATION "Enable desktop integration modules" off)
-option(ENABLE_QT_THUMBNAILER "Enable kde5/qt5 thumnailer" off)
-set(CUSTOM_WEBSITE_URL
-  ""
-  CACHE STRING
-  "Enable custom local webserver to check updates"
-)
+option(FULLSCREEN_PLATFORM "Enable fullscreen by default" OFF)
+option(ENABLE_CLANG_TIDY "Enable static analysis" OFF)
+option(ENABLE_CCACHE "Use CCache to improve recompilation speed (optional)" ON)
+option(ENABLE_SENTRY "Use Sentry SDK to report crashes" OFF)
+option(ENABLE_WEBP "Enable support to load/save .webp files" ON)
+option(ENABLE_PSD "Enable experimental support for .psd files" OFF)
+option(ENABLE_DESKTOP_INTEGRATION "Enable desktop integration modules" OFF)
+option(ENABLE_QT_THUMBNAILER "Enable kde5/qt5 thumnailer" OFF)
+set(CUSTOM_WEBSITE_URL "" CACHE STRING "Enable custom local webserver to check updates")
 
 if(ENABLE_SENTRY)
   set(SENTRY_DIR "" CACHE STRING "Sentry native location")
@@ -154,48 +145,25 @@ if(NOT LAF_BACKEND)
 endif()
 
 if(ENABLE_DRM AND NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/drm/CMakeLists.txt)
-  message(
-    FATAL_ERROR
-    "Your Aseprite repository is incomplete, clone the drm repository"
-  )
+  message(FATAL_ERROR "Your Aseprite repository is incomplete, clone the drm repository")
 endif()
 
 ######################################################################
 # Profile build type
 
 list(APPEND CMAKE_BUILD_TYPES Profile)
-mark_as_advanced(
-  CMAKE_C_FLAGS_PROFILE
-  CMAKE_CXX_FLAGS_PROFILE
-  CMAKE_EXE_LINKER_FLAGS_PROFILE
-)
+mark_as_advanced(CMAKE_C_FLAGS_PROFILE CMAKE_CXX_FLAGS_PROFILE CMAKE_EXE_LINKER_FLAGS_PROFILE)
 
 if(CMAKE_COMPILER_IS_GNUCC)
   set(CMAKE_C_FLAGS_PROFILE "-pg" CACHE STRING "Profiling C flags")
-  set(CMAKE_CXX_FLAGS_PROFILE
-    "${CMAKE_C_FLAGS_PROFILE}"
-    CACHE STRING
-    "Profiling C++ flags"
-  )
-  set(CMAKE_EXE_LINKER_FLAGS_PROFILE
-    "-pg"
-    CACHE STRING
-    "Profiling linker flags"
-  )
+  set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_C_FLAGS_PROFILE}" CACHE STRING "Profiling C++ flags")
+  set(CMAKE_EXE_LINKER_FLAGS_PROFILE "-pg" CACHE STRING "Profiling linker flags")
 endif()
 
 if(MSVC)
   set(CMAKE_C_FLAGS_PROFILE "/MT /Zi /Ox /Gd" CACHE STRING "Profiling C flags")
-  set(CMAKE_CXX_FLAGS_PROFILE
-    "${CMAKE_C_FLAGS_PROFILE}"
-    CACHE STRING
-    "Profiling C++ flags"
-  )
-  set(CMAKE_EXE_LINKER_FLAGS_PROFILE
-    "/PROFILE /DEBUG"
-    CACHE STRING
-    "Profiling linker flags"
-  )
+  set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_C_FLAGS_PROFILE}" CACHE STRING "Profiling C++ flags")
+  set(CMAKE_EXE_LINKER_FLAGS_PROFILE "/PROFILE /DEBUG" CACHE STRING "Profiling linker flags")
 endif()
 
 ######################################################################
@@ -268,10 +236,7 @@ else()
   set(ZLIB_FOUND ON)
   set(ZLIB_LIBRARY zlibstatic)
   set(ZLIB_LIBRARIES ${ZLIB_LIBRARY})
-  set(ZLIB_INCLUDE_DIRS
-    ${ZLIB_DIR}
-    ${CMAKE_CURRENT_BINARY_DIR}/third_party/zlib
-  ) # Zlib generated zconf.h file
+  set(ZLIB_INCLUDE_DIRS ${ZLIB_DIR} ${CMAKE_CURRENT_BINARY_DIR}/third_party/zlib) # Zlib generated zconf.h file
   set(ZLIB_INCLUDE_DIR ${ZLIB_INCLUDE_DIRS} CACHE PATH "")
 endif()
 include_directories(${ZLIB_INCLUDE_DIRS})
@@ -290,10 +255,7 @@ else()
     set(PNG_LIBRARY png_static)
   endif()
   set(PNG_LIBRARIES ${PNG_LIBRARY})
-  set(PNG_INCLUDE_DIRS
-    ${LIBPNG_DIR}
-    ${CMAKE_CURRENT_BINARY_DIR}/third_party/libpng
-  ) # Libpng generated pnglibconf.h file
+  set(PNG_INCLUDE_DIRS ${LIBPNG_DIR} ${CMAKE_CURRENT_BINARY_DIR}/third_party/libpng) # Libpng generated pnglibconf.h file
   set(PNG_INCLUDE_DIR ${PNG_INCLUDE_DIRS} CACHE PATH "")
   set(PNG_PNG_INCLUDE_DIR ${PNG_INCLUDE_DIRS} CACHE PATH "")
 endif()
@@ -441,10 +403,7 @@ add_subdirectory(src)
 # Based on http://mariobadr.com/using-clang-tidy-with-cmake-36.html
 
 if(ENABLE_CLANG_TIDY)
-  find_program(CLANG_TIDY_EXE
-    NAMES "clang-tidy"
-    DOC "Path to clang-tidy executable"
-  )
+  find_program(CLANG_TIDY_EXE NAMES "clang-tidy" DOC "Path to clang-tidy executable")
   if(NOT CLANG_TIDY_EXE)
     message(STATUS "clang-tidy not found.")
   else()
@@ -459,14 +418,8 @@ if(ENABLE_CLANG_TIDY)
     set_target_properties(clip PROPERTIES CXX_CLANG_TIDY "${DO_CLANG_TIDY}")
     set_target_properties(dio-lib PROPERTIES CXX_CLANG_TIDY "${DO_CLANG_TIDY}")
     set_target_properties(doc-lib PROPERTIES CXX_CLANG_TIDY "${DO_CLANG_TIDY}")
-    set_target_properties(
-      filters-lib
-      PROPERTIES CXX_CLANG_TIDY "${DO_CLANG_TIDY}"
-    )
-    set_target_properties(
-      fixmath-lib
-      PROPERTIES CXX_CLANG_TIDY "${DO_CLANG_TIDY}"
-    )
+    set_target_properties(filters-lib PROPERTIES CXX_CLANG_TIDY "${DO_CLANG_TIDY}")
+    set_target_properties(fixmath-lib PROPERTIES CXX_CLANG_TIDY "${DO_CLANG_TIDY}")
     set_target_properties(flic-lib PROPERTIES CXX_CLANG_TIDY "${DO_CLANG_TIDY}")
     set_target_properties(gen PROPERTIES CXX_CLANG_TIDY "${DO_CLANG_TIDY}")
     set_target_properties(laf-base PROPERTIES CXX_CLANG_TIDY "${DO_CLANG_TIDY}")
@@ -475,15 +428,9 @@ if(ENABLE_CLANG_TIDY)
     set_target_properties(laf-os PROPERTIES CXX_CLANG_TIDY "${DO_CLANG_TIDY}")
     set_target_properties(net-lib PROPERTIES CXX_CLANG_TIDY "${DO_CLANG_TIDY}")
     set_target_properties(obs PROPERTIES CXX_CLANG_TIDY "${DO_CLANG_TIDY}")
-    set_target_properties(
-      render-lib
-      PROPERTIES CXX_CLANG_TIDY "${DO_CLANG_TIDY}"
-    )
+    set_target_properties(render-lib PROPERTIES CXX_CLANG_TIDY "${DO_CLANG_TIDY}")
     set_target_properties(ui-lib PROPERTIES CXX_CLANG_TIDY "${DO_CLANG_TIDY}")
     set_target_properties(undo PROPERTIES CXX_CLANG_TIDY "${DO_CLANG_TIDY}")
-    set_target_properties(
-      updater-lib
-      PROPERTIES CXX_CLANG_TIDY "${DO_CLANG_TIDY}"
-    )
+    set_target_properties(updater-lib PROPERTIES CXX_CLANG_TIDY "${DO_CLANG_TIDY}")
   endif()
 endif()

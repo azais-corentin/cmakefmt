@@ -242,8 +242,8 @@ fn simple_diff(expected: &str, actual: &str) -> String {
         ) -> fmt::Result {
             let before_text: String = before.iter().map(|&t| self.interner[t]).collect();
             let after_text: String = after.iter().map(|&t| self.interner[t]).collect();
-            let invisible_only =
-                before_text != after_text && strip_invisible(&before_text) == strip_invisible(&after_text);
+            let invisible_only = before_text != after_text
+                && strip_invisible(&before_text) == strip_invisible(&after_text);
 
             if invisible_only {
                 self.has_invisible_hunk.set(true);
@@ -290,11 +290,7 @@ fn simple_diff(expected: &str, actual: &str) -> String {
         has_invisible_hunk: Cell::new(false),
     };
     let result = diff
-        .unified_diff(
-            &printer,
-            UnifiedDiffConfig::default(),
-            &input,
-        )
+        .unified_diff(&printer, UnifiedDiffConfig::default(), &input)
         .to_string();
 
     if printer.has_invisible_hunk.get() {
@@ -548,6 +544,9 @@ mod invisible_diff_tests {
             result.contains("invisible-only differences"),
             "trailing space diff should trigger invisible-only mode, got: {result}"
         );
-        assert!(result.contains('\u{00B7}'), "expected middle dot for space in diff");
+        assert!(
+            result.contains('\u{00B7}'),
+            "expected middle dot for space in diff"
+        );
     }
 }

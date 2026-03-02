@@ -68,11 +68,30 @@ pub fn resolve_config(
         _ => CaseStyle::Upper,
     };
 
-    let closing_paren_newline =
-        get_value(&mut config, "closingParenNewline", defaults.closing_paren_newline, &mut diagnostics);
-    let sort_lists = get_value(&mut config, "sortLists", defaults.sort_lists, &mut diagnostics);
-    let max_blank_lines: u8 = get_value(&mut config, "maxBlankLines", defaults.max_blank_lines, &mut diagnostics);
-    let space_before_paren = get_value(&mut config, "spaceBeforeParen", defaults.space_before_paren, &mut diagnostics);
+    let closing_paren_newline = get_value(
+        &mut config,
+        "closingParenNewline",
+        defaults.closing_paren_newline,
+        &mut diagnostics,
+    );
+    let sort_lists = get_value(
+        &mut config,
+        "sortLists",
+        defaults.sort_lists,
+        &mut diagnostics,
+    );
+    let max_blank_lines: u8 = get_value(
+        &mut config,
+        "maxBlankLines",
+        defaults.max_blank_lines,
+        &mut diagnostics,
+    );
+    let space_before_paren = get_value(
+        &mut config,
+        "spaceBeforeParen",
+        defaults.space_before_paren,
+        &mut diagnostics,
+    );
 
     diagnostics.extend(get_unknown_property_diagnostics(config));
 

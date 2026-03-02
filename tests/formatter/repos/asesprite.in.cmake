@@ -1,4 +1,4 @@
-### {}
+### {"lineWidth": 100}
 # Aseprite
 # Copyright (C) 2018-2025  Igara Studio S.A.
 # Copyright (C) 2001-2018  David Capello

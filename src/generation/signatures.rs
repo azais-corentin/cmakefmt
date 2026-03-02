@@ -118,14 +118,15 @@ macro_rules! spec {
 static SET_KW: &[(&str, KwType)] = &[
     ("PARENT_SCOPE", KwType::Option),
     ("FORCE", KwType::Option),
-    ("CACHE", KwType::OneValue),
     ("TYPE", KwType::OneValue),
     ("HELP", KwType::OneValue),
     ("VALUE", KwType::MultiValue),
 ];
 
+static SET_SECTIONS: &[SectionDef] = &[("CACHE", 1, &[])];
+
 static SET_SPEC: CommandSpec = spec! {
-    front: 1, back: 0, kw: SET_KW, sections: &[], cmd_line: &[], pair: &[],
+    front: 1, back: 0, kw: SET_KW, sections: SET_SECTIONS, cmd_line: &[], pair: &[],
 };
 
 // ---------------------------------------------------------------------------
@@ -389,7 +390,7 @@ static MESSAGE_KW: &[(&str, KwType)] = &[
 ];
 
 static MESSAGE_SPEC: CommandSpec = spec! {
-    front: 0, back: 0, kw: MESSAGE_KW, sections: &[], cmd_line: &[], pair: &[],
+    front: 1, back: 0, kw: MESSAGE_KW, sections: &[], cmd_line: &[], pair: &[],
 };
 
 // ---------------------------------------------------------------------------

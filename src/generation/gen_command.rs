@@ -240,6 +240,11 @@ const KNOWN_KEYWORDS: &[&str] = &[
     "PATTERN",
     "REGEX",
     "EXCLUDE",
+    "FILE_SET",
+    "BASE_DIRS",
+    "HEADERS",
+    "CXX_MODULES",
+    "CXX_MODULE_HEADER_UNITS",
 ];
 
 /// Commands where arguments after keywords can be sorted.
@@ -286,7 +291,28 @@ fn apply_command_case(name: &str, style: CaseStyle) -> String {
     }
 }
 
+fn normalize_boolean_literal(text: &str) -> Option<&'static str> {
+    if text.eq_ignore_ascii_case("ON") {
+        Some("ON")
+    } else if text.eq_ignore_ascii_case("OFF") {
+        Some("OFF")
+    } else if text.eq_ignore_ascii_case("TRUE") {
+        Some("TRUE")
+    } else if text.eq_ignore_ascii_case("FALSE") {
+        Some("FALSE")
+    } else if text.eq_ignore_ascii_case("YES") {
+        Some("YES")
+    } else if text.eq_ignore_ascii_case("NO") {
+        Some("NO")
+    } else {
+        None
+    }
+}
+
 fn apply_keyword_case(text: &str, style: CaseStyle) -> String {
+    if let Some(normalized) = normalize_boolean_literal(text) {
+        return normalized.to_string();
+    }
     match style {
         CaseStyle::Lower => text.to_ascii_lowercase(),
         CaseStyle::Upper => text.to_ascii_uppercase(),
@@ -720,6 +746,8 @@ fn try_single_line(
                         let t = arg_inline_text(a);
                         if keyword_positions.contains(&i) {
                             apply_keyword_case(&t, config.keyword_case)
+                        } else if let Some(normalized) = normalize_boolean_literal(&t) {
+                            normalized.to_string()
                         } else {
                             t
                         }
@@ -833,14 +861,13 @@ fn compute_keyword_positions(args: &[FormattedArg], spec: &CommandSpec) -> Vec<u
     let mut once_keyword_seen = false;
     let mut i = 0;
 
-    // Skip front positional
+    // Skip front positional (but mark keyword args for casing)
     let mut pos_count = 0;
     while i < args.len() && pos_count < spec.front_positional {
-        if get_keyword_type(&args[i], spec).is_none() && !is_section_keyword(&args[i], spec) {
-            pos_count += 1;
-        } else {
-            break;
+        if get_keyword_type(&args[i], spec).is_some() || is_section_keyword(&args[i], spec) {
+            positions.push(i);
         }
+        pos_count += 1;
         i += 1;
     }
 
@@ -1025,14 +1052,8 @@ fn split_arguments<'a>(
     // 1. Consume front positional args (args before first keyword)
     let mut pos_count = 0;
     while i < main_args.len() && pos_count < spec.front_positional {
-        if get_keyword_type(&main_args[i], spec).is_none()
-            && !is_section_keyword(&main_args[i], spec)
-        {
-            front_pos.push(&main_args[i]);
-            pos_count += 1;
-        } else {
-            break;
-        }
+        front_pos.push(&main_args[i]);
+        pos_count += 1;
         i += 1;
     }
 
@@ -1201,14 +1222,13 @@ fn split_arguments<'a>(
 // ===========================================================================
 
 fn gen_known_multi_line(
-    cmd_name: &str,
+    _cmd_name: &str,
     arguments: &[FormattedArg],
     spec: &CommandSpec,
     config: &Configuration,
     indent_depth: u32,
 ) -> PrintItems {
     let (front_pos, groups, back_pos) = split_arguments(arguments, spec);
-    let is_short_name = !config.use_tabs && (cmd_name.len() + 1) == config.indent_width as usize;
     let base_indent = (indent_depth as usize + 1) * config.indent_width as usize;
 
     let mut inner = PrintItems::new();
@@ -1216,14 +1236,18 @@ fn gen_known_multi_line(
 
     // Emit front positional args
     for (idx, arg) in front_pos.iter().enumerate() {
-        if idx == 0 && is_short_name {
-            // Short name: first arg on same line as cmd(
+        if idx == 0 {
+            // First positional arg always on same line as cmd(
             last_on_opening_line = true;
         } else {
             inner.push_signal(Signal::NewLine);
             last_on_opening_line = false;
         }
-        emit_arg(&mut inner, arg);
+        if arg.is_keyword {
+            emit_kw_arg(&mut inner, arg, config);
+        } else {
+            emit_arg(&mut inner, arg);
+        }
     }
 
     // Emit keyword groups
@@ -1322,16 +1346,23 @@ fn emit_keyword_group(
 
     // Check if this is a section keyword with sub-keywords
     let section_kws = get_section_keywords(&keyword.text, spec);
-
-    // Try inline: keyword + all values on one line
+    let section_front = get_section_front_positional(&keyword.text, spec);
+    let has_section_tail_values =
+        section_kws.is_some() && section_front > 0 && values.len() > section_front;
+    // Try inline: keyword + all values on one line.
+    // Reserve indent_width margin so the line isn't packed tighter
+    // than the sub-indent where values would land in step 2.
     let inline_width = compute_keyword_inline_width(keyword, values);
-    if base_indent + inline_width <= config.line_width as usize
-        && !values.iter().any(|v| v.text.contains('\n'))
+    let can_inline_content = !values.iter().any(|v| v.text.contains('\n'))
         && values
             .iter()
             .all(|v| v.trailing_comment.is_none() || v.trailing_is_bracket)
         && (keyword.trailing_comment.is_none() || keyword.trailing_is_bracket)
-        && !values.iter().any(|v| v.text.starts_with('#'))
+        && !values.iter().any(|v| v.text.starts_with('#'));
+
+    if base_indent + inline_width + config.indent_width as usize <= config.line_width as usize
+        && can_inline_content
+        && !has_section_tail_values
     {
         items.push_signal(Signal::NewLine);
         let kw_text = if keyword.is_keyword {
@@ -1342,7 +1373,11 @@ fn emit_keyword_group(
         items.push_string(kw_text);
         for val in values {
             items.push_space();
-            let val_text = arg_inline_text(val);
+            let val_text = if val.is_keyword {
+                apply_keyword_case(&arg_inline_text(val), config.keyword_case)
+            } else {
+                arg_inline_text(val)
+            };
             items.extend(ir_helpers::gen_from_raw_string(&val_text));
         }
         if let Some(comment) = &keyword.trailing_comment {
@@ -1352,12 +1387,40 @@ fn emit_keyword_group(
         return;
     }
 
+    // Step 2: keyword on its own line, all values on one line at deeper indent.
+    let sub_indent = base_indent + config.indent_width as usize;
+    let values_only_width: usize =
+        values.iter().map(|v| arg_width(v)).sum::<usize>() + values.len().saturating_sub(1);
+    if sub_indent + values_only_width <= config.line_width as usize
+        && can_inline_content
+        && values.len() > 1
+        && !has_section_tail_values
+    {
+        items.push_signal(Signal::NewLine);
+        emit_kw_arg(items, keyword, config);
+        let mut val_items = PrintItems::new();
+        val_items.push_signal(Signal::NewLine);
+        for (vi, val) in values.iter().enumerate() {
+            if vi > 0 {
+                val_items.push_space();
+            }
+            let val_text = if val.is_keyword {
+                apply_keyword_case(&arg_inline_text(val), config.keyword_case)
+            } else {
+                arg_inline_text(val)
+            };
+            val_items.extend(ir_helpers::gen_from_raw_string(&val_text));
+        }
+        items.extend(ir_helpers::with_indent(val_items));
+        return;
+    }
+
     // Expanded: keyword on its own line, values indented below
     items.push_signal(Signal::NewLine);
 
     if let Some(sub_kws) = section_kws {
         // Section keyword with possible front positionals to keep inline.
-        let sec_front = get_section_front_positional(&keyword.text, spec);
+        let sec_front = section_front;
         let leading_count = sec_front.min(values.len());
         if leading_count > 0 {
             let leading_width = keyword.text.len()
@@ -1380,12 +1443,16 @@ fn emit_keyword_group(
                     items.push_space();
                     items.extend(ir_helpers::gen_from_raw_string(&arg_inline_text(val)));
                 }
-                emit_section_values(
+                let wrap_section_tail = values[leading_count..]
+                    .iter()
+                    .any(|v| v.text.contains('\n'));
+                emit_section_values_inner(
                     items,
                     &values[leading_count..],
                     sub_kws,
                     config,
                     base_indent,
+                    wrap_section_tail,
                 );
                 return;
             }
@@ -1415,12 +1482,8 @@ fn emit_keyword_group(
             let regular_values = &values[..trailing_comment_start];
             let trailing_comments = &values[trailing_comment_start..];
 
-            let mut val_items = PrintItems::new();
-            for val in regular_values {
-                val_items.push_signal(Signal::NewLine);
-                emit_arg(&mut val_items, val);
-            }
-            items.extend(ir_helpers::with_indent(val_items));
+            // Detect and format genex groups among the values.
+            emit_values_with_genex(items, regular_values);
 
             for comment in trailing_comments {
                 items.push_signal(Signal::NewLine);
@@ -1828,6 +1891,17 @@ fn emit_section_values(
     config: &Configuration,
     base_indent: usize,
 ) {
+    emit_section_values_inner(items, values, sub_keywords, config, base_indent, true);
+}
+
+fn emit_section_values_inner(
+    items: &mut PrintItems,
+    values: &[&FormattedArg],
+    sub_keywords: &[(&str, KwType)],
+    config: &Configuration,
+    base_indent: usize,
+    wrap_indent: bool,
+) {
     let sub_indent = base_indent + config.indent_width as usize;
     let mut val_items = PrintItems::new();
     let mut i = 0;
@@ -1843,7 +1917,7 @@ fn emit_section_values(
             match kt {
                 KwType::Option => {
                     val_items.push_signal(Signal::NewLine);
-                    emit_arg(&mut val_items, values[i]);
+                    emit_sub_kw_arg(&mut val_items, values[i], config);
                     i += 1;
                 }
                 KwType::OneValue => {
@@ -1858,9 +1932,17 @@ fn emit_section_values(
                         if sub_indent + iw <= config.line_width as usize && !sv.text.contains('\n')
                         {
                             val_items.push_signal(Signal::NewLine);
-                            val_items.push_string(values[i].text.clone());
+                            val_items.push_string(apply_keyword_case(
+                                &values[i].text,
+                                config.keyword_case,
+                            ));
                             val_items.push_space();
-                            val_items.extend(ir_helpers::gen_from_raw_string(&arg_inline_text(sv)));
+                            let sv_text = if sv.is_keyword {
+                                apply_keyword_case(&arg_inline_text(sv), config.keyword_case)
+                            } else {
+                                arg_inline_text(sv)
+                            };
+                            val_items.extend(ir_helpers::gen_from_raw_string(&sv_text));
                             if let Some(comment) = &values[i].trailing_comment {
                                 val_items.push_space();
                                 val_items.extend(ir_helpers::gen_from_raw_string(comment));
@@ -1871,7 +1953,7 @@ fn emit_section_values(
                     }
                     // Expanded
                     val_items.push_signal(Signal::NewLine);
-                    emit_arg(&mut val_items, values[i]);
+                    emit_sub_kw_arg(&mut val_items, values[i], config);
                     if let Some(sv) = sub_val {
                         let mut sub_items = PrintItems::new();
                         sub_items.push_signal(Signal::NewLine);
@@ -1909,11 +1991,7 @@ fn emit_section_values(
                         && !sub_values.iter().any(|v| v.text.starts_with('#'))
                     {
                         val_items.push_signal(Signal::NewLine);
-                        let sub_kw_text = if kw.is_keyword {
-                            apply_keyword_case(&kw.text, config.keyword_case)
-                        } else {
-                            kw.text.clone()
-                        };
+                        let sub_kw_text = apply_keyword_case(&kw.text, config.keyword_case);
                         val_items.push_string(sub_kw_text);
                         for sv in &sub_values {
                             val_items.push_space();
@@ -1925,10 +2003,10 @@ fn emit_section_values(
                         }
                     } else if sub_values.is_empty() {
                         val_items.push_signal(Signal::NewLine);
-                        emit_kw_arg(&mut val_items, kw, config);
+                        emit_sub_kw_arg(&mut val_items, kw, config);
                     } else {
                         val_items.push_signal(Signal::NewLine);
-                        emit_kw_arg(&mut val_items, kw, config);
+                        emit_sub_kw_arg(&mut val_items, kw, config);
                         let mut sub_items = PrintItems::new();
                         for sv in &sub_values {
                             sub_items.push_signal(Signal::NewLine);
@@ -1974,14 +2052,15 @@ fn emit_section_values(
                     if sub_indent + total_iw <= config.line_width as usize && all_inlineable {
                         // Full inline
                         val_items.push_signal(Signal::NewLine);
-                        val_items.push_string(if kw.is_keyword {
-                            apply_keyword_case(&kw.text, config.keyword_case)
-                        } else {
-                            kw.text.clone()
-                        });
+                        val_items.push_string(apply_keyword_case(&kw.text, config.keyword_case));
                         for v in all_group_values {
                             val_items.push_space();
-                            val_items.extend(ir_helpers::gen_from_raw_string(&arg_inline_text(v)));
+                            let vt = if v.is_keyword {
+                                apply_keyword_case(&arg_inline_text(v), config.keyword_case)
+                            } else {
+                                arg_inline_text(v)
+                            };
+                            val_items.extend(ir_helpers::gen_from_raw_string(&vt));
                         }
                         if let Some(comment) = &kw.trailing_comment {
                             val_items.push_space();
@@ -2006,11 +2085,8 @@ fn emit_section_values(
                         if can_inline_front {
                             // Keyword + front positionals inline, rest indented below
                             val_items.push_signal(Signal::NewLine);
-                            val_items.push_string(if kw.is_keyword {
-                                apply_keyword_case(&kw.text, config.keyword_case)
-                            } else {
-                                kw.text.clone()
-                            });
+                            val_items
+                                .push_string(apply_keyword_case(&kw.text, config.keyword_case));
                             for v in front_positionals {
                                 val_items.push_space();
                                 val_items
@@ -2020,23 +2096,25 @@ fn emit_section_values(
                                 val_items.push_space();
                                 val_items.extend(ir_helpers::gen_from_raw_string(comment));
                             }
-                            emit_section_values(
+                            emit_section_values_inner(
                                 &mut val_items,
                                 rest_values,
                                 group_sub_kws,
                                 config,
                                 sub_indent,
+                                false,
                             );
                         } else {
                             // Keyword alone on its line, everything else indented
                             val_items.push_signal(Signal::NewLine);
-                            emit_kw_arg(&mut val_items, kw, config);
-                            emit_section_values(
+                            emit_sub_kw_arg(&mut val_items, kw, config);
+                            emit_section_values_inner(
                                 &mut val_items,
                                 all_group_values,
                                 group_sub_kws,
                                 config,
                                 sub_indent,
+                                false,
                             );
                         }
                     }
@@ -2050,7 +2128,11 @@ fn emit_section_values(
         }
     }
 
-    items.extend(ir_helpers::with_indent(val_items));
+    if wrap_indent {
+        items.extend(ir_helpers::with_indent(val_items));
+    } else {
+        items.extend(val_items);
+    }
 }
 
 fn is_text_in_keyword_list(text: &str, kws: &[(&str, KwType)]) -> bool {
@@ -2672,7 +2754,7 @@ fn has_line_comment_in_paren(arg: &FormattedArg) -> bool {
 // ===========================================================================
 
 /// Emit a single argument with its trailing comment.
-/// Text is emitted AS-IS (no keyword casing applied).
+/// Text is emitted AS-IS, except unquoted boolean literals are normalized to uppercase.
 fn emit_arg(items: &mut PrintItems, arg: &FormattedArg) {
     emit_arg_with_case(items, arg, None);
 }
@@ -2680,6 +2762,22 @@ fn emit_arg(items: &mut PrintItems, arg: &FormattedArg) {
 /// Emit a keyword argument with keyword casing applied.
 fn emit_kw_arg(items: &mut PrintItems, arg: &FormattedArg, config: &Configuration) {
     emit_arg_with_case(items, arg, Some(config.keyword_case));
+}
+
+/// Emit a sub-keyword with keyword casing applied unconditionally.
+/// Used for sub-keywords identified by position in section groups,
+/// which lack the `is_keyword` flag.
+fn emit_sub_kw_arg(items: &mut PrintItems, arg: &FormattedArg, config: &Configuration) {
+    let text = apply_keyword_case(&arg.text, config.keyword_case);
+    items.extend(ir_helpers::gen_from_raw_string(&text));
+    if let Some(comment) = &arg.trailing_comment {
+        items.push_space();
+        if arg.trailing_is_bracket {
+            emit_bracket_verbatim(items, comment);
+        } else {
+            items.extend(ir_helpers::gen_from_raw_string(comment));
+        }
+    }
 }
 
 fn emit_arg_with_case(items: &mut PrintItems, arg: &FormattedArg, kw_case: Option<CaseStyle>) {
@@ -2693,7 +2791,9 @@ fn emit_arg_with_case(items: &mut PrintItems, arg: &FormattedArg, kw_case: Optio
     } else if arg.is_bracket || arg.text.starts_with("#[") {
         emit_bracket_verbatim(items, &arg.text);
     } else {
-        let text = if let Some(case) = kw_case {
+        let text = if let Some(normalized) = normalize_boolean_literal(&arg.text) {
+            normalized.to_string()
+        } else if let Some(case) = kw_case {
             if arg.is_keyword {
                 apply_keyword_case(&arg.text, case)
             } else {
@@ -2702,7 +2802,27 @@ fn emit_arg_with_case(items: &mut PrintItems, arg: &FormattedArg, kw_case: Optio
         } else {
             arg.text.clone()
         };
-        items.extend(ir_helpers::gen_from_raw_string(&text));
+        if text.contains('\n') {
+            // Multi-line quoted strings: emit first line normally (gets indent
+            // from context), then continuation lines verbatim.
+            let first_nl = text.find('\n').unwrap();
+            let first_line = &text[..first_nl];
+            let rest = &text[first_nl + 1..];
+            items.push_string(first_line.to_string());
+            items.push_signal(Signal::StartIgnoringIndent);
+            for line in rest.lines() {
+                items.push_signal(Signal::NewLine);
+                if !line.is_empty() {
+                    items.push_string(line.to_string());
+                }
+            }
+            if rest.ends_with('\n') {
+                items.push_signal(Signal::NewLine);
+            }
+            items.push_signal(Signal::FinishIgnoringIndent);
+        } else {
+            items.extend(ir_helpers::gen_from_raw_string(&text));
+        }
     }
 
     if let Some(comment) = &arg.trailing_comment {
@@ -2771,4 +2891,363 @@ fn sort_argument_groups(args: &mut [FormattedArg]) {
             i += 1;
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Generator expression (genex) formatting
+// ---------------------------------------------------------------------------
+
+/// Compute the net depth change of `$<` / `>` in a string.
+/// Each `$<` increments by 1, each `>` decrements by 1.
+fn genex_depth_delta(text: &str) -> i32 {
+    let mut depth: i32 = 0;
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if i + 1 < bytes.len() && bytes[i] == b'$' && bytes[i + 1] == b'<' {
+            depth += 1;
+            i += 2;
+        } else if bytes[i] == b'>' {
+            depth -= 1;
+            i += 1;
+        } else {
+            i += 1;
+        }
+    }
+    depth
+}
+
+/// Split `text` at occurrences of `sep` that are at genex depth 0.
+fn split_at_depth0(text: &str, sep: char) -> Vec<&str> {
+    let mut result = Vec::new();
+    let mut depth: i32 = 0;
+    let mut start = 0;
+    let bytes = text.as_bytes();
+    let sep_byte = sep as u8;
+    let mut i = 0;
+    while i < bytes.len() {
+        if i + 1 < bytes.len() && bytes[i] == b'$' && bytes[i + 1] == b'<' {
+            depth += 1;
+            i += 2;
+        } else if bytes[i] == b'>' {
+            depth -= 1;
+            i += 1;
+        } else if bytes[i] == sep_byte && depth == 0 {
+            result.push(&text[start..i]);
+            start = i + 1;
+            i += 1;
+        } else {
+            i += 1;
+        }
+    }
+    if start <= text.len() {
+        result.push(&text[start..]);
+    }
+    result
+}
+
+/// Find the byte offset of the first `:` at genex depth 0, or `None`.
+fn find_depth0_colon(text: &str) -> Option<usize> {
+    let mut depth: i32 = 0;
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if i + 1 < bytes.len() && bytes[i] == b'$' && bytes[i + 1] == b'<' {
+            depth += 1;
+            i += 2;
+        } else if bytes[i] == b'>' {
+            depth -= 1;
+            i += 1;
+        } else if bytes[i] == b':' && depth == 0 {
+            return Some(i);
+        } else {
+            i += 1;
+        }
+    }
+    None
+}
+
+/// A parsed generator expression tree node.
+enum GenexNode {
+    /// Plain text (no genex).
+    Text(String),
+    /// `$<NAME>` — a genex with no colon (simple variable reference).
+    SimpleGenex { prefix: String, name: String },
+    /// `$<NAME:child1,child2,...>` — a named genex with comma-separated children.
+    NamedGenex {
+        prefix: String,
+        name: String,
+        children: Vec<GenexNode>,
+    },
+    /// `$<$<COND>:val1 val2 ...>` — condition genex wrapping space-separated values.
+    ConditionGenex {
+        condition: Box<GenexNode>,
+        values: Vec<GenexNode>,
+    },
+}
+
+/// Parse a text fragment into a `GenexNode`.
+/// The text may start with a non-genex prefix (e.g. `LOG_LEVEL=$<IF:...>`).
+fn parse_genex(text: &str) -> GenexNode {
+    let text = text.trim();
+    // Find the first `$<` in the text.
+    let genex_start = text.find("$<");
+    match genex_start {
+        None => GenexNode::Text(text.to_owned()),
+        Some(0) => parse_genex_inner(text),
+        Some(pos) => {
+            // There is a prefix before the genex (e.g. "LOG_LEVEL=").
+            let prefix = &text[..pos];
+            let rest = &text[pos..];
+            let mut node = parse_genex_inner(rest);
+            // Attach prefix to the parsed node.
+            match &mut node {
+                GenexNode::SimpleGenex { prefix: p, .. }
+                | GenexNode::NamedGenex { prefix: p, .. } => {
+                    *p = prefix.to_owned();
+                }
+                GenexNode::ConditionGenex { .. } | GenexNode::Text(_) => {
+                    // Condition genex or text shouldn't normally have a prefix,
+                    // but if they do, wrap in text.
+                    return GenexNode::Text(text.to_owned());
+                }
+            }
+            node
+        }
+    }
+}
+
+/// Parse text that starts with `$<` as a genex expression.
+fn parse_genex_inner(text: &str) -> GenexNode {
+    let text = text.trim();
+    // Must start with `$<` and end with `>`.
+    if !text.starts_with("$<") || !text.ends_with('>') {
+        return GenexNode::Text(text.to_owned());
+    }
+    // Strip outer `$<` and `>`.
+    let inner = &text[2..text.len() - 1];
+
+    // Find first depth-0 `:` within the stripped content.
+    match find_depth0_colon(inner) {
+        None => {
+            // No colon \u2192 SimpleGenex like `$<CXX_COMPILER_VERSION>`.
+            GenexNode::SimpleGenex {
+                prefix: String::new(),
+                name: inner.trim().to_owned(),
+            }
+        }
+        Some(colon_pos) => {
+            let before_colon = inner[..colon_pos].trim();
+            let after_colon = inner[colon_pos + 1..].trim();
+
+            if before_colon.starts_with("$<") {
+                // Condition genex: `$<$<COND>:values>`.
+                let condition = parse_genex(before_colon);
+                // Values are space-separated at depth 0.
+                let value_parts = split_at_depth0(after_colon, ' ');
+                let values = value_parts
+                    .into_iter()
+                    .map(|s| s.trim())
+                    .filter(|s| !s.is_empty())
+                    .map(parse_genex)
+                    .collect();
+                GenexNode::ConditionGenex {
+                    condition: Box::new(condition),
+                    values,
+                }
+            } else {
+                // Named genex: `$<NAME:children>`.
+                let name = before_colon.to_owned();
+                let child_parts = split_at_depth0(after_colon, ',');
+                let children = child_parts
+                    .into_iter()
+                    .map(|s| s.trim())
+                    .filter(|s| !s.is_empty())
+                    .map(parse_genex)
+                    .collect();
+                GenexNode::NamedGenex {
+                    prefix: String::new(),
+                    name,
+                    children,
+                }
+            }
+        }
+    }
+}
+
+/// Reconstruct the flat (inline) text of a genex node.
+fn genex_inline_text(node: &GenexNode) -> String {
+    match node {
+        GenexNode::Text(s) => s.clone(),
+        GenexNode::SimpleGenex { prefix, name } => {
+            format!("{prefix}$<{name}>")
+        }
+        GenexNode::NamedGenex {
+            prefix,
+            name,
+            children,
+        } => {
+            let children_text: Vec<String> = children.iter().map(genex_inline_text).collect();
+            format!("{prefix}$<{name}:{}>", children_text.join(","))
+        }
+        GenexNode::ConditionGenex { condition, values } => {
+            let cond_text = genex_inline_text(condition);
+            let values_text: Vec<String> = values.iter().map(genex_inline_text).collect();
+            format!("$<{cond_text}:{}>", values_text.join(" "))
+        }
+    }
+}
+
+/// Returns true if a genex node should be formatted inline (single line).
+fn genex_is_inline(node: &GenexNode) -> bool {
+    match node {
+        GenexNode::Text(_) | GenexNode::SimpleGenex { .. } => true,
+        GenexNode::NamedGenex { children, .. } => {
+            // Inline only if exactly 1 child that is itself inline-simple.
+            children.len() == 1
+                && matches!(
+                    &children[0],
+                    GenexNode::Text(_) | GenexNode::SimpleGenex { .. }
+                )
+        }
+        GenexNode::ConditionGenex { .. } => false,
+    }
+}
+
+/// Format a genex node tree into PrintItems.
+fn format_genex_node(items: &mut PrintItems, node: &GenexNode) {
+    format_genex_impl(items, node, "");
+}
+
+/// Internal: format a genex node, appending `close_suffix` after the closing `>`.
+/// This is used by ConditionGenex to merge condition's `>` with `:`.
+fn format_genex_impl(items: &mut PrintItems, node: &GenexNode, close_suffix: &str) {
+    match node {
+        GenexNode::Text(s) => {
+            items.extend(ir_helpers::gen_from_raw_string(s));
+            if !close_suffix.is_empty() {
+                items.extend(ir_helpers::gen_from_raw_string(close_suffix));
+            }
+        }
+        GenexNode::SimpleGenex { prefix, name } => {
+            let text = format!("{prefix}$<{name}>{close_suffix}");
+            items.extend(ir_helpers::gen_from_raw_string(&text));
+        }
+        GenexNode::NamedGenex {
+            prefix,
+            name,
+            children,
+        } => {
+            if genex_is_inline(node) {
+                let text = format!("{}{close_suffix}", genex_inline_text(node));
+                items.extend(ir_helpers::gen_from_raw_string(&text));
+            } else {
+                // Multi-line: `$<NAME:` then children indented, then `>`.
+                let opener = format!("{prefix}$<{name}:");
+                items.extend(ir_helpers::gen_from_raw_string(&opener));
+                let mut inner = PrintItems::new();
+                for (i, child) in children.iter().enumerate() {
+                    inner.push_signal(Signal::NewLine);
+                    format_genex_node(&mut inner, child);
+                    if i + 1 < children.len() {
+                        inner.push_str_runtime_width_computed(",");
+                    }
+                }
+                items.extend(ir_helpers::with_indent(inner));
+                items.push_signal(Signal::NewLine);
+                let closer = format!(">{close_suffix}");
+                items.extend(ir_helpers::gen_from_raw_string(&closer));
+            }
+        }
+        GenexNode::ConditionGenex { condition, values } => {
+            if genex_is_inline(condition) {
+                // Condition fits inline: `$<inline_cond:`
+                let cond_text = genex_inline_text(condition);
+                let opener = format!("$<{cond_text}:");
+                items.extend(ir_helpers::gen_from_raw_string(&opener));
+            } else {
+                // Condition is multi-line: `$<` then condition with >: suffix.
+                items.extend(ir_helpers::gen_from_raw_string("$<"));
+                format_genex_impl(items, condition, ":");
+            }
+            // Values indented.
+            let mut val_items = PrintItems::new();
+            for val in values {
+                val_items.push_signal(Signal::NewLine);
+                format_genex_node(&mut val_items, val);
+            }
+            items.extend(ir_helpers::with_indent(val_items));
+            items.push_signal(Signal::NewLine);
+            let closer = format!(">{close_suffix}");
+            items.extend(ir_helpers::gen_from_raw_string(&closer));
+        }
+    }
+}
+
+/// Group a slice of `FormattedArg` values into genex groups and standalone args.
+/// A genex group is a sequence of consecutive args whose cumulative `$<`/`>`
+/// depth goes above 0 and returns to 0.
+enum GenexArgGroup<'a> {
+    /// A standalone argument (not part of a genex spanning multiple tokens).
+    Single(&'a FormattedArg),
+    /// A group of consecutive args forming one complete genex.
+    Genex(Vec<&'a FormattedArg>),
+}
+
+fn group_args_by_genex<'a>(args: &[&'a FormattedArg]) -> Vec<GenexArgGroup<'a>> {
+    let mut groups: Vec<GenexArgGroup<'a>> = Vec::new();
+    let mut depth: i32 = 0;
+    let mut genex_buf: Vec<&'a FormattedArg> = Vec::new();
+
+    for &arg in args {
+        let delta = genex_depth_delta(&arg.text);
+        if depth == 0 && delta == 0 {
+            // Standalone arg, not genex.
+            // But it might contain a self-contained genex (like LOG_LEVEL=$<IF:...>).
+            if arg.text.contains("$<") {
+                groups.push(GenexArgGroup::Genex(vec![arg]));
+            } else {
+                groups.push(GenexArgGroup::Single(arg));
+            }
+        } else {
+            genex_buf.push(arg);
+            depth += delta;
+            if depth <= 0 {
+                // Genex group complete.
+                groups.push(GenexArgGroup::Genex(std::mem::take(&mut genex_buf)));
+                depth = 0;
+            }
+        }
+    }
+    // If there are leftover tokens (unclosed genex), emit them individually.
+    for arg in genex_buf {
+        groups.push(GenexArgGroup::Single(arg));
+    }
+    groups
+}
+
+/// Emit values under a regular keyword, detecting and formatting genex groups.
+fn emit_values_with_genex(items: &mut PrintItems, values: &[&FormattedArg]) {
+    let groups = group_args_by_genex(values);
+    let mut val_items = PrintItems::new();
+    for group in &groups {
+        match group {
+            GenexArgGroup::Single(arg) => {
+                val_items.push_signal(Signal::NewLine);
+                emit_arg(&mut val_items, arg);
+            }
+            GenexArgGroup::Genex(args) => {
+                // Join token texts with spaces to reconstruct the full genex.
+                let joined: String = args
+                    .iter()
+                    .map(|a| a.text.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                let node = parse_genex(&joined);
+                val_items.push_signal(Signal::NewLine);
+                format_genex_node(&mut val_items, &node);
+            }
+        }
+    }
+    items.extend(ir_helpers::with_indent(val_items));
 }
