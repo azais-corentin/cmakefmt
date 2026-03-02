@@ -35,7 +35,8 @@ function(enable_module target)
       file(TO_NATIVE_PATH "${BMI_DIR}/${target}.ifc" BMI)
       target_compile_options(${target}
         PRIVATE /interface /ifcOutput ${BMI}
-        INTERFACE /reference fmt=${BMI})
+        INTERFACE /reference fmt=${BMI}
+      )
       set_target_properties(${target} PROPERTIES ADDITIONAL_CLEAN_FILES ${BMI})
       set_source_files_properties(${BMI} PROPERTIES GENERATED ON)
     endif ()
@@ -43,8 +44,10 @@ function(enable_module target)
 endfunction()
 
 set(FMT_USE_CMAKE_MODULES FALSE)
-if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.28 AND
-    CMAKE_GENERATOR STREQUAL "Ninja")
+if (
+  CMAKE_VERSION VERSION_GREATER_EQUAL 3.28
+  AND CMAKE_GENERATOR STREQUAL "Ninja"
+)
   set(FMT_USE_CMAKE_MODULES TRUE)
 endif ()
 
@@ -66,7 +69,7 @@ function(add_module_library name)
     # Create a non-modular library.
     target_sources(${name} PRIVATE ${AML_FALLBACK})
     set_target_properties(${name} PROPERTIES CXX_SCAN_FOR_MODULES OFF)
-    return()
+    return ()
   endif ()
 
   # Modules require C++20.
@@ -76,8 +79,9 @@ function(add_module_library name)
   endif ()
 
   if (FMT_USE_CMAKE_MODULES)
-    target_sources(${name} PUBLIC FILE_SET fmt TYPE CXX_MODULES
-                   FILES ${sources})
+    target_sources(${name}
+      PUBLIC FILE_SET fmt TYPE CXX_MODULES FILES ${sources}
+    )
   else()
     # `std` is affected by CMake options and may be higher than C++20.
     get_target_property(std ${name} CXX_STANDARD)
@@ -159,8 +163,10 @@ set_verbose(FMT_INC_DIR ${CMAKE_INSTALL_INCLUDEDIR} CACHE STRING
             "will be joined with ${CMAKE_INSTALL_PREFIX} or an absolute path.")
 
 option(FMT_PEDANTIC "Enable extra warnings and expensive tests." OFF)
-option(FMT_WERROR "Halt the compilation with an error on compiler warnings."
-       OFF)
+option(FMT_WERROR
+  "Halt the compilation with an error on compiler warnings."
+  OFF
+)
 
 # Options that control generation of various targets.
 option(FMT_DOC "Generate the doc target." ${FMT_MASTER_PROJECT})
@@ -223,45 +229,77 @@ if (FMT_MASTER_PROJECT AND NOT DEFINED CMAKE_VISIBILITY_INLINES_HIDDEN)
 endif ()
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-  set(PEDANTIC_COMPILE_FLAGS -pedantic-errors -Wall -Wextra -pedantic
-      -Wold-style-cast -Wundef
-      -Wredundant-decls -Wwrite-strings -Wpointer-arith
-      -Wcast-qual -Wformat=2 -Wmissing-include-dirs
-      -Wcast-align
-      -Wctor-dtor-privacy -Wdisabled-optimization
-      -Winvalid-pch -Woverloaded-virtual
-      -Wconversion -Wundef
-      -Wno-ctor-dtor-privacy -Wno-format-nonliteral)
+  set(PEDANTIC_COMPILE_FLAGS
+    -pedantic-errors
+    -Wall
+    -Wextra
+    -pedantic
+    -Wold-style-cast
+    -Wundef
+    -Wredundant-decls
+    -Wwrite-strings
+    -Wpointer-arith
+    -Wcast-qual
+    -Wformat=2
+    -Wmissing-include-dirs
+    -Wcast-align
+    -Wctor-dtor-privacy
+    -Wdisabled-optimization
+    -Winvalid-pch
+    -Woverloaded-virtual
+    -Wconversion
+    -Wundef
+    -Wno-ctor-dtor-privacy
+    -Wno-format-nonliteral
+  )
   if (NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.6)
-      set(PEDANTIC_COMPILE_FLAGS ${PEDANTIC_COMPILE_FLAGS}
-         -Wno-dangling-else -Wno-unused-local-typedefs)
+      set(PEDANTIC_COMPILE_FLAGS
+        ${PEDANTIC_COMPILE_FLAGS} -Wno-dangling-else -Wno-unused-local-typedefs
+      )
   endif ()
   if (NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5.0)
-      set(PEDANTIC_COMPILE_FLAGS ${PEDANTIC_COMPILE_FLAGS} -Wdouble-promotion
-          -Wtrampolines -Wzero-as-null-pointer-constant -Wuseless-cast
-          -Wvector-operation-performance -Wsized-deallocation -Wshadow)
+      set(PEDANTIC_COMPILE_FLAGS
+        ${PEDANTIC_COMPILE_FLAGS}
+        -Wdouble-promotion
+        -Wtrampolines
+        -Wzero-as-null-pointer-constant
+        -Wuseless-cast
+        -Wvector-operation-performance
+        -Wsized-deallocation
+        -Wshadow
+      )
   endif ()
   if (NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 6.0)
-      set(PEDANTIC_COMPILE_FLAGS ${PEDANTIC_COMPILE_FLAGS} -Wshift-overflow=2
-          -Wduplicated-cond)
-      # Workaround for GCC regression
-      # [12/13/14/15 regression] New (since gcc 12) false positive null-dereference in vector.resize
-      # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=108860
-      if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 12.0)
-        set(PEDANTIC_COMPILE_FLAGS ${PEDANTIC_COMPILE_FLAGS} -Wnull-dereference)
-      endif ()
+    set(PEDANTIC_COMPILE_FLAGS
+      ${PEDANTIC_COMPILE_FLAGS} -Wshift-overflow=2 -Wduplicated-cond
+    )
+    # Workaround for GCC regression
+    # [12/13/14/15 regression] New (since gcc 12) false positive null-dereference in vector.resize
+    # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=108860
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 12.0)
+      set(PEDANTIC_COMPILE_FLAGS ${PEDANTIC_COMPILE_FLAGS} -Wnull-dereference)
+    endif ()
   endif ()
   set(WERROR_FLAG -Werror)
 endif ()
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  set(PEDANTIC_COMPILE_FLAGS -Wall -Wextra -pedantic -Wconversion -Wundef
-      -Wdeprecated -Wweak-vtables -Wshadow
-      -Wno-gnu-zero-variadic-macro-arguments)
+  set(PEDANTIC_COMPILE_FLAGS
+    -Wall
+    -Wextra
+    -pedantic
+    -Wconversion
+    -Wundef
+    -Wdeprecated
+    -Wweak-vtables
+    -Wshadow
+    -Wno-gnu-zero-variadic-macro-arguments
+  )
   check_cxx_compiler_flag(-Wzero-as-null-pointer-constant HAS_NULLPTR_WARNING)
   if (HAS_NULLPTR_WARNING)
-    set(PEDANTIC_COMPILE_FLAGS ${PEDANTIC_COMPILE_FLAGS}
-        -Wzero-as-null-pointer-constant)
+    set(PEDANTIC_COMPILE_FLAGS
+      ${PEDANTIC_COMPILE_FLAGS} -Wzero-as-null-pointer-constant
+    )
   endif ()
   set(WERROR_FLAG -Werror)
 endif ()
@@ -282,11 +320,14 @@ if (FMT_MASTER_PROJECT AND CMAKE_GENERATOR MATCHES "Visual Studio")
   endif ()
   # Set FrameworkPathOverride to get rid of MSB3644 warnings.
   join(netfxpath
-       "C:\\Program Files\\Reference Assemblies\\Microsoft\\Framework\\"
-       ".NETFramework\\v4.0")
-  file(WRITE run-msbuild.bat "
+    "C:\\Program Files\\Reference Assemblies\\Microsoft\\Framework\\"
+    ".NETFramework\\v4.0"
+  )
+  file(WRITE run-msbuild.bat 
+  "
     ${MSBUILD_SETUP}
-    ${CMAKE_MAKE_PROGRAM} -p:FrameworkPathOverride=\"${netfxpath}\" %*")
+    ${CMAKE_MAKE_PROGRAM} -p:FrameworkPathOverride=\"${netfxpath}\" %*"
+  )
 endif ()
 
 function(add_headers VAR)
@@ -312,7 +353,7 @@ if (FMT_MODULE)
   enable_module(fmt)
 elseif (FMT_OS)
   target_sources(fmt PRIVATE src/os.cc)
-else()
+else ()
   target_compile_definitions(fmt PRIVATE FMT_OS=0)
 endif ()
 
@@ -329,24 +370,31 @@ else ()
   message(WARNING "Feature cxx_std_11 is unknown for the CXX compiler")
 endif ()
 
-target_include_directories(fmt ${FMT_SYSTEM_HEADERS_ATTRIBUTE} BEFORE PUBLIC
-  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:${FMT_INC_DIR}>)
+target_include_directories(fmt
+  ${FMT_SYSTEM_HEADERS_ATTRIBUTE}
+  BEFORE
+  PUBLIC
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:${FMT_INC_DIR}>
+)
 
 set(FMT_DEBUG_POSTFIX d CACHE STRING "Debug library postfix.")
 
-set_target_properties(fmt PROPERTIES
-  VERSION ${FMT_VERSION} SOVERSION ${CPACK_PACKAGE_VERSION_MAJOR}
-  PUBLIC_HEADER "${FMT_HEADERS}"
-  DEBUG_POSTFIX "${FMT_DEBUG_POSTFIX}"
+set_target_properties(fmt
+  PROPERTIES
+    VERSION ${FMT_VERSION}
+    SOVERSION ${CPACK_PACKAGE_VERSION_MAJOR}
+    PUBLIC_HEADER "${FMT_HEADERS}"
+    DEBUG_POSTFIX "${FMT_DEBUG_POSTFIX}"
 
-  # Workaround for Visual Studio 2017:
-  # Ensure the .pdb is created with the same name and in the same directory
-  # as the .lib. Newer VS versions already do this by default, but there is no
-  # harm in setting it for those too. Ignored by other generators.
-  COMPILE_PDB_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
-  COMPILE_PDB_NAME "fmt"
-  COMPILE_PDB_NAME_DEBUG "fmt${FMT_DEBUG_POSTFIX}")
+    # Workaround for Visual Studio 2017:
+    # Ensure the .pdb is created with the same name and in the same directory
+    # as the .lib. Newer VS versions already do this by default, but there is no
+    # harm in setting it for those too. Ignored by other generators.
+    COMPILE_PDB_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    COMPILE_PDB_NAME "fmt"
+    COMPILE_PDB_NAME_DEBUG "fmt${FMT_DEBUG_POSTFIX}"
+)
 
 # Set FMT_LIB_NAME for pkg-config fmt.pc. We cannot use the OUTPUT_NAME target
 # property because it's not set by default.
@@ -369,8 +417,12 @@ if (NOT MSVC)
   # Unicode is always supported on compilers other than MSVC.
 elseif (FMT_UNICODE)
   # Unicode support requires compiling with /utf-8.
-  target_compile_options(fmt PUBLIC $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:MSVC>>:/utf-8>)
-  target_compile_options(fmt-header-only INTERFACE $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:MSVC>>:/utf-8>)
+  target_compile_options(fmt
+    PUBLIC $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:MSVC>>:/utf-8>
+  )
+  target_compile_options(fmt-header-only
+    INTERFACE $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:MSVC>>:/utf-8>
+  )
 else ()
   target_compile_definitions(fmt PUBLIC FMT_UNICODE=0)
 endif ()
@@ -379,9 +431,12 @@ target_compile_definitions(fmt-header-only INTERFACE FMT_HEADER_ONLY=1)
 target_compile_features(fmt-header-only INTERFACE cxx_std_11)
 
 target_include_directories(fmt-header-only
-  ${FMT_SYSTEM_HEADERS_ATTRIBUTE} BEFORE INTERFACE
-  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:${FMT_INC_DIR}>)
+  ${FMT_SYSTEM_HEADERS_ATTRIBUTE}
+  BEFORE
+  INTERFACE
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:${FMT_INC_DIR}>
+)
 
 add_library(fmt-c STATIC src/fmt-c.cc)
 target_compile_features(fmt-c INTERFACE c_std_11)
@@ -541,7 +596,7 @@ endif ()
 set(gitignore ${PROJECT_SOURCE_DIR}/.gitignore)
 if (FMT_MASTER_PROJECT AND EXISTS ${gitignore})
   # Get the list of ignored files from .gitignore.
-  file (STRINGS ${gitignore} lines)
+  file(STRINGS ${gitignore} lines)
   list(REMOVE_ITEM lines /doc/html)
   foreach (line ${lines})
     string(REPLACE "." "[.]" line "${line}")

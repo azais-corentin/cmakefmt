@@ -1,3 +1,4 @@
+### {"spaceBeforeParen": ["if", "else", "elseif", "endif", "foreach", "endforeach", "return"]}
 cmake_minimum_required(VERSION 3.8...3.28)
 include_guard(GLOBAL)
 
