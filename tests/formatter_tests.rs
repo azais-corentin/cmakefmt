@@ -59,7 +59,7 @@ fn test_formatter_files() {
         let expected = std::fs::read_to_string(&out_path).unwrap();
 
         // Strip ### header line if present and try to parse config
-        let (input, config) = if raw_input.starts_with("### ") {
+        let (input, config, header_overrides, has_custom_header) = if raw_input.starts_with("### ") {
             let header_end = raw_input.find('\n');
             let header_content = match header_end {
                 Some(pos) => &raw_input[4..pos],
@@ -69,10 +69,20 @@ fn test_formatter_files() {
                 Some(pos) => &raw_input[pos + 1..],
                 None => "",
             };
-            let config = parse_config_header(header_content);
-            (remaining, config)
+            let parsed_header = parse_config_header(header_content);
+            (
+                remaining,
+                parsed_header.config,
+                parsed_header.overrides,
+                true,
+            )
         } else {
-            (raw_input.as_str(), Configuration::default())
+            (
+                raw_input.as_str(),
+                Configuration::default(),
+                Vec::new(),
+                false,
+            )
         };
         let cmake_path = Path::new("CMakeLists.txt");
 
@@ -88,10 +98,15 @@ fn test_formatter_files() {
             }
             Ok(Ok(Some(formatted))) => {
                 if formatted != expected {
-                    failures.push(format!(
-                        "MISMATCH: {}\n--- expected\n+++ actual\n{}",
-                        in_path.display(),
-                        simple_diff(&expected, &formatted)
+                    failures.push(with_config_context(
+                        format!(
+                            "MISMATCH: {}\n--- expected\n+++ actual\n{}",
+                            in_path.display(),
+                            simple_diff(&expected, &formatted)
+                        ),
+                        has_custom_header,
+                        &header_overrides,
+                        &config,
                     ));
                 }
                 // Idempotency: format the output again
@@ -99,17 +114,27 @@ fn test_formatter_files() {
                     Ok(None) => { /* Already formatted — pass */ }
                     Ok(Some(reformatted)) => {
                         if reformatted != formatted {
-                            failures.push(format!(
-                                "IDEMPOTENCY: {}\nSecond format produced different output\n{}",
-                                in_path.display(),
-                                simple_diff(&formatted, &reformatted)
+                            failures.push(with_config_context(
+                                format!(
+                                    "IDEMPOTENCY: {}\nSecond format produced different output\n{}",
+                                    in_path.display(),
+                                    simple_diff(&formatted, &reformatted)
+                                ),
+                                has_custom_header,
+                                &header_overrides,
+                                &config,
                             ));
                         }
                     }
                     Err(e) => {
-                        failures.push(format!(
-                            "IDEMPOTENCY ERROR: {}\nSecond format failed: {e}",
-                            in_path.display()
+                        failures.push(with_config_context(
+                            format!(
+                                "IDEMPOTENCY ERROR: {}\nSecond format failed: {e}",
+                                in_path.display()
+                            ),
+                            has_custom_header,
+                            &header_overrides,
+                            &config,
                         ));
                     }
                 }
@@ -117,10 +142,15 @@ fn test_formatter_files() {
             Ok(Ok(None)) => {
                 // No change — input already formatted; it should match expected
                 if input != expected {
-                    failures.push(format!(
-                        "MISMATCH (no change returned): {}\n--- expected\n+++ input\n{}",
-                        in_path.display(),
-                        simple_diff(&expected, input)
+                    failures.push(with_config_context(
+                        format!(
+                            "MISMATCH (no change returned): {}\n--- expected\n+++ input\n{}",
+                            in_path.display(),
+                            simple_diff(&expected, input)
+                        ),
+                        has_custom_header,
+                        &header_overrides,
+                        &config,
                     ));
                 }
                 // Idempotency: format input again (it was already formatted)
@@ -128,17 +158,27 @@ fn test_formatter_files() {
                     Ok(None) => { /* Still formatted — pass */ }
                     Ok(Some(reformatted)) => {
                         if reformatted != input {
-                            failures.push(format!(
-                                "IDEMPOTENCY: {}\nRe-formatting already-formatted input changed it\n{}",
-                                in_path.display(),
-                                simple_diff(input, &reformatted)
+                            failures.push(with_config_context(
+                                format!(
+                                    "IDEMPOTENCY: {}\nRe-formatting already-formatted input changed it\n{}",
+                                    in_path.display(),
+                                    simple_diff(input, &reformatted)
+                                ),
+                                has_custom_header,
+                                &header_overrides,
+                                &config,
                             ));
                         }
                     }
                     Err(e) => {
-                        failures.push(format!(
-                            "IDEMPOTENCY ERROR: {}\nRe-format of unchanged input failed: {e}",
-                            in_path.display()
+                        failures.push(with_config_context(
+                            format!(
+                                "IDEMPOTENCY ERROR: {}\nRe-format of unchanged input failed: {e}",
+                                in_path.display()
+                            ),
+                            has_custom_header,
+                            &header_overrides,
+                            &config,
                         ));
                     }
                 }
@@ -345,8 +385,42 @@ fn make_invisible_visible(s: &str) -> String {
     out
 }
 
-fn parse_config_header(header: &str) -> Configuration {
+fn with_config_context(
+    base_message: String,
+    has_custom_header: bool,
+    header_overrides: &[(String, String)],
+    config: &Configuration,
+) -> String {
+    if !has_custom_header {
+        return base_message;
+    }
+
+    let overrides = if header_overrides.is_empty() {
+        "<none parsed>".to_string()
+    } else {
+        header_overrides
+            .iter()
+            .map(|(key, value)| format!("{key}={value}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let config_section =
+        format!("Header overrides: {overrides}\nResolved config: {config:#?}");
+
+    if let Some((head, tail)) = base_message.split_once('\n') {
+        format!("{head}\n{config_section}\n{tail}")
+    } else {
+        format!("{base_message}\n{config_section}")
+    }
+}
+struct ParsedConfigHeader {
+    config: Configuration,
+    overrides: Vec<(String, String)>,
+}
+
+fn parse_config_header(header: &str) -> ParsedConfigHeader {
     let mut config = Configuration::default();
+    let mut overrides = Vec::new();
 
     // Try JSON first (camelCase keys like {"commandCase": "preserve"})
     if let Ok(map) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(header) {
@@ -359,6 +433,7 @@ fn parse_config_header(header: &str) -> Configuration {
                             "preserve" => CaseStyle::Preserve,
                             _ => CaseStyle::Lower,
                         };
+                        overrides.push((key.clone(), format!("{:?}", config.command_case)));
                     }
                 }
                 "keywordCase" => {
@@ -368,37 +443,44 @@ fn parse_config_header(header: &str) -> Configuration {
                             "preserve" => CaseStyle::Preserve,
                             _ => CaseStyle::Upper,
                         };
+                        overrides.push((key.clone(), format!("{:?}", config.keyword_case)));
                     }
                 }
                 "lineWidth" => {
                     if let Some(n) = value.as_u64() {
                         config.line_width = n as u32;
+                        overrides.push((key.clone(), config.line_width.to_string()));
                     }
                 }
                 "indentWidth" => {
                     if let Some(n) = value.as_u64() {
                         config.indent_width = n as u8;
+                        overrides.push((key.clone(), config.indent_width.to_string()));
                     }
                 }
                 "useTabs" => {
                     if let Some(b) = value.as_bool() {
                         config.use_tabs = b;
+                        overrides.push((key.clone(), config.use_tabs.to_string()));
                     }
                 }
                 "sortLists" => {
                     if let Some(b) = value.as_bool() {
                         config.sort_lists = b;
+                        overrides.push((key.clone(), config.sort_lists.to_string()));
                     }
                 }
                 "closingParenNewline" => {
                     if let Some(b) = value.as_bool() {
                         config.closing_paren_newline = b;
+                        overrides.push((key.clone(), config.closing_paren_newline.to_string()));
                     }
                 }
                 _ => {}
             }
         }
-        return config;
+        overrides.sort_by(|a, b| a.0.cmp(&b.0));
+        return ParsedConfigHeader { config, overrides };
     }
 
     // Fall back to gersemi-style {key: value} format
@@ -408,7 +490,7 @@ fn parse_config_header(header: &str) -> Configuration {
     let content = content.trim();
 
     if content.is_empty() {
-        return config;
+        return ParsedConfigHeader { config, overrides };
     }
 
     for pair in split_respecting_brackets(content) {
@@ -420,13 +502,16 @@ fn parse_config_header(header: &str) -> Configuration {
                 "line_length" => {
                     if let Ok(n) = value.parse::<u32>() {
                         config.line_width = n;
+                        overrides.push((key.to_string(), config.line_width.to_string()));
                     }
                 }
                 "indent" => {
                     if value == "tabs" {
                         config.use_tabs = true;
+                        overrides.push((key.to_string(), "tabs".to_string()));
                     } else if let Ok(n) = value.parse::<u8>() {
                         config.indent_width = n;
+                        overrides.push((key.to_string(), config.indent_width.to_string()));
                     }
                 }
                 "commandCase" | "command_case" => {
@@ -435,6 +520,7 @@ fn parse_config_header(header: &str) -> Configuration {
                         "preserve" => CaseStyle::Preserve,
                         _ => CaseStyle::Lower,
                     };
+                    overrides.push((key.to_string(), format!("{:?}", config.command_case)));
                 }
                 "keywordCase" | "keyword_case" => {
                     config.keyword_case = match value {
@@ -442,16 +528,19 @@ fn parse_config_header(header: &str) -> Configuration {
                         "preserve" => CaseStyle::Preserve,
                         _ => CaseStyle::Upper,
                     };
+                    overrides.push((key.to_string(), format!("{:?}", config.keyword_case)));
                 }
                 "sortLists" | "sort_lists" => {
                     config.sort_lists = value == "true";
+                    overrides.push((key.to_string(), config.sort_lists.to_string()));
                 }
                 _ => { /* ignore unknown keys for forward compat */ }
             }
         }
     }
 
-    config
+    overrides.sort_by(|a, b| a.0.cmp(&b.0));
+    ParsedConfigHeader { config, overrides }
 }
 
 fn split_respecting_brackets(s: &str) -> Vec<&str> {
@@ -548,5 +637,72 @@ mod invisible_diff_tests {
             result.contains('\u{00B7}'),
             "expected middle dot for space in diff"
         );
+    }
+}
+
+#[cfg(test)]
+mod config_header_tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_config_header_json_collects_overrides_and_config() {
+        let parsed = parse_config_header(
+            r#"{"commandCase":"upper","lineWidth":100,"sortLists":true}"#,
+        );
+
+        assert_eq!(
+            parsed.overrides,
+            vec![
+                ("commandCase".to_string(), "Upper".to_string()),
+                ("lineWidth".to_string(), "100".to_string()),
+                ("sortLists".to_string(), "true".to_string()),
+            ]
+        );
+        assert_eq!(parsed.config.command_case, CaseStyle::Upper);
+        assert_eq!(parsed.config.line_width, 100);
+        assert!(parsed.config.sort_lists);
+    }
+
+    #[test]
+    fn test_parse_config_header_gersemi_collects_overrides_and_config() {
+        let parsed = parse_config_header(
+            "{indent: tabs, line_length: 120, keyword_case: preserve, sort_lists: true}",
+        );
+
+        assert_eq!(
+            parsed.overrides,
+            vec![
+                ("indent".to_string(), "tabs".to_string()),
+                ("keyword_case".to_string(), "Preserve".to_string()),
+                ("line_length".to_string(), "120".to_string()),
+                ("sort_lists".to_string(), "true".to_string()),
+            ]
+        );
+        assert!(parsed.config.use_tabs);
+        assert_eq!(parsed.config.line_width, 120);
+        assert_eq!(parsed.config.keyword_case, CaseStyle::Preserve);
+        assert!(parsed.config.sort_lists);
+    }
+
+    #[test]
+    fn test_with_config_context_applies_only_for_custom_header() {
+        let config = Configuration::default();
+        let base = "MISMATCH: tests/formatter/sample.in.cmake\n--- expected\n+++ actual\n@@ -1 +1 @@"
+            .to_string();
+        let without_header = with_config_context(base.clone(), false, &[], &config);
+        assert_eq!(without_header, base);
+
+        let with_header = with_config_context(
+            base.clone(),
+            true,
+            &[("lineWidth".to_string(), "100".to_string())],
+            &config,
+        );
+        assert!(with_header.contains("Header overrides: lineWidth=100"));
+        assert!(with_header.contains("Resolved config:"));
+        let overrides_index = with_header.find("Header overrides:").unwrap();
+        let diff_index = with_header.find("--- expected").unwrap();
+        assert!(overrides_index < diff_index);
+        assert!(with_header.starts_with("MISMATCH: tests/formatter/sample.in.cmake\n"));
     }
 }

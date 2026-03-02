@@ -251,9 +251,7 @@ static TARGET_INCLUDE_DIRECTORIES_KW: &[(&str, KwType)] = &[
     ("PRIVATE", KwType::MultiValue),
 ];
 
-static TARGET_INCLUDE_DIRECTORIES_SPEC: CommandSpec = spec! {
-    front: 1, back: 0, kw: TARGET_INCLUDE_DIRECTORIES_KW, sections: &[], cmd_line: &[], pair: &[],
-};
+static TARGET_INCLUDE_DIRECTORIES_SPEC: CommandSpec = spec! { front: 2, back: 0, kw: TARGET_INCLUDE_DIRECTORIES_KW, sections: &[], cmd_line: &[], pair: &[], };
 
 // ---------------------------------------------------------------------------
 // 8. target_link_directories
@@ -695,9 +693,8 @@ static FOREACH_KW: &[(&str, KwType)] = &[
     ("ZIP_LISTS", KwType::MultiValue),
 ];
 
-static FOREACH_SPEC: CommandSpec = spec! {
-    front: 1, back: 0, kw: FOREACH_KW, sections: &[], cmd_line: &[], pair: &[],
-};
+static FOREACH_SPEC: CommandSpec =
+    spec! { front: 0, back: 0, kw: FOREACH_KW, sections: &[], cmd_line: &[], pair: &[], };
 
 // ---------------------------------------------------------------------------
 // 28. function
@@ -1348,13 +1345,7 @@ static SOURCE_GROUP_SPEC: CommandSpec = spec! {
 
 static SET_TARGET_PROPERTIES_KW: &[(&str, KwType)] = &[("PROPERTIES", KwType::MultiValue)];
 
-static SET_TARGET_PROPERTIES_SPEC: CommandSpec = spec! {
-    front: 0, back: 0,
-    kw: SET_TARGET_PROPERTIES_KW,
-    sections: &[],
-    cmd_line: &[],
-    pair: &["PROPERTIES"],
-};
+static SET_TARGET_PROPERTIES_SPEC: CommandSpec = spec! { front: 1, back: 0, kw: SET_TARGET_PROPERTIES_KW, sections: &[], cmd_line: &[], pair: &["PROPERTIES"], };
 
 // ---------------------------------------------------------------------------
 // 45. set_source_files_properties
@@ -1681,9 +1672,8 @@ static MARK_AS_ADVANCED_SPEC: CommandSpec = spec! {
 // 60. option
 // ---------------------------------------------------------------------------
 
-static OPTION_SPEC: CommandSpec = spec! {
-    front: 3, back: 0, kw: &[], sections: &[], cmd_line: &[], pair: &[],
-};
+static OPTION_SPEC: CommandSpec =
+    spec! { front: 0, back: 0, kw: &[], sections: &[], cmd_line: &[], pair: &[], };
 
 // ---------------------------------------------------------------------------
 // 61. unset

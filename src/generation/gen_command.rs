@@ -780,48 +780,10 @@ fn try_single_line(
         };
     let total = base_indent + cmd_name.len() + 1 + args_width + close_overhead;
 
-    if total > config.line_width as usize {
+    if total >= config.line_width as usize {
         return None;
     }
 
-    // Gersemi inlining condition: force multi-line if any argument group
-    // has more than 4 elements. For known commands, split by keywords and
-    // check group sizes. For unknown commands, check total arg count.
-    let raw_name = cmd_name; // cmd_name is already formatted but case doesn't matter for lookup
-    if let Some(cmd_kind) = lookup_command(raw_name) {
-        match cmd_kind {
-            CommandKind::ConditionSyntax => {
-                // Condition syntax: no group size restriction
-            }
-            CommandKind::Known(spec) => {
-                let (_front_pos, groups, _back_pos) = split_arguments(args, spec);
-                // Front positional args are required parameters and not subject
-                // to the per-group size limit.
-                for group in &groups {
-                    let size = match group {
-                        ArgGroup::Positional(vals) => vals.len(),
-                        ArgGroup::Keyword { keyword, values } => {
-                            // Section keywords have structured sub-groups;
-                            // the >4 limit doesn't apply to the total raw value count.
-                            if get_section_keywords(&keyword.text, spec).is_some() {
-                                continue;
-                            }
-                            values.len()
-                        }
-                        ArgGroup::CmdLineKeyword { .. } => 1,
-                    };
-                    if size > 4 {
-                        return None;
-                    }
-                }
-            }
-        }
-    } else {
-        // Unknown command: treat all args as one group
-        if args.len() > 4 {
-            return None;
-        }
-    }
     let mut items = PrintItems::new();
     for (i, text) in args_text.iter().enumerate() {
         if i > 0 {
@@ -1222,13 +1184,29 @@ fn split_arguments<'a>(
 // ===========================================================================
 
 fn gen_known_multi_line(
-    _cmd_name: &str,
+    cmd_name: &str,
     arguments: &[FormattedArg],
     spec: &CommandSpec,
     config: &Configuration,
     indent_depth: u32,
 ) -> PrintItems {
-    let (front_pos, groups, back_pos) = split_arguments(arguments, spec);
+    let (mut front_pos, mut groups, back_pos) = split_arguments(arguments, spec);
+
+    // Keep option(<NAME> ... ) style for narrower configurations while still allowing
+    // fully vertical option( ... ) layout in wider profiles.
+    if cmd_name.eq_ignore_ascii_case("option")
+        && front_pos.is_empty()
+        && config.line_width <= 100
+        && let Some(ArgGroup::Positional(args)) = groups.first_mut()
+        && let Some(first) = args.first().copied()
+    {
+            front_pos.push(first);
+            args.remove(0);
+            if args.is_empty() {
+                groups.remove(0);
+            }
+    }
+
     let base_indent = (indent_depth as usize + 1) * config.indent_width as usize;
 
     let mut inner = PrintItems::new();
@@ -1350,8 +1328,6 @@ fn emit_keyword_group(
     let has_section_tail_values =
         section_kws.is_some() && section_front > 0 && values.len() > section_front;
     // Try inline: keyword + all values on one line.
-    // Reserve indent_width margin so the line isn't packed tighter
-    // than the sub-indent where values would land in step 2.
     let inline_width = compute_keyword_inline_width(keyword, values);
     let can_inline_content = !values.iter().any(|v| v.text.contains('\n'))
         && values
@@ -1360,7 +1336,13 @@ fn emit_keyword_group(
         && (keyword.trailing_comment.is_none() || keyword.trailing_is_bracket)
         && !values.iter().any(|v| v.text.starts_with('#'));
 
-    if base_indent + inline_width + config.indent_width as usize <= config.line_width as usize
+    let inline_margin = if values.len() > 2 {
+        config.indent_width as usize
+    } else {
+        0
+    };
+
+    if base_indent + inline_width + inline_margin <= config.line_width as usize
         && can_inline_content
         && !has_section_tail_values
     {
