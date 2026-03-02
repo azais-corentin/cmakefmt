@@ -60,9 +60,9 @@ struct Cli {
     #[arg(long, default_value_t = Configuration::default().max_blank_lines)]
     max_blank_lines: u8,
 
-    /// Insert a space before opening parenthesis.
-    #[arg(long, default_value_t = Configuration::default().space_before_paren)]
-    space_before_paren: bool,
+    /// Insert space before '(' for these commands (comma-separated, e.g. if,while,foreach).
+    #[arg(long, value_delimiter = ',')]
+    space_before_paren: Vec<String>,
 }
 
 impl Cli {
@@ -77,7 +77,7 @@ impl Cli {
             closing_paren_newline: self.closing_paren_newline,
             sort_lists: self.sort_lists,
             max_blank_lines: self.max_blank_lines,
-            space_before_paren: self.space_before_paren,
+            space_before_paren: self.space_before_paren.iter().map(|s| s.to_ascii_lowercase()).collect(),
         })
     }
 }

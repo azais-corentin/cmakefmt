@@ -345,7 +345,7 @@ pub fn gen_command(
     items.push_string(formatted_name.clone());
 
     // Space before paren
-    if config.space_before_paren {
+    if config.has_space_before_paren(raw_name) {
         items.push_space();
     }
     items.push_str_runtime_width_computed("(");
@@ -408,7 +408,7 @@ fn gen_unknown_command(
     let mut items = PrintItems::new();
 
     items.push_string(formatted_name.to_string());
-    if config.space_before_paren {
+    if config.has_space_before_paren(cmd.name.text(source)) {
         items.push_space();
     }
     items.push_str_runtime_width_computed("(");

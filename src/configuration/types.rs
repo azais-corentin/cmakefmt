@@ -15,7 +15,7 @@ pub struct Configuration {
     pub closing_paren_newline: bool,
     pub sort_lists: bool,
     pub max_blank_lines: u8,
-    pub space_before_paren: bool,
+    pub space_before_paren: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ValueEnum)]
@@ -44,8 +44,16 @@ impl Default for Configuration {
             closing_paren_newline: true,
             sort_lists: false,
             max_blank_lines: 1,
-            space_before_paren: false,
+            space_before_paren: Vec::new(),
         }
+    }
+}
+
+impl Configuration {
+    pub fn has_space_before_paren(&self, command_name: &str) -> bool {
+        self.space_before_paren
+            .iter()
+            .any(|c| c.eq_ignore_ascii_case(command_name))
     }
 }
 

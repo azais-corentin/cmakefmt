@@ -134,7 +134,7 @@ impl Loader {
             CanonicalKey::ClosingParenNewline => set_field!(self, key, value, parse_bool, closing_paren_newline),
             CanonicalKey::SortLists => set_field!(self, key, value, parse_bool, sort_lists),
             CanonicalKey::MaxBlankLines => set_field!(self, key, value, parse_u8, max_blank_lines),
-            CanonicalKey::SpaceBeforeParen => set_field!(self, key, value, parse_bool, space_before_paren),
+            CanonicalKey::SpaceBeforeParen => self.parse_space_before_paren(key, value),
             CanonicalKey::IndentMode => self.parse_indent_mode(key, value),
         }
     }
@@ -228,6 +228,55 @@ impl Loader {
             return;
         };
         apply(self, parsed);
+    }
+
+    fn parse_space_before_paren(&mut self, key: &str, value: RawConfigValue) {
+        let parsed = match value {
+            RawConfigValue::Dprint(ConfigKeyValue::Array(items)) => {
+                let mut names = Vec::new();
+                for item in items {
+                    if let ConfigKeyValue::String(s) = item {
+                        names.push(s.to_ascii_lowercase());
+                    } else {
+                        self.push_invalid_type(key, "array of command name strings");
+                        return;
+                    }
+                }
+                names
+            }
+            RawConfigValue::Json(serde_json::Value::Array(items)) => {
+                let mut names = Vec::new();
+                for item in items {
+                    if let serde_json::Value::String(s) = item {
+                        names.push(s.to_ascii_lowercase());
+                    } else {
+                        self.push_invalid_type(key, "array of command name strings");
+                        return;
+                    }
+                }
+                names
+            }
+            RawConfigValue::Text(ref text) => {
+                let trimmed = text.trim();
+                if let Some(inner) = trimmed.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+                    inner
+                        .split(',')
+                        .map(|s| s.trim().trim_matches('"').trim_matches('\'').to_ascii_lowercase())
+                        .filter(|s| !s.is_empty())
+                        .collect()
+                } else {
+                    self.push_invalid_type(key, "array of command names (e.g. [if, while])");
+                    return;
+                }
+            }
+            _ => {
+                self.push_invalid_type(key, "array of command name strings");
+                return;
+            }
+        };
+        let display: String = format!("[{}]", parsed.join(", "));
+        self.config.space_before_paren = parsed;
+        self.overrides.push((key.to_string(), display));
     }
 
     fn push_unknown_key(&mut self, key: &str) {
@@ -499,6 +548,63 @@ mod tests {
         assert_eq!(result.config.indent_width, 6);
         assert!(result.config.use_tabs);
         assert!(result.config.sort_lists);
+        assert!(result.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn parses_space_before_paren_json_array() {
+        let result = load_from_header(r#"{"spaceBeforeParen": ["if", "while", "foreach"]}"#);
+        assert_eq!(result.config.space_before_paren, vec!["if", "while", "foreach"]);
+        assert!(result.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn parses_space_before_paren_json_array_lowercased() {
+        let result = load_from_header(r#"{"spaceBeforeParen": ["IF", "While"]}"#);
+        assert_eq!(result.config.space_before_paren, vec!["if", "while"]);
+        assert!(result.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn parses_space_before_paren_json_empty_array() {
+        let result = load_from_header(r#"{"spaceBeforeParen": []}"#);
+        assert!(result.config.space_before_paren.is_empty());
+        assert!(result.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn parses_space_before_paren_gersemi_bracket_list() {
+        let result = load_from_header("space_before_paren: [if, while]");
+        assert_eq!(result.config.space_before_paren, vec!["if", "while"]);
+        assert!(result.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn space_before_paren_invalid_value_emits_diagnostic() {
+        let result = load_from_header(r#"{"spaceBeforeParen": 42}"#);
+        assert!(result.config.space_before_paren.is_empty());
+        assert_eq!(result.diagnostics.len(), 1);
+        assert!(result.diagnostics[0].message.contains("expected array"));
+    }
+
+    #[test]
+    fn space_before_paren_dprint_array() {
+        let mut map = ConfigKeyMap::new();
+        map.insert(
+            "spaceBeforeParen".to_string(),
+            ConfigKeyValue::Array(vec![
+                ConfigKeyValue::String("set".to_string()),
+                ConfigKeyValue::String("IF".to_string()),
+            ]),
+        );
+        let global = GlobalConfiguration {
+            line_width: None,
+            indent_width: None,
+            use_tabs: None,
+            new_line_kind: None,
+        };
+        let result = load_from_dprint(map, &global);
+        assert_eq!(result.config.space_before_paren, vec!["set", "if"]);
         assert!(result.diagnostics.is_empty());
     }
 }
