@@ -135,14 +135,12 @@ else()
 endif()
 
 option(SPDLOG_PREVENT_CHILD_FD "Prevent from child processes to inherit log file descriptors" OFF)
-option(
-    SPDLOG_NO_THREAD_ID
+option(SPDLOG_NO_THREAD_ID
     "prevent spdlog from querying the thread id on each log call if thread id is not needed"
     OFF
 )
 option(SPDLOG_NO_TLS "prevent spdlog from using thread local storage" OFF)
-option(
-    SPDLOG_NO_ATOMIC_LEVELS
+option(SPDLOG_NO_ATOMIC_LEVELS
     "prevent spdlog from using of std::atomic log levels (use only if your code never modifies log levels concurrently"
     OFF
 )

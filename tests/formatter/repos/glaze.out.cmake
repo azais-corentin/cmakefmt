@@ -62,8 +62,7 @@ if(glaze_DEVELOPER_MODE)
   include(cmake/dev-mode.cmake)
 endif()
 
-option(
-  glaze_DISABLE_SIMD_WHEN_SUPPORTED
+option(glaze_DISABLE_SIMD_WHEN_SUPPORTED
   "disable SIMD optimizations even when targets support it (e.g. AVX2)"
   OFF
 )
@@ -71,8 +70,7 @@ if(glaze_DISABLE_SIMD_WHEN_SUPPORTED)
   target_compile_definitions(glaze_glaze INTERFACE GLZ_DISABLE_SIMD)
 endif()
 
-option(
-  glaze_DISABLE_ALWAYS_INLINE
+option(glaze_DISABLE_ALWAYS_INLINE
   "disable forced inlining to reduce binary size and compilation time"
   OFF
 )

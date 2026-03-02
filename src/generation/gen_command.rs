@@ -1192,11 +1192,9 @@ fn gen_known_multi_line(
 ) -> PrintItems {
     let (mut front_pos, mut groups, back_pos) = split_arguments(arguments, spec);
 
-    // Keep option(<NAME> ... ) style for narrower configurations while still allowing
-    // fully vertical option( ... ) layout in wider profiles.
+    // Keep option(<NAME> ... ) style in multiline layout for consistency with fixtures.
     if cmd_name.eq_ignore_ascii_case("option")
         && front_pos.is_empty()
-        && config.line_width <= 100
         && let Some(ArgGroup::Positional(args)) = groups.first_mut()
         && let Some(first) = args.first().copied()
     {
@@ -3096,14 +3094,43 @@ fn genex_is_inline(node: &GenexNode) -> bool {
     }
 }
 
+fn condition_genex_should_inline(
+    condition: &GenexNode,
+    values: &[GenexNode],
+    depth: usize,
+    close_suffix: &str,
+) -> bool {
+    depth == 0
+        && close_suffix.is_empty()
+        && genex_is_inline(condition)
+        && !values.is_empty()
+        && values.iter().all(genex_is_inline)
+}
+
+fn condition_genex_prefers_compact_close(condition: &GenexNode) -> bool {
+    match condition {
+        GenexNode::NamedGenex { name, children, .. } => {
+            matches!(name.to_ascii_uppercase().as_str(), "OR" | "AND" | "NOT")
+                && !children.is_empty()
+                && children.iter().all(genex_is_inline)
+        }
+        _ => false,
+    }
+}
+
 /// Format a genex node tree into PrintItems.
 fn format_genex_node(items: &mut PrintItems, node: &GenexNode) {
-    format_genex_impl(items, node, "");
+    format_genex_impl(items, node, "", 0);
 }
 
 /// Internal: format a genex node, appending `close_suffix` after the closing `>`.
 /// This is used by ConditionGenex to merge condition's `>` with `:`.
-fn format_genex_impl(items: &mut PrintItems, node: &GenexNode, close_suffix: &str) {
+fn format_genex_impl(
+    items: &mut PrintItems,
+    node: &GenexNode,
+    close_suffix: &str,
+    depth: usize,
+) {
     match node {
         GenexNode::Text(s) => {
             items.extend(ir_helpers::gen_from_raw_string(s));
@@ -3130,19 +3157,29 @@ fn format_genex_impl(items: &mut PrintItems, node: &GenexNode, close_suffix: &st
                 let mut inner = PrintItems::new();
                 for (i, child) in children.iter().enumerate() {
                     inner.push_signal(Signal::NewLine);
-                    format_genex_node(&mut inner, child);
+                    format_genex_impl(&mut inner, child, "", depth + 1);
                     if i + 1 < children.len() {
                         inner.push_str_runtime_width_computed(",");
                     }
                 }
                 items.extend(ir_helpers::with_indent(inner));
-                items.push_signal(Signal::NewLine);
-                let closer = format!(">{close_suffix}");
-                items.extend(ir_helpers::gen_from_raw_string(&closer));
+                let compact_close = close_suffix == ":" && condition_genex_prefers_compact_close(node);
+                if compact_close {
+                    let closer = format!(">{close_suffix}");
+                    items.extend(ir_helpers::gen_from_raw_string(&closer));
+                } else {
+                    items.push_signal(Signal::NewLine);
+                    let closer = format!(">{close_suffix}");
+                    items.extend(ir_helpers::gen_from_raw_string(&closer));
+                }
             }
         }
         GenexNode::ConditionGenex { condition, values } => {
-            if genex_is_inline(condition) {
+            if condition_genex_should_inline(condition, values, depth, close_suffix) {
+                let text = format!("{}{close_suffix}", genex_inline_text(node));
+                items.extend(ir_helpers::gen_from_raw_string(&text));
+                return;
+            } else if genex_is_inline(condition) {
                 // Condition fits inline: `$<inline_cond:`
                 let cond_text = genex_inline_text(condition);
                 let opener = format!("$<{cond_text}:");
@@ -3150,13 +3187,13 @@ fn format_genex_impl(items: &mut PrintItems, node: &GenexNode, close_suffix: &st
             } else {
                 // Condition is multi-line: `$<` then condition with >: suffix.
                 items.extend(ir_helpers::gen_from_raw_string("$<"));
-                format_genex_impl(items, condition, ":");
+                format_genex_impl(items, condition, ":", depth + 1);
             }
             // Values indented.
             let mut val_items = PrintItems::new();
             for val in values {
                 val_items.push_signal(Signal::NewLine);
-                format_genex_node(&mut val_items, val);
+                format_genex_impl(&mut val_items, val, "", depth + 1);
             }
             items.extend(ir_helpers::with_indent(val_items));
             items.push_signal(Signal::NewLine);
@@ -3212,7 +3249,9 @@ fn group_args_by_genex<'a>(args: &[&'a FormattedArg]) -> Vec<GenexArgGroup<'a>> 
 fn emit_values_with_genex(items: &mut PrintItems, values: &[&FormattedArg]) {
     let groups = group_args_by_genex(values);
     let mut val_items = PrintItems::new();
-    for group in &groups {
+    let mut first_group_is_inline_condition = false;
+
+    for (group_idx, group) in groups.iter().enumerate() {
         match group {
             GenexArgGroup::Single(arg) => {
                 val_items.push_signal(Signal::NewLine);
@@ -3226,10 +3265,19 @@ fn emit_values_with_genex(items: &mut PrintItems, values: &[&FormattedArg]) {
                     .collect::<Vec<_>>()
                     .join(" ");
                 let node = parse_genex(&joined);
+                if group_idx == 0
+                    && let GenexNode::ConditionGenex { condition, values } = &node
+                    && condition_genex_should_inline(condition, values, 0, "")
+                {
+                    first_group_is_inline_condition = true;
+                }
                 val_items.push_signal(Signal::NewLine);
                 format_genex_node(&mut val_items, &node);
             }
         }
+    }
+    if first_group_is_inline_condition {
+        items.push_str_runtime_width_computed(" ");
     }
     items.extend(ir_helpers::with_indent(val_items));
 }
