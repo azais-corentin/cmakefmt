@@ -7,7 +7,6 @@ use cmakefmt::{CaseStyle, Configuration, format_text, load_from_header};
 fn test_formatter_files() {
     let formatter_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/formatter");
     let mut failures: Vec<String> = Vec::new();
-    let mut skipped = 0;
     let mut count = 0;
 
     let mut in_files = walk_cmake_files(&formatter_dir, ".in.cmake");
@@ -94,10 +93,17 @@ fn test_formatter_files() {
         }));
 
         match result {
-            Err(_) => {
-                // Formatter panics on some inputs (e.g. multiline bracket args)
-                skipped += 1;
-                continue;
+            Err(panic_info) => {
+                let msg = panic_info
+                    .downcast_ref::<String>()
+                    .map(|s| s.as_str())
+                    .or_else(|| panic_info.downcast_ref::<&str>().copied())
+                    .unwrap_or("(no message)");
+                failures.push(format!(
+                    "PANIC: {}\n{msg}",
+                    in_path.display()
+                ));
+                count += 1;
             }
             Ok(Ok(Some(formatted))) => {
                 if formatted != expected {
@@ -192,10 +198,12 @@ fn test_formatter_files() {
                     }
                 }
             }
-            Ok(Err(_)) => {
-                // Parse errors on some inputs
-                skipped += 1;
-                continue;
+            Ok(Err(e)) => {
+                failures.push(format!(
+                    "PARSE ERROR: {}\n{e}",
+                    in_path.display()
+                ));
+                count += 1;
             }
         }
         count += 1;
@@ -213,7 +221,7 @@ fn test_formatter_files() {
 
     assert!(count > 0, "No formatter test files found");
 
-    eprintln!("{count} formatter tests passed ({skipped} skipped due to formatter limitations)");
+    eprintln!("{count} formatter tests passed");
 }
 
 fn walk_cmake_files(dir: &Path, suffix: &str) -> Vec<PathBuf> {

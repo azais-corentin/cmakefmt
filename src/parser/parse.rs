@@ -4,6 +4,21 @@ use logos::Logos;
 use super::ast::{Argument, CommandInvocation, File, FileElement, Span};
 use super::token::Token;
 
+/// Convert a byte offset into a 1-based (line, column) pair.
+fn byte_offset_to_line_col(source: &str, offset: usize) -> (usize, usize) {
+    let offset = offset.min(source.len());
+    let before = &source[..offset];
+    let line = before.bytes().filter(|&b| b == b'\n').count() + 1;
+    let col = before.len() - before.rfind('\n').map_or(0, |n| n + 1) + 1;
+    (line, col)
+}
+
+fn describe_token(tok: Option<&Token>) -> String {
+    match tok {
+        Some(t) => t.to_string(),
+        None => "end of input".to_string(),
+    }
+}
 struct Parser<'a> {
     source: &'a str,
     tokens: Vec<(Token, std::ops::Range<usize>)>,
@@ -106,11 +121,9 @@ fn parse_file_elements(p: &mut Parser) -> Result<Vec<FileElement>> {
                 elements.push(FileElement::Command(cmd));
             }
             Some(other) => {
-                bail!(
-                    "unexpected token {:?} at byte offset {}",
-                    other,
-                    p.peek_span().map(|s| s.start).unwrap_or(0)
-                );
+                let offset = p.peek_span().map(|s| s.start).unwrap_or(0);
+                let (line, col) = byte_offset_to_line_col(p.source, offset);
+                bail!("unexpected token {other} at {line}:{col}");
             }
             None => break,
         }
@@ -133,11 +146,11 @@ fn parse_command_invocation(p: &mut Parser) -> Result<CommandInvocation> {
             open_span
         }
         other => {
+            let (line, col) = byte_offset_to_line_col(p.source, name_span.end);
             bail!(
-                "expected '(' after command name '{}' at byte {}, got {:?}",
+                "expected '(' after command name '{}' at {line}:{col}, got {}",
                 name_span.text(p.source),
-                name_span.end,
-                other
+                describe_token(other)
             );
         }
     };
@@ -152,11 +165,11 @@ fn parse_command_invocation(p: &mut Parser) -> Result<CommandInvocation> {
             close_span
         }
         other => {
+            let (line, col) = byte_offset_to_line_col(p.source, name_span.start);
             bail!(
-                "expected ')' to close command '{}' at byte {}, got {:?}",
+                "expected ')' to close command '{}' at {line}:{col}, got {}",
                 name_span.text(p.source),
-                name_span.start,
-                other
+                describe_token(other)
             );
         }
     };
@@ -215,7 +228,9 @@ fn parse_arguments(p: &mut Parser) -> Result<Vec<Argument>> {
                         p.advance();
                     }
                     other => {
-                        bail!("expected ')' to close paren group, got {:?}", other);
+                        let offset = p.peek_span().map(|s| s.start).unwrap_or(0);
+                        let (line, col) = byte_offset_to_line_col(p.source, offset);
+                        bail!("expected ')' to close paren group at {line}:{col}, got {}", describe_token(other));
                     }
                 }
                 args.push(Argument::ParenGroup { arguments: inner });
@@ -284,7 +299,9 @@ fn parse_single_argument(p: &mut Parser) -> Result<Argument> {
             Ok(Argument::BracketComment(span))
         }
         other => {
-            bail!("expected argument, got {:?}", other);
+            let offset = p.peek_span().map(|s| s.start).unwrap_or(0);
+            let (line, col) = byte_offset_to_line_col(p.source, offset);
+            bail!("expected argument at {line}:{col}, got {}", describe_token(other));
         }
     }
 }

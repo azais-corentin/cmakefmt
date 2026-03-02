@@ -30,6 +30,22 @@ pub enum Token {
     UnquotedText,
 }
 
+impl std::fmt::Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Token::Space => f.write_str("<space>"),
+            Token::Newline => f.write_str("<newline>"),
+            Token::LParen => f.write_str("'('"),
+            Token::RParen => f.write_str("')'"),
+            Token::BracketArgument => f.write_str("bracket argument"),
+            Token::BracketComment => f.write_str("bracket comment"),
+            Token::LineComment => f.write_str("line comment"),
+            Token::QuotedArgument => f.write_str("quoted string"),
+            Token::UnquotedText => f.write_str("unquoted text"),
+        }
+    }
+}
+
 fn bracket_arg_callback(lex: &mut Lexer<Token>) -> bool {
     let opening = lex.slice();
     let eq_count = opening.len() - 2;
