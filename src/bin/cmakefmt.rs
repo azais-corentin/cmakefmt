@@ -3,7 +3,10 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::Parser;
-use cmakefmt::{CaseStyle, Configuration, NewLineKind, format_text};
+use cmakefmt::{
+    CaseStyle, ConfigLoadResult, Configuration, NewLineKind, format_text,
+    load_from_cli,
+};
 
 #[derive(Parser)]
 #[command(name = "cmakefmt", about = "Format CMake files", version)]
@@ -63,8 +66,8 @@ struct Cli {
 }
 
 impl Cli {
-    fn to_config(&self) -> Configuration {
-        Configuration {
+    fn to_config(&self) -> ConfigLoadResult {
+        load_from_cli(Configuration {
             line_width: self.line_width,
             indent_width: self.indent_width,
             use_tabs: self.use_tabs,
@@ -75,7 +78,7 @@ impl Cli {
             sort_lists: self.sort_lists,
             max_blank_lines: self.max_blank_lines,
             space_before_paren: self.space_before_paren,
-        }
+        })
     }
 }
 
@@ -107,7 +110,11 @@ fn expand_globs(patterns: &[String]) -> Result<Vec<PathBuf>, String> {
 
 fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
     let cli = Cli::parse();
-    let config = cli.to_config();
+    let config_result = cli.to_config();
+    for diagnostic in &config_result.diagnostics {
+        eprintln!("warning: {} ({})", diagnostic.message, diagnostic.key);
+    }
+    let config = config_result.config;
 
     if cli.files.is_empty() {
         return run_stdin(&cli, &config);

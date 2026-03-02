@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use cmakefmt::{CaseStyle, Configuration, format_text};
+use cmakefmt::{CaseStyle, Configuration, format_text, load_from_header};
 
 #[test]
 fn test_formatter_files() {
@@ -59,30 +59,33 @@ fn test_formatter_files() {
         let expected = std::fs::read_to_string(&out_path).unwrap();
 
         // Strip ### header line if present and try to parse config
-        let (input, config, header_overrides, has_custom_header) = if raw_input.starts_with("### ") {
-            let header_end = raw_input.find('\n');
-            let header_content = match header_end {
-                Some(pos) => &raw_input[4..pos],
-                None => &raw_input[4..],
-            };
-            let remaining = match header_end {
-                Some(pos) => &raw_input[pos + 1..],
-                None => "",
-            };
-            let parsed_header = parse_config_header(header_content);
-            (
-                remaining,
-                parsed_header.config,
-                parsed_header.overrides,
-                true,
-            )
-        } else {
-            (
-                raw_input.as_str(),
-                Configuration::default(),
-                Vec::new(),
-                false,
-            )
+        let (input, config, header_overrides, header_diagnostics, has_custom_header) =
+            if raw_input.starts_with("### ") {
+                let header_end = raw_input.find('\n');
+                let header_content = match header_end {
+                    Some(pos) => &raw_input[4..pos],
+                    None => &raw_input[4..],
+                };
+                let remaining = match header_end {
+                    Some(pos) => &raw_input[pos + 1..],
+                    None => "",
+                };
+                let parsed_header = parse_config_header(header_content);
+                (
+                    remaining,
+                    parsed_header.config,
+                    parsed_header.overrides,
+                    parsed_header.diagnostics,
+                    true,
+                )
+            } else {
+                (
+                    raw_input.as_str(),
+                    Configuration::default(),
+                    Vec::new(),
+                    Vec::new(),
+                    false,
+                )
         };
         let cmake_path = Path::new("CMakeLists.txt");
 
@@ -107,6 +110,7 @@ fn test_formatter_files() {
                         has_custom_header,
                         &header_overrides,
                         &config,
+                        &header_diagnostics,
                     ));
                 }
                 // Idempotency: format the output again
@@ -123,6 +127,7 @@ fn test_formatter_files() {
                                 has_custom_header,
                                 &header_overrides,
                                 &config,
+                                &header_diagnostics,
                             ));
                         }
                     }
@@ -135,6 +140,7 @@ fn test_formatter_files() {
                             has_custom_header,
                             &header_overrides,
                             &config,
+                            &header_diagnostics,
                         ));
                     }
                 }
@@ -151,6 +157,7 @@ fn test_formatter_files() {
                         has_custom_header,
                         &header_overrides,
                         &config,
+                        &header_diagnostics,
                     ));
                 }
                 // Idempotency: format input again (it was already formatted)
@@ -167,6 +174,7 @@ fn test_formatter_files() {
                                 has_custom_header,
                                 &header_overrides,
                                 &config,
+                                &header_diagnostics,
                             ));
                         }
                     }
@@ -179,6 +187,7 @@ fn test_formatter_files() {
                             has_custom_header,
                             &header_overrides,
                             &config,
+                            &header_diagnostics,
                         ));
                     }
                 }
@@ -390,6 +399,7 @@ fn with_config_context(
     has_custom_header: bool,
     header_overrides: &[(String, String)],
     config: &Configuration,
+    header_diagnostics: &[String],
 ) -> String {
     if !has_custom_header {
         return base_message;
@@ -404,8 +414,13 @@ fn with_config_context(
             .collect::<Vec<_>>()
             .join(", ")
     };
+    let diagnostics_section = if header_diagnostics.is_empty() {
+        String::new()
+    } else {
+        format!("\nHeader diagnostics: {}", header_diagnostics.join(" | "))
+    };
     let config_section =
-        format!("Header overrides: {overrides}\nResolved config: {config:#?}");
+        format!("Header overrides: {overrides}{diagnostics_section}\nResolved config: {config:#?}");
 
     if let Some((head, tail)) = base_message.split_once('\n') {
         format!("{head}\n{config_section}\n{tail}")
@@ -416,153 +431,22 @@ fn with_config_context(
 struct ParsedConfigHeader {
     config: Configuration,
     overrides: Vec<(String, String)>,
+    diagnostics: Vec<String>,
 }
 
 fn parse_config_header(header: &str) -> ParsedConfigHeader {
-    let mut config = Configuration::default();
-    let mut overrides = Vec::new();
-
-    // Try JSON first (camelCase keys like {"commandCase": "preserve"})
-    if let Ok(map) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(header) {
-        for (key, value) in &map {
-            match key.as_str() {
-                "commandCase" => {
-                    if let Some(s) = value.as_str() {
-                        config.command_case = match s {
-                            "upper" => CaseStyle::Upper,
-                            "preserve" => CaseStyle::Preserve,
-                            _ => CaseStyle::Lower,
-                        };
-                        overrides.push((key.clone(), format!("{:?}", config.command_case)));
-                    }
-                }
-                "keywordCase" => {
-                    if let Some(s) = value.as_str() {
-                        config.keyword_case = match s {
-                            "lower" => CaseStyle::Lower,
-                            "preserve" => CaseStyle::Preserve,
-                            _ => CaseStyle::Upper,
-                        };
-                        overrides.push((key.clone(), format!("{:?}", config.keyword_case)));
-                    }
-                }
-                "lineWidth" => {
-                    if let Some(n) = value.as_u64() {
-                        config.line_width = n as u32;
-                        overrides.push((key.clone(), config.line_width.to_string()));
-                    }
-                }
-                "indentWidth" => {
-                    if let Some(n) = value.as_u64() {
-                        config.indent_width = n as u8;
-                        overrides.push((key.clone(), config.indent_width.to_string()));
-                    }
-                }
-                "useTabs" => {
-                    if let Some(b) = value.as_bool() {
-                        config.use_tabs = b;
-                        overrides.push((key.clone(), config.use_tabs.to_string()));
-                    }
-                }
-                "sortLists" => {
-                    if let Some(b) = value.as_bool() {
-                        config.sort_lists = b;
-                        overrides.push((key.clone(), config.sort_lists.to_string()));
-                    }
-                }
-                "closingParenNewline" => {
-                    if let Some(b) = value.as_bool() {
-                        config.closing_paren_newline = b;
-                        overrides.push((key.clone(), config.closing_paren_newline.to_string()));
-                    }
-                }
-                _ => {}
-            }
-        }
-        overrides.sort_by(|a, b| a.0.cmp(&b.0));
-        return ParsedConfigHeader { config, overrides };
+    let result = load_from_header(header);
+    ParsedConfigHeader {
+        config: result.config,
+        overrides: result.overrides,
+        diagnostics: result
+            .diagnostics
+            .into_iter()
+            .map(|diagnostic| format!("{} ({})", diagnostic.message, diagnostic.key))
+            .collect(),
     }
-
-    // Fall back to gersemi-style {key: value} format
-    let content = header.trim();
-    let content = content.strip_prefix('{').unwrap_or(content);
-    let content = content.strip_suffix('}').unwrap_or(content);
-    let content = content.trim();
-
-    if content.is_empty() {
-        return ParsedConfigHeader { config, overrides };
-    }
-
-    for pair in split_respecting_brackets(content) {
-        let pair = pair.trim();
-        if let Some((key, value)) = pair.split_once(':') {
-            let key = key.trim().trim_matches('"');
-            let value = value.trim().trim_matches('"');
-            match key {
-                "line_length" => {
-                    if let Ok(n) = value.parse::<u32>() {
-                        config.line_width = n;
-                        overrides.push((key.to_string(), config.line_width.to_string()));
-                    }
-                }
-                "indent" => {
-                    if value == "tabs" {
-                        config.use_tabs = true;
-                        overrides.push((key.to_string(), "tabs".to_string()));
-                    } else if let Ok(n) = value.parse::<u8>() {
-                        config.indent_width = n;
-                        overrides.push((key.to_string(), config.indent_width.to_string()));
-                    }
-                }
-                "commandCase" | "command_case" => {
-                    config.command_case = match value {
-                        "upper" => CaseStyle::Upper,
-                        "preserve" => CaseStyle::Preserve,
-                        _ => CaseStyle::Lower,
-                    };
-                    overrides.push((key.to_string(), format!("{:?}", config.command_case)));
-                }
-                "keywordCase" | "keyword_case" => {
-                    config.keyword_case = match value {
-                        "lower" => CaseStyle::Lower,
-                        "preserve" => CaseStyle::Preserve,
-                        _ => CaseStyle::Upper,
-                    };
-                    overrides.push((key.to_string(), format!("{:?}", config.keyword_case)));
-                }
-                "sortLists" | "sort_lists" => {
-                    config.sort_lists = value == "true";
-                    overrides.push((key.to_string(), config.sort_lists.to_string()));
-                }
-                _ => { /* ignore unknown keys for forward compat */ }
-            }
-        }
-    }
-
-    overrides.sort_by(|a, b| a.0.cmp(&b.0));
-    ParsedConfigHeader { config, overrides }
 }
 
-fn split_respecting_brackets(s: &str) -> Vec<&str> {
-    let mut results = Vec::new();
-    let mut depth = 0;
-    let mut start = 0;
-    for (i, c) in s.char_indices() {
-        match c {
-            '[' => depth += 1,
-            ']' => depth -= 1,
-            ',' if depth == 0 => {
-                results.push(&s[start..i]);
-                start = i + 1;
-            }
-            _ => {}
-        }
-    }
-    if start < s.len() {
-        results.push(&s[start..]);
-    }
-    results
-}
 
 #[cfg(test)]
 mod invisible_diff_tests {
@@ -666,7 +550,7 @@ mod config_header_tests {
     #[test]
     fn test_parse_config_header_gersemi_collects_overrides_and_config() {
         let parsed = parse_config_header(
-            "{indent: tabs, line_length: 120, keyword_case: preserve, sort_lists: true}",
+            "{indent: tabs, line_width: 120, new_line_kind: lf, keyword_case: preserve, sort_lists: true}",
         );
 
         assert_eq!(
@@ -674,14 +558,36 @@ mod config_header_tests {
             vec![
                 ("indent".to_string(), "tabs".to_string()),
                 ("keyword_case".to_string(), "Preserve".to_string()),
-                ("line_length".to_string(), "120".to_string()),
+                ("line_width".to_string(), "120".to_string()),
+                ("new_line_kind".to_string(), "Lf".to_string()),
                 ("sort_lists".to_string(), "true".to_string()),
             ]
         );
         assert!(parsed.config.use_tabs);
         assert_eq!(parsed.config.line_width, 120);
+        assert_eq!(parsed.config.new_line_kind, cmakefmt::NewLineKind::Lf);
         assert_eq!(parsed.config.keyword_case, CaseStyle::Preserve);
         assert!(parsed.config.sort_lists);
+    }
+
+    #[test]
+    fn test_parse_config_header_gersemi_removed_aliases_emit_diagnostics() {
+        let parsed = parse_config_header("{line_length: 120, newline: lf}");
+
+        assert_eq!(parsed.config.line_width, Configuration::default().line_width);
+        assert_eq!(
+            parsed.config.new_line_kind,
+            Configuration::default().new_line_kind
+        );
+        assert!(parsed.overrides.is_empty());
+        assert_eq!(parsed.diagnostics.len(), 2);
+        assert_eq!(
+            parsed.diagnostics,
+            vec![
+                "Unknown property in configuration (line_length)".to_string(),
+                "Unknown property in configuration (newline)".to_string(),
+            ]
+        );
     }
 
     #[test]
@@ -689,7 +595,7 @@ mod config_header_tests {
         let config = Configuration::default();
         let base = "MISMATCH: tests/formatter/sample.in.cmake\n--- expected\n+++ actual\n@@ -1 +1 @@"
             .to_string();
-        let without_header = with_config_context(base.clone(), false, &[], &config);
+        let without_header = with_config_context(base.clone(), false, &[], &config, &[]);
         assert_eq!(without_header, base);
 
         let with_header = with_config_context(
@@ -697,9 +603,22 @@ mod config_header_tests {
             true,
             &[("lineWidth".to_string(), "100".to_string())],
             &config,
+            &[],
         );
         assert!(with_header.contains("Header overrides: lineWidth=100"));
         assert!(with_header.contains("Resolved config:"));
+        assert!(!with_header.contains("Header diagnostics:"));
+
+        let with_diagnostics = with_config_context(
+            base.clone(),
+            true,
+            &[("lineWidth".to_string(), "100".to_string())],
+            &config,
+            &["Unknown property in configuration (line_length)".to_string()],
+        );
+        assert!(with_diagnostics.contains(
+            "Header diagnostics: Unknown property in configuration (line_length)"
+        ));
         let overrides_index = with_header.find("Header overrides:").unwrap();
         let diff_index = with_header.find("--- expected").unwrap();
         assert!(overrides_index < diff_index);

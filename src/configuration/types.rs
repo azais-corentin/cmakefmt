@@ -1,4 +1,5 @@
 use std::fmt;
+use std::str::FromStr;
 
 use clap::ValueEnum;
 use serde::Serialize;
@@ -64,6 +65,32 @@ impl fmt::Display for CaseStyle {
             CaseStyle::Lower => write!(f, "lower"),
             CaseStyle::Upper => write!(f, "upper"),
             CaseStyle::Preserve => write!(f, "preserve"),
+        }
+    }
+}
+
+impl FromStr for NewLineKind {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "auto" => Ok(NewLineKind::Auto),
+            "lf" => Ok(NewLineKind::Lf),
+            "crlf" => Ok(NewLineKind::CrLf),
+            _ => Err(format!("Invalid newLineKind value '{s}'. Expected one of: auto, lf, crlf")),
+        }
+    }
+}
+
+impl FromStr for CaseStyle {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "lower" => Ok(CaseStyle::Lower),
+            "upper" => Ok(CaseStyle::Upper),
+            "preserve" => Ok(CaseStyle::Preserve),
+            _ => Err(format!("Invalid value '{s}'. Expected one of: lower, upper, preserve")),
         }
     }
 }
