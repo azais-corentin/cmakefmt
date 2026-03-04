@@ -113,7 +113,6 @@ opening line regardless of wrapping.
   )
   ```
 
-
 ### 1.4 `wrapArgThreshold`
 
 |             |                |
@@ -131,6 +130,23 @@ A value of `4` means any command with 5+ arguments always wraps.
 
 Useful for keeping commands like `set()` compact while forcing long `target_link_libraries()` invocations to expand.
 
+```cmake
+# Input:
+set(MY_VAR a b c d e)
+
+# Output (wrapArgThreshold = 4): 5 arguments > 4, forced one-per-line
+set(MY_VAR
+  a
+  b
+  c
+  d
+  e
+)
+
+# Output (wrapArgThreshold = 0, default): fits on one line, no forced wrapping
+set(MY_VAR a b c d e)
+```
+
 ### 1.5 `magicTrailingNewline`
 
 |             |           |
@@ -140,13 +156,27 @@ Useful for keeping commands like `set()` compact while forcing long `target_link
 
 When `true`, a "magic trailing newline" is treated as an explicit signal to keep the
 expanded layout, even if the invocation would fit on a single line. A magic trailing
-newline is detected when the input contains a newline character followed by optional whitespace
-followed by `)` — i.e., the closing `)` is not preceded by a non-whitespace character on the same line.
+newline is detected in the **input** when the closing `)` appears on its own line — that is, preceded only by whitespace (or nothing) on that line. This is an input-layout signal; it does not describe the output format.
 
 A trailing newline on a wrapped invocation serves as an author-intent signal to keep the expanded layout.
 
 When `false`, the formatter collapses any invocation that fits onto a single line regardless
 of the original layout.
+
+```cmake
+# Input (closing paren on its own line — magic trailing newline detected):
+set(FOO
+  "bar"
+)
+
+# Output (magicTrailingNewline = true): stays expanded even though it fits on one line
+set(FOO
+  "bar"
+)
+
+# Output (magicTrailingNewline = false): collapsed because it fits
+set(FOO "bar")
+```
 
 ---
 
@@ -164,6 +194,20 @@ Number of spaces (or tab stops) per indentation level. Each nesting level — ke
 a command, values under a keyword, nested generator-expression arguments, and body blocks of
 `if`/`foreach`/`function`/`macro` — increases indentation by this amount.
 
+```cmake
+# indentWidth = 2 (default)
+target_link_libraries(MyTarget
+  PRIVATE
+    Boost::filesystem
+)
+
+# indentWidth = 4
+target_link_libraries(MyTarget
+    PRIVATE
+        Boost::filesystem
+)
+```
+
 ### 2.2 `indentStyle`
 
 |             |                    |
@@ -179,6 +223,21 @@ When set to `"space"` (default), any tab characters in the input are converted t
 `indentWidth` spaces. When set to `"tab"`, indentation uses tab characters; tab characters
 within quoted strings are always preserved regardless of this setting.
 
+```cmake
+# indentStyle = "space", indentWidth = 2
+target_link_libraries(MyTarget
+  PRIVATE
+    Boost::filesystem
+)
+
+# indentStyle = "tab" (→ represents a tab character)
+target_link_libraries(MyTarget
+→PRIVATE
+→→Boost::filesystem
+)
+```
+
+(In the tab example above, `→` represents a tab character.)
 
 ### 2.3 `continuationIndentWidth`
 
@@ -248,6 +307,21 @@ top-level commands and within argument lists. Runs exceeding this count are coll
 A value of `0` collapses *all* blank lines.
 See §3.2 for interaction with `minBlankLinesBetweenBlocks`.
 
+Leading blank lines at the beginning of the file are always stripped entirely, independent of `maxBlankLines`.
+
+```cmake
+# Input (3 consecutive blank lines):
+set(FOO "bar")
+
+
+
+set(BAZ "qux")
+
+# Output (maxBlankLines = 1):
+set(FOO "bar")
+
+set(BAZ "qux")
+```
 
 ### 3.2 `minBlankLinesBetweenBlocks`
 
@@ -276,6 +350,20 @@ When `minBlankLinesBetweenBlocks` exceeds `maxBlankLines`, `minBlankLinesBetween
 takes precedence at block boundaries. The formatter inserts the minimum required blank
 lines even if this exceeds `maxBlankLines`.
 
+```cmake
+# Input (no blank line before if):
+set(FOO "bar")
+if(FOO)
+  message(STATUS "yes")
+endif()
+
+# Output (minBlankLinesBetweenBlocks = 1):
+set(FOO "bar")
+
+if(FOO)
+  message(STATUS "yes")
+endif()
+```
 
 ### 3.3 `blankLineBetweenSections`
 
@@ -321,6 +409,16 @@ Casing applied to command names (`cmake_minimum_required`, `add_library`, `if`, 
 - `"upper"`: Uppercases all commands.
 - `"unchanged"`: Preserves the original casing from the source file.
 
+```cmake
+# Input:
+SET(FOO "bar")
+CMAKE_MINIMUM_REQUIRED(VERSION 3.20)
+
+# Output (commandCase = "lower"):
+set(FOO "bar")
+cmake_minimum_required(VERSION 3.20)
+```
+
 ### 4.2 `keywordCase`
 
 |             |                                     |
@@ -360,6 +458,8 @@ customKeywords = ["CONAN_PKG", "VCPKG_DEPS", "MY_OPTION"]
 | **Type**    | `"upper" \| "lower" \| "unchanged"` |
 | **Default** | `"unchanged"`                       |
 
+Unlike keywords (§4.2), which are structural tokens that affect formatting layout (e.g., PRIVATE, PUBLIC, SOURCES), literals are boolean and comparison constants used as argument values.
+
 Casing applied to well-known boolean/constant literals: `ON`, `OFF`, `TRUE`, `FALSE`,
 `YES`, `NO`, `AND`, `OR`, `NOT`, `STREQUAL`, `STRLESS`, `STRGREATER`, `STRLESS_EQUAL`,
 `STRGREATER_EQUAL`, `VERSION_EQUAL`, `VERSION_LESS`, `VERSION_GREATER`,
@@ -372,6 +472,16 @@ Normalizing these literals to uppercase is a common convention, but many project
 
 These tokens are normalized *everywhere* they appear as arguments, not only in condition contexts.
 Any argument matching one of the listed tokens (case-insensitive match) is subject to `literalCase` normalization.
+
+```cmake
+# Input:
+option(USE_FEATURE "Enable feature" on)
+if(DEFINED result AND off)
+
+# Output (literalCase = "upper"):
+option(USE_FEATURE "Enable feature" ON)
+if(DEFINED result AND OFF)
+```
 
 ---
 
@@ -454,6 +564,17 @@ Controls handling of whitespace between the last argument and `)` on a single-li
 Only applies to single-line commands. On multi-line commands, the closing `)` placement
 is controlled by `closingParenNewline` (§5.1).
 
+```cmake
+# Input:
+set(FOO "bar" )
+
+# Output (trailingSpaceInParens = "remove"):
+set(FOO "bar")
+
+# Output (trailingSpaceInParens = "preserve"):
+set(FOO "bar" )
+```
+
 ---
 
 ## 6 · Comments
@@ -488,6 +609,8 @@ Controls how the formatter handles comments.
 
 - **`"strip"`**: Remove all comments. **Use with extreme caution.**
 
+A file consisting entirely of comments is handled identically — each comment is preserved, reflowed, or stripped according to this setting.
+
 ### 6.2 `commentWidth`
 
 |             |                              |
@@ -498,7 +621,6 @@ Controls how the formatter handles comments.
 
 Maximum line width for comments specifically. When `null`, inherits `lineWidth`.
 Only effective when `commentPreservation` is `"reflow"`.
-
 
 ### 6.3 `alignTrailingComments`
 
@@ -530,7 +652,6 @@ set(BAZ_LONG "qux") # The baz variable
 set(X "y") # Short one
 ```
 
-
 ### 6.4 `commentGap`
 
 |             |           |
@@ -542,6 +663,17 @@ set(X "y") # Short one
 Minimum number of spaces between the end of a code token and the start of a trailing `#` comment.
 A value of `0` produces no space between the last code token and the `#` marker
 (e.g., `set(FOO "bar")# comment`).
+
+```cmake
+# Input:
+set(FOO "bar")# trailing comment
+
+# Output (commentGap = 1, default):
+set(FOO "bar") # trailing comment
+
+# Output (commentGap = 2):
+set(FOO "bar")  # trailing comment
+```
 
 ### 6.5 Verbatim Content *(fixed behavior, not configurable)*
 
@@ -575,7 +707,6 @@ Controls which line-ending sequence is written to the output.
 - **`"auto"`**: Detect the dominant line ending in the input file and preserve it.
   If the file has no line endings (single-line file), default to `"lf"`.
 
-
 ### 7.2 `finalNewline`
 
 |             |           |
@@ -586,6 +717,9 @@ Controls which line-ending sequence is written to the output.
 When `true`, ensure the file ends with exactly one trailing newline. Excess trailing
 newlines are removed; a missing trailing newline is added. Empty or whitespace-only
 files are normalized to a single newline character.
+An empty file (zero bytes) is normalized to a single newline character when `finalNewline = true`.
+
+For example, if the input file ends with `cmake_minimum_required(VERSION 3.20)` and no trailing newline, the formatter appends one. If the input ends with two trailing newlines, excess trailing newlines are removed, leaving exactly one.
 
 When `false`, do not add a trailing newline if one is absent. `finalNewline = false` only controls
 whether a *missing* trailing newline is added. Existing trailing newlines are not stripped by this
@@ -608,6 +742,16 @@ POSIX convention and most editors expect a trailing newline, so the default is `
 When `true`, remove any trailing whitespace (spaces, tabs) at the end of every line.
 This is standard hygiene for version-controlled files and almost universally desired.
 
+```cmake
+# Input (· represents trailing spaces):
+set(FOO "bar")···
+message(STATUS "hello")·
+
+# Output (trimTrailingWhitespace = true):
+set(FOO "bar")
+message(STATUS "hello")
+```
+
 ### 8.2 `collapseSpaces`
 
 |             |           |
@@ -618,6 +762,14 @@ This is standard hygiene for version-controlled files and almost universally des
 When `true`, collapse runs of multiple spaces between arguments on the same line
 to a single space. Does not affect indentation (which is controlled by `indentWidth`)
 or spaces inside quoted strings.
+
+```cmake
+# Input:
+set(FOO    "bar"    "baz")
+
+# Output (collapseSpaces = true):
+set(FOO "bar" "baz")
+```
 
 ### 8.3 Backslash Line Continuations *(fixed behavior, not configurable)*
 
@@ -686,7 +838,6 @@ set(BAZ "qux")
 set(LONGER "value")
 ```
 
-
 ### 9.3 `alignArgGroups`
 
 |             |           |
@@ -698,6 +849,8 @@ When `true`, and when a command's arguments are laid out one-per-line, detect re
 structural patterns in the argument list and column-align them. The formatter looks for
 groups of consecutive lines that share the same number of tokens and attempts to align
 corresponding columns.
+
+More precisely, two consecutive argument lines are candidates for columnar alignment when they contain the same number of whitespace-separated tokens (each token being one CMake argument — a quoted string, unquoted word, or generator expression counted as a single token). Alignment pads each column with spaces to the maximum width of that column across all lines in the group.
 
 A "token" in this context is a single CMake argument — a quoted string, unquoted argument,
 or generator expression (including its entire nested content as one token).
@@ -786,6 +939,14 @@ Controls whether generator expressions (`$<...>`) are eligible for multi-line fo
   `$<$<CONFIG:Debug>:$<TARGET_FILE:foo>>` remains a single line regardless of depth.
   This can cause line-width violations for deeply nested genexes.
 
+```cmake
+# genexWrap = "never" — generator expression stays on one line
+target_compile_definitions(MyLib
+  PRIVATE
+    $<$<CONFIG:Debug>:DEBUG_MODE=1;VERBOSE_LOG=1>
+)
+```
+
 ### 10.2 `genexClosingAngleNewline`
 
 |             |           |
@@ -854,7 +1015,6 @@ spaceBeforeParen = true
 When pragma `push` overrides are active (§13.4), the current stack frame takes priority
 over `perCommandConfig`. See §13.4.4 for the full resolution order.
 
-
 The exact options overridable via `perCommandConfig` are: `lineWidth`, `wrapStyle`,
 `firstArgSameLine`, `wrapArgThreshold`, `magicTrailingNewline`, `indentWidth`,
 `indentStyle`, `continuationIndentWidth`, `genexIndentWidth`, `commandCase`, `keywordCase`,
@@ -863,7 +1023,6 @@ The exact options overridable via `perCommandConfig` are: `lineWidth`, `wrapStyl
 `alignTrailingComments`, `commentGap`, `alignPropertyValues`, `alignConsecutiveSet`,
 `alignArgGroups`, `genexWrap`, `genexClosingAngleNewline`, `sortArguments`, and
 `sortKeywordSections`.
-
 
 ---
 
@@ -901,6 +1060,24 @@ Arguments containing generator expressions (`$<...>`) and variable references (`
 are sorted by their literal text representation (the unexpanded source text). The formatter
 does not evaluate or expand variables before sorting.
 
+```cmake
+# Input:
+target_sources(MyApp
+  PRIVATE
+    zebra.cpp
+    alpha.cpp
+    middle.cpp
+)
+
+# Output (sortArguments = true):
+target_sources(MyApp
+  PRIVATE
+    alpha.cpp
+    middle.cpp
+    zebra.cpp
+)
+```
+
 ### 12.2 `sortKeywordSections`
 
 |             |           |
@@ -910,13 +1087,31 @@ does not evaluate or expand variables before sorting.
 
 When `true`, reorder keyword sections within a command to a canonical order. For
 `target_link_libraries` and similar commands, the canonical order is
-`PUBLIC` → `PRIVATE` → `INTERFACE`.
+`PUBLIC` → `INTERFACE` → `PRIVATE`.
 
 This is an opinionated option and off by default.
 
 The canonical section order is defined per-command in the formatter's keyword dictionary.
 For commands not in the dictionary, no reordering is performed. See Appendix F for the
 full per-command canonical order.
+
+```cmake
+# Input:
+target_link_libraries(MyTarget
+  PRIVATE
+    internal_lib
+  PUBLIC
+    Boost::filesystem
+)
+
+# Output (sortKeywordSections = true): PUBLIC before PRIVATE (canonical order)
+target_link_libraries(MyTarget
+  PUBLIC
+    Boost::filesystem
+  PRIVATE
+    internal_lib
+)
+```
 
 ---
 
@@ -930,23 +1125,20 @@ behavior locally within a file. All pragmas use the `cmakefmt:` prefix.
 ```
 pragma     := "#" ws? "cmakefmt:" ws? action
 action     := "off" | "on" | "skip"
-            | "push" ( ws assignment_list )?
+            | "push" ws toml-inline-table
             | "pop"
 
-assignment_list := assignment ( "," ws? assignment )*
-assignment      := key ws? "=" ws? value
-
-key        := [a-zA-Z][a-zA-Z0-9]*
-value      := integer | "true" | "false" | '"' [^"]* '"'
 ws         := [ \t]+
 ```
+
+Where `toml-inline-table` follows [TOML inline table syntax](https://toml.io/en/v1.1.0#inline-table) with one relaxation: trailing commas are permitted. Values inside the table are TOML scalars (integer, boolean, double-quoted string) or TOML inline arrays.
 
 **Rules:**
 
 - One pragma per line. No code on the same line.
 - The prefix `cmakefmt:` is case-sensitive, lowercase.
 - Whitespace between `#` and `cmakefmt:` is optional: `#cmakefmt: off` and `# cmakefmt: off` are both valid.
-- Values use TOML scalar syntax: `80` (integer), `true`/`false` (boolean), `"lower"` (string). Arrays and tables are not supported.
+- `push` takes an inline TOML table: `push { lineWidth = 120 }`. Braces are always required; bare `push` without braces is forbidden. `push {}` creates an empty save-point. Values use TOML scalar syntax: `80` (integer), `true`/`false` (boolean), `"lower"` (string). Arrays use TOML inline-array syntax (e.g., `push { spaceBeforeParen = ["if", "elseif"] }`).
 - Trailing content after a valid pragma is a warning and is ignored.
 
 ### 13.2 `off` / `on`
@@ -972,7 +1164,7 @@ set(MY_CAREFULLY_ALIGNED_MATRIX
 - `off`/`on` does not interact with the `push`/`pop` stack. The configuration state is unchanged across an off-region:
 
 ```cmake
-# cmakefmt: push lineWidth = 120
+# cmakefmt: push { lineWidth = 120 }
 # cmakefmt: off
 ...verbatim content...
 # cmakefmt: on
@@ -1004,7 +1196,7 @@ Create a new configuration frame on the stack. The frame inherits all values fro
 current top, then applies any inline overrides.
 
 ```cmake
-# cmakefmt: push lineWidth = 120, alignPropertyValues = true
+# cmakefmt: push { lineWidth = 120, alignPropertyValues = true }
 set_target_properties(MyTarget PROPERTIES
   CXX_STANDARD              17
   CXX_STANDARD_REQUIRED     ON
@@ -1013,7 +1205,7 @@ set_target_properties(MyTarget PROPERTIES
 # cmakefmt: pop
 ```
 
-A bare `push` (no assignments) creates a save-point with no changes.
+`push {}` (empty table) creates a save-point with no changes.
 
 #### 13.4.2 `pop`
 
@@ -1025,8 +1217,8 @@ only the root frame is a warning and is ignored.
 Frames nest arbitrarily. Each `pop` discards exactly one frame:
 
 ```cmake
-# cmakefmt: push lineWidth = 120           ← frame 1
-  # cmakefmt: push indentWidth = 4         ← frame 2
+# cmakefmt: push { lineWidth = 120 }         ← frame 1
+  # cmakefmt: push { indentWidth = 4 }       ← frame 2
     # lineWidth = 120, indentWidth = 4
   # cmakefmt: pop                          ← discard frame 2
   # lineWidth = 120, indentWidth restored
@@ -1047,7 +1239,7 @@ A `push` override always takes priority over `perCommandConfig`.
 
 ### 13.5 Pragma-Settable Options
 
-The options settable via `push` include all formatting options. Only `disableFormatting`,
+The options settable via `push` include all formatting options listed in the Summary Table. Only `disableFormatting`,
 `extends`, and `$schema` cannot be set in a pragma — these control configuration
 infrastructure, not formatting behavior. Setting any of these produces a warning and is
 ignored. Note that `push` has broader scope than `perCommandConfig` (§11.1): it can also
@@ -1089,6 +1281,18 @@ When `true`, the body of flow-control blocks (`if`/`elseif`/`else`/`endif`,
 When `false`, no additional indentation is applied to block bodies. This produces
 a flat style sometimes seen in older CMake codebases.
 
+```cmake
+# indentBlockBody = true (default)
+if(ENABLE_TESTS)
+  add_subdirectory(tests)
+endif()
+
+# indentBlockBody = false
+if(ENABLE_TESTS)
+add_subdirectory(tests)
+endif()
+```
+
 ### 14.2 `elseOnNewline`
 
 |             |           |
@@ -1098,6 +1302,17 @@ a flat style sometimes seen in older CMake codebases.
 
 Whether `else()` / `elseif()` always starts on its own line. This is almost universally
 `true` for CMake, but the option exists for completeness.
+
+```cmake
+# elseOnNewline = true (default)
+if(FOO)
+  do_foo()
+else()
+  do_bar()
+endif()
+```
+
+When `true`, `else()` and `elseif()` always start on their own line, which is standard CMake style.
 
 ### 14.3 `endCommandArgs`
 
@@ -1128,6 +1343,18 @@ its matched arguments exceeds `lineWidth`, it wraps like any other command invoc
 Nested parentheses in conditions (e.g., `if((A AND B) OR C)`) are treated as grouped
 sub-expressions. When wrapping occurs, the parenthesized group is indented as a unit.
 
+```cmake
+# endCommandArgs = "match"
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  message(STATUS "Debug mode")
+endif(CMAKE_BUILD_TYPE STREQUAL "Debug")
+
+# endCommandArgs = "remove" (default)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  message(STATUS "Debug mode")
+endif()
+```
+
 ### 14.4 Empty Commands
 
 Commands with no arguments (`endif()`, `else()`, `return()`, `endforeach()`, etc.) are always
@@ -1151,6 +1378,14 @@ some platforms.
 Arguments containing variable references (e.g., `${CMAKE_SOURCE_DIR}/foo`) are also quoted
 if the expanded-form pattern matches. The quoting wraps the entire argument including the
 variable reference: `"${CMAKE_SOURCE_DIR}/foo"`.
+
+```cmake
+# Input:
+install(FILES src/config.ini DESTINATION etc/myapp)
+
+# Output (quoteUnquotedPaths = true):
+install(FILES "src/config.ini" DESTINATION "etc/myapp")
+```
 
 ---
 
@@ -1224,6 +1459,14 @@ When `true`, formatting is fully disabled and output **MUST** be byte-for-byte i
 In this mode, the formatter applies no transformations or normalizations, including `lineEnding`, `finalNewline`, `trimTrailingWhitespace`, `collapseSpaces`, `maxBlankLines`, and UTF-8 BOM stripping.
 `disableFormatting = true` takes precedence over all other options and pragmas.
 
+```cmake
+# Input (irregular formatting):
+SET(  FOO   "bar"  )
+
+# Output (disableFormatting = true): byte-for-byte identical to input
+SET(  FOO   "bar"  )
+```
+
 ### 17.2 `ignorePatterns`
 
 |             |            |
@@ -1263,6 +1506,22 @@ ignoreCommands = ["ExternalProject_Add", "FetchContent_Declare"]
 
 Useful for complex macro invocations or commands with DSL-like syntax where the
 formatter's heuristics may produce undesirable results.
+
+```cmake
+# ignoreCommands = ["ExternalProject_Add"]
+
+# Input (irregular formatting):
+ExternalProject_Add(googletest
+    GIT_REPOSITORY  https://github.com/google/googletest.git
+    GIT_TAG         release-1.12.1
+)
+
+# Output: preserved verbatim, no formatting applied
+ExternalProject_Add(googletest
+    GIT_REPOSITORY  https://github.com/google/googletest.git
+    GIT_TAG         release-1.12.1
+)
+```
 
 ---
 
@@ -1402,7 +1661,7 @@ spaceBeforeParen = true
 
 ## Appendix C — Cascading Wrap Algorithm Detail
 
-The cascading algorithm is the heart of the formatter. Given a command invocation:
+The cascading algorithm is the heart of the formatter. For the vertical variant (`wrapStyle = "vertical"`), see the Vertical Wrapping Variant subsection below. Given a command invocation:
 
 ```
 command_name(arg1 KEYWORD arg2 arg3 KEYWORD2 arg4)
@@ -1435,6 +1694,20 @@ target_link_libraries(MyTarget
     Threads::Threads
   PUBLIC
     some_other_lib
+)
+```
+
+**Commands without keywords.** For commands like `set()` that have no recognized keywords, Step 2 is not applicable (there are no keywords to break on). The cascade goes directly from Step 1 to Step 3:
+
+```cmake
+# Step 1 — fits on one line
+set(MY_VAR a b c)
+
+# Step 3 — does not fit, one argument per line
+set(MY_VAR
+  a_long_value
+  another_long_value
+  yet_another_value
 )
 ```
 
@@ -1474,6 +1747,30 @@ target_link_libraries(
 
 The algorithm recurses into generator expressions, treating `$<` as an opening bracket
 and `>` as a closing bracket, with `genexIndentWidth` controlling nested indentation.
+
+### Vertical Wrapping Variant
+
+When `wrapStyle = "vertical"` (§1.2), the algorithm simplifies:
+
+**Step 1 — Single line.** Identical to cascade Step 1: if the entire invocation fits within `lineWidth`, emit on one line.
+
+**Step 3 — One per line.** If Step 1 fails, skip directly to one-argument-per-line layout. Step 2 (keyword breaks with packed arguments) is never attempted.
+
+Indentation rules are identical to cascade Step 3: keywords indent by `indentWidth` relative to the command, values indent by `continuationIndentWidth` (or `indentWidth`) relative to the keyword.
+
+```cmake
+# wrapStyle = "vertical" — fits on one line
+set(MY_VAR "hello")
+
+# wrapStyle = "vertical" — does not fit, one-per-line
+target_link_libraries(MyTarget
+  PRIVATE
+    Boost::filesystem
+    Threads::Threads
+  PUBLIC
+    some_other_lib
+)
+```
 
 ---
 
@@ -1540,7 +1837,6 @@ Suppress non-error output.
 Print the resolved configuration (after merging defaults, config file, and CLI overrides)
 as TOML to stdout. Useful for debugging.
 
-
 ### Flag Interactions
 
 | Combination                           | Behavior                                                                                                                                             |
@@ -1599,8 +1895,8 @@ keyword-structured commands.
 
 | Command                 | Canonical Section Order                                                                                                                |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `target_link_libraries` | `PUBLIC` → `PRIVATE` → `INTERFACE` → `LINK_PUBLIC` → `LINK_PRIVATE` → `LINK_INTERFACE_LIBRARIES`                                       |
-| `target_sources`        | `PUBLIC` → `PRIVATE` → `INTERFACE`                                                                                                     |
+| `target_link_libraries` | `PUBLIC` → `INTERFACE` → `PRIVATE` → `LINK_PUBLIC` → `LINK_PRIVATE` → `LINK_INTERFACE_LIBRARIES`                                       |
+| `target_sources`        | `PUBLIC` → `INTERFACE` → `PRIVATE`                                                                                                     |
 | `install`               | Sections: `ARCHIVE`, `LIBRARY`, `RUNTIME`, `OBJECTS`, `FRAMEWORK`, `BUNDLE`, `PUBLIC_HEADER`, `PRIVATE_HEADER`, `RESOURCE`, `FILE_SET` |
 | `export`                | Sections: `PACKAGE_DEPENDENCY`, `TARGET`, `VERSION`                                                                                    |
 
