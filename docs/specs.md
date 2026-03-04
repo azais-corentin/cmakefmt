@@ -6,7 +6,7 @@ effect, and concrete before/after examples where helpful.
 
 Input is expected to be valid UTF-8. Non-UTF-8 input is rejected with an error.
 When `disableFormatting = false` (default), a leading UTF-8 BOM (byte-order mark) is stripped from input and never emitted in output.
-When `disableFormatting = true` (§17.1), output is byte-for-byte identical to input and no preprocessing or normalization (including BOM stripping) is applied.
+When `disableFormatting = true` (§16.1), output is byte-for-byte identical to input and no preprocessing or normalization (including BOM stripping) is applied.
 
 Configuration is read from a TOML file named `.cmakefmt.toml` (or `cmakefmt.toml`) discovered by walking
 from the formatted file's directory upward to the filesystem root. The first file found wins. If both
@@ -55,7 +55,7 @@ Controls the overall line-wrapping philosophy. This is the master switch for wra
   1. *Fit on single line* if total width ≤ `lineWidth`.
   2. *Keywords on new lines, arguments inline* — each keyword starts a new line, and its
      arguments are packed onto that line as space allows.
-  3. *One argument per line* — if step 2 still overflows, every argument gets its own line.
+  3. *One argument per line* — if step 2 still overflows for a keyword group, that group escalates to one argument per line. Each keyword group independently decides between Step 2 and Step 3 based on its own rendered width.
 
   This applies recursively to all nesting levels, including generator expressions.
 
@@ -113,6 +113,10 @@ opening line regardless of wrapping.
   )
   ```
 
+When `firstArgSameLine = false`, the first argument is indented by `indentWidth` relative to the command (at the same level as keywords).
+
+If the command name plus the first argument together exceed `lineWidth` when `firstArgSameLine = true`, the opening line is emitted as-is (no individual token is split). The overflow is tolerated on the opening line; remaining arguments still wrap normally per the cascade algorithm.
+
 ### 1.4 `wrapArgThreshold`
 
 |             |                |
@@ -134,7 +138,7 @@ Useful for keeping commands like `set()` compact while forcing long `target_link
 # Input:
 set(MY_VAR a b c d e)
 
-# Output (wrapArgThreshold = 4): 5 arguments > 4, forced one-per-line
+# Output (wrapArgThreshold = 4): 6 arguments > 4, forced one-per-line
 set(MY_VAR
   a
   b
@@ -159,6 +163,23 @@ expanded layout, even if the invocation would fit on a single line. A magic trai
 newline is detected in the **input** when the closing `)` appears on its own line — that is, preceded only by whitespace (or nothing) on that line. This is an input-layout signal; it does not describe the output format.
 
 A trailing newline on a wrapped invocation serves as an author-intent signal to keep the expanded layout.
+
+Magic trailing newline skips Step 1 (single-line) only. The cascade still attempts Step 2 (keyword breaks) for keyword-bearing commands before escalating to Step 3. Under `wrapStyle = "vertical"`, since Step 2 does not exist, magic trailing newline skips Step 1 and proceeds directly to Step 3 (one-per-line). For example:
+
+```cmake
+# Input (magic trailing newline detected):
+target_link_libraries(MyTarget
+  PRIVATE
+    Boost::filesystem
+)
+
+# Output (magicTrailingNewline = true): Step 2 is still attempted
+target_link_libraries(MyTarget
+  PRIVATE Boost::filesystem
+)
+```
+
+Magic trailing newline detection requires at least one argument. Empty commands (e.g., `endif(\n)`) are not affected.
 
 When `false`, the formatter collapses any invocation that fits onto a single line regardless
 of the original layout.
@@ -239,6 +260,8 @@ target_link_libraries(MyTarget
 
 (In the tab example above, `→` represents a tab character.)
 
+When `indentStyle = "tab"` and `continuationIndentWidth` or `genexIndentWidth` differs from `indentWidth`, the formatter uses tabs for whole-`indentWidth` multiples and spaces for the remainder. For example, with `indentWidth = 4` and `continuationIndentWidth = 6`: a keyword at depth 1 uses 1 tab (4 columns), and a value line at the keyword's depth + 6 columns = column 10 is rendered as 2 tabs + 2 spaces. This "tabs for indentation, spaces for alignment" strategy ensures consistent display regardless of tab-width settings.
+
 ### 2.3 `continuationIndentWidth`
 
 |             |                                |
@@ -267,6 +290,8 @@ target_link_libraries(MyTarget
 In this example, `PRIVATE` is indented by `indentWidth` (2) relative to the command,
 and the library names are indented by `continuationIndentWidth` (4) relative to `PRIVATE`.
 
+For commands without recognized keywords, arguments are indented by `indentWidth` (not `continuationIndentWidth`). `continuationIndentWidth` only applies to value arguments appearing under a recognized keyword.
+
 ### 2.4 `genexIndentWidth`
 
 |             |                                |
@@ -277,7 +302,8 @@ and the library names are indented by `continuationIndentWidth` (4) relative to 
 
 Override indentation specifically inside generator expressions (`$<...>`). Generator
 expressions can be deeply nested, and some teams prefer a narrower indent inside them
-to reduce rightward drift.
+to reduce rightward drift. The indent is relative to the column where `$<` starts, not
+relative to the beginning of the line.
 
 ```cmake
 # genexIndentWidth = 2 (with indentWidth = 4)
@@ -294,6 +320,9 @@ target_compile_definitions(MyLib
 
 ## 3 · Blank Lines
 
+
+A **blank line** is a line containing no characters, or only whitespace characters, before the line ending.
+
 ### 3.1 `maxBlankLines`
 
 |             |           |
@@ -302,10 +331,11 @@ target_compile_definitions(MyLib
 | **Default** | `1`       |
 | **Range**   | `0 – 100` |
 
-Maximum number of **consecutive** blank lines preserved anywhere in the file — between
-top-level commands and within argument lists. Runs exceeding this count are collapsed.
-A value of `0` collapses *all* blank lines.
+Maximum number of **consecutive** blank lines preserved between top-level statements.
+Runs exceeding this count are collapsed. A value of `0` collapses *all* blank lines between statements.
 See §3.2 for interaction with `minBlankLinesBetweenBlocks`.
+
+Author-placed blank lines inside command argument lists are discarded during reformatting. Only `blankLineBetweenSections` (§3.3) can insert blank lines within a command's argument list. `maxBlankLines` does not apply inside argument lists.
 
 Leading blank lines at the beginning of the file are always stripped entirely, independent of `maxBlankLines`.
 
@@ -331,20 +361,24 @@ set(BAZ "qux")
 | **Default** | `0`       |
 | **Range**   | `0 – 10`  |
 
-Minimum number of blank lines inserted between top-level block-opening commands
-(`if`, `foreach`, `function`, `macro`) and the preceding command. Ensures visual
-separation of logical sections.
+Minimum number of blank lines inserted between block-opening commands
+(`if`, `foreach`, `while`, `function`, `macro`, `block`) and the preceding statement at any nesting level. This applies inside block bodies (e.g., inside `function()`, `if()`, `foreach()`) as well as at the file root. Ensures visual separation of logical sections.
 
 A value of `1` guarantees at least one blank line before every `if()`, `foreach()`,
-`function()`, or `macro()` block, unless the preceding line is a comment that belongs
+`while()`, `function()`, `macro()`, or `block()` block, unless the preceding line is a comment that belongs
 to the block.
 
 A comment "belongs to" the immediately following block if there is no blank line between the
-comment and the block-opening command. The blank-line insertion point moves above such attached comments.
+comment and the block-opening command. A group of consecutive comment lines (line comments
+`# ...` or bracket comments `#[[ ... ]]`) with no blank lines between them and the
+block-opening command are all considered attached to the block. The blank-line insertion
+point moves above the topmost attached comment.
 
 The minimum applies only before block-opening commands. Block-closing commands (`endif`,
 `endforeach`, `endwhile`, `endfunction`, `endmacro`, `endblock`) are excluded — the
 minimum blank-line guarantee does not apply before them.
+
+When a block-opening command is the first statement in the file (or the first statement inside a block body after the opener), `minBlankLinesBetweenBlocks` does not insert blank lines before it — there is no preceding statement to separate from.
 
 When `minBlankLinesBetweenBlocks` exceeds `maxBlankLines`, `minBlankLinesBetweenBlocks`
 takes precedence at block boundaries. The formatter inserts the minimum required blank
@@ -365,6 +399,25 @@ if(FOO)
 endif()
 ```
 
+```cmake
+# Input (minBlankLinesBetweenBlocks = 1):
+set(FOO "bar")
+# This comment is attached to the if block
+# So is this one
+if(FOO)
+  message(STATUS "yes")
+endif()
+
+# Output:
+set(FOO "bar")
+
+# This comment is attached to the if block
+# So is this one
+if(FOO)
+  message(STATUS "yes")
+endif()
+```
+
 ### 3.3 `blankLineBetweenSections`
 
 |             |           |
@@ -380,6 +433,10 @@ multiple sections.
 
 The blank line is inserted *between* sections — not before the first section keyword in a
 command. If a command has only one section, this option has no effect.
+
+A blank line is always inserted between consecutive section keywords, even when the preceding section has zero arguments (e.g., a standalone keyword like `VERBATIM`).
+
+When `blankLineBetweenSections = true`, the inserted blank lines take precedence over `maxBlankLines` within argument lists, analogous to `minBlankLinesBetweenBlocks` (§3.2). See Appendix E for interaction details.
 
 ```cmake
 # blankLineBetweenSections = true
@@ -451,6 +508,10 @@ built-in dictionary.
 customKeywords = ["CONAN_PKG", "VCPKG_DEPS", "MY_OPTION"]
 ```
 
+Custom keywords participate in section detection, argument sorting (§12.1), and formatting layout — not only casing normalization. Adding a keyword to this list causes the formatter to treat it as a section header in all commands.
+
+If a token in `customKeywords` also appears in the built-in literal list (§4.4), keyword classification takes precedence — the token is treated as a keyword in all contexts and `literalCase` does not apply to it.
+
 ### 4.4 `literalCase`
 
 |             |                                     |
@@ -466,12 +527,15 @@ Casing applied to well-known boolean/constant literals: `ON`, `OFF`, `TRUE`, `FA
 `VERSION_LESS_EQUAL`, `VERSION_GREATER_EQUAL`, `EQUAL`, `LESS`, `GREATER`,
 `LESS_EQUAL`, `GREATER_EQUAL`, `MATCHES`, `IN_LIST`, `DEFINED`, `COMMAND`,
 `POLICY`, `TARGET`, `TEST`, `EXISTS`, `IS_DIRECTORY`, `IS_SYMLINK`,
-`IS_ABSOLUTE`, `IS_NEWER_THAN`, `PATH_EQUAL`. See Appendix F for the full keyword dictionary.
+`IS_ABSOLUTE`, `IS_NEWER_THAN`, `PATH_EQUAL`.
 
 Normalizing these literals to uppercase is a common convention, but many projects prefer leaving them as-is.
 
-These tokens are normalized *everywhere* they appear as arguments, not only in condition contexts.
-Any argument matching one of the listed tokens (case-insensitive match) is subject to `literalCase` normalization.
+These tokens are normalized *everywhere* they appear as unquoted arguments, not only in condition contexts.
+Any unquoted argument matching one of the listed tokens (case-insensitive match) is subject to `literalCase` normalization.
+Literal case normalization applies only to unquoted arguments. Content inside quoted strings is never modified.
+
+When a token appears in both the keyword dictionary and the literal list (e.g., `TARGET`, `COMMAND`, `POLICY`, `TEST`), keyword classification takes precedence when the token serves a structural role in the current command's keyword dictionary. `literalCase` only applies when the token is used as a plain argument value.
 
 ```cmake
 # Input:
@@ -510,7 +574,14 @@ target_link_libraries(MyTarget
     Boost::filesystem)
 ```
 
-When `false`, the `)` stays on the last argument's line.
+When `false`, the `)` stays on the last argument's line. If the last argument has a trailing comment, `)` is inserted *before* the `#` marker (between the argument and the comment), separated by `commentGap` spaces from `)` to `#`. This prevents `)` from being swallowed into the comment text.
+
+```cmake
+# closingParenNewline = false, last argument has trailing comment
+target_link_libraries(MyTarget
+  PRIVATE
+    Boost::filesystem) # link filesystem
+```
 
 ### 5.2 `spaceBeforeParen`
 
@@ -525,55 +596,45 @@ Controls whether a space is inserted between the command name and the opening `(
 - `true`: Space for all commands — `if (...)`.
 - `["if", "elseif", "while", "foreach"]`: Space only for the listed commands.
 
-Command names in the list are matched case-insensitively, after `commandCase` normalization.
+Command names in the list are matched case-insensitively.
 
 ### 5.3 `spaceInsideParen`
 
-|             |           |
-| ----------- | --------- |
-| **Type**    | `boolean` |
-| **Default** | `false`   |
+|             |                                      |
+| ----------- | ------------------------------------ |
+| **Type**    | `"insert" \| "remove" \| "preserve"` |
+| **Default** | `"remove"`                           |
 
-When `true`, insert a space after the opening `(` and before the closing `)` on
+Controls whitespace immediately after the opening `(` and before the closing `)` on
 single-line invocations.
 
-```cmake
-# spaceInsideParen = true
-set( MY_VAR "hello" )
+- **`"insert"`**: Insert a space after `(` and before `)` on single-line commands.
 
-# spaceInsideParen = false (default)
-set(MY_VAR "hello")
-```
+  ```cmake
+  # spaceInsideParen = "insert"
+  set( MY_VAR "hello" )
+  ```
+
+- **`"remove"`** (default): Remove any space after `(` and before `)` on single-line commands.
+
+  ```cmake
+  # spaceInsideParen = "remove"
+  set(MY_VAR "hello")
+  ```
+
+- **`"preserve"`**: Keep whatever spacing was in the input.
+
+  ```cmake
+  # spaceInsideParen = "preserve" — input preserved as-is
+  set( MY_VAR "hello" )  # stays as-is
+  set(MY_VAR "hello")    # stays as-is
+  ```
 
 Does not apply to multi-line commands (spacing is controlled by indentation in that case).
 
+When a multi-line command collapses to a single line (e.g., because its arguments now fit), `"preserve"` mode has no meaningful input spacing to preserve. In this case, the formatter treats `"preserve"` as `"remove"` — no space is inserted after `(` or before `)`.
+
 `spaceInsideParen` has no effect on empty argument lists — `cmd()` stays `cmd()`.
-
-### 5.4 `trailingSpaceInParens`
-
-|             |                          |
-| ----------- | ------------------------ |
-| **Type**    | `"remove" \| "preserve"` |
-| **Default** | `"remove"`               |
-
-Controls handling of whitespace between the last argument and `)` on a single-line command.
-
-- `"remove"` (default): `set(FOO "bar" )` → `set(FOO "bar")`.
-- `"preserve"`: Keep any trailing space that was present in the input.
-
-Only applies to single-line commands. On multi-line commands, the closing `)` placement
-is controlled by `closingParenNewline` (§5.1).
-
-```cmake
-# Input:
-set(FOO "bar" )
-
-# Output (trailingSpaceInParens = "remove"):
-set(FOO "bar")
-
-# Output (trailingSpaceInParens = "preserve"):
-set(FOO "bar" )
-```
 
 ---
 
@@ -581,16 +642,18 @@ set(FOO "bar" )
 
 ### 6.1 `commentPreservation`
 
-|             |                                     |
-| ----------- | ----------------------------------- |
-| **Type**    | `"preserve" \| "reflow" \| "strip"` |
-| **Default** | `"preserve"`                        |
+|             |                          |
+| ----------- | ------------------------ |
+| **Type**    | `"preserve" \| "reflow"` |
+| **Default** | `"preserve"`             |
 
 Controls how the formatter handles comments.
 
 - **`"preserve"`** (default): Comments are kept in-place. Inline comments within argument
   lists are re-indented to match surrounding arguments. Standalone comment lines between
-  commands are preserved verbatim (content and relative position unchanged).
+  commands are preserved verbatim (content and relative position unchanged). Standalone
+  comment lines inside argument lists (between arguments) are re-indented to match the
+  surrounding indentation level and prevent single-line collapse of the command.
 
 - **`"reflow"`**: Comment text is reflowed to fit within `lineWidth`, respecting the
   current indentation. Leading `#` markers and any initial whitespace pattern are preserved.
@@ -599,17 +662,26 @@ Controls how the formatter handles comments.
   containing only `#` with optional trailing whitespace), or (b) a change in leading
   whitespace pattern after the `#` marker (e.g., indented sub-lists).
   Formatting pragma comments (§13) are never reflowed regardless of this setting.
-  Lines that appear to contain code (e.g., indented with 4+ spaces relative to the comment
-  block's baseline, or containing CMake-like syntax) are not reflowed — they are preserved
-  as-is within the paragraph flow.
+  Lines indented with 4+ spaces relative to the comment block's baseline are treated as
+  code and are not reflowed — they are preserved as-is within the paragraph flow.
+  Additionally, lines enclosed in triple-backtick fences (` ``` `) within a comment block
+  are treated as fenced code blocks: all lines between the opening and closing fence
+  (inclusive) are preserved verbatim and never reflowed. If an opening fence has no
+  matching closing fence before the end of the comment block, all remaining lines from
+  the opening fence to the end of the block are treated as code (greedy match).
 
   Lines that begin with a list marker (`-`, `*`, `+`, or a digit followed by `.` or `)`) after
   the `#` and optional whitespace are treated as individual list items. List items are not reflowed
   across item boundaries — each item is treated as its own paragraph.
+  Continuation lines of a list item — lines indented deeper than the list marker — belong to the same
+  item paragraph and are exempt from paragraph-break rule (b). Only a new list marker at the same or
+  lesser indentation starts a new paragraph.
 
-- **`"strip"`**: Remove all comments. **Use with extreme caution.**
+  > **Known limitation:** Nested list markers (sub-lists indented under a parent item) are
+  > treated as continuation lines of the parent item, not as independent list items. Deeply
+  > nested list structures may not reflow as expected.
 
-A file consisting entirely of comments is handled identically — each comment is preserved, reflowed, or stripped according to this setting.
+A file consisting entirely of comments is handled identically — each comment is preserved or reflowed according to this setting.
 
 ### 6.2 `commentWidth`
 
@@ -631,14 +703,16 @@ Only effective when `commentPreservation` is `"reflow"`.
 
 When `true`, align trailing comments (`# ...`) on consecutive lines to start at the same
 column. The alignment column is determined by the longest code segment in the group plus
-a minimum gap of two spaces.
+a minimum gap of `commentGap` spaces (§6.4).
 
 A group of consecutive lines is broken by any blank line or any line that does not have
 a trailing comment. Only lines within the same group are aligned together.
 
-Applies to consecutive lines at the same nesting level. Trailing comments inside wrapped
-multi-line command argument lists are aligned within their argument group, not across the
-entire file.
+Applies to consecutive lines at the same block-nesting depth (i.e., lines inside the same
+`if`/`foreach`/`function`/etc. body). Lines at different nesting depths are never aligned
+together. Trailing comments inside wrapped multi-line command argument lists are aligned
+within their argument group (a per-keyword-section scope within a command invocation), not
+across the entire file.
 
 ```cmake
 # alignTrailingComments = true
@@ -662,7 +736,8 @@ set(X "y") # Short one
 
 Minimum number of spaces between the end of a code token and the start of a trailing `#` comment.
 A value of `0` produces no space between the last code token and the `#` marker
-(e.g., `set(FOO "bar")# comment`).
+(e.g., `set(FOO "bar")# comment`). Note that `commentGap = 0` produces visually unusual
+adjacency and may reduce readability; it is primarily useful for niche formatting styles.
 
 ```cmake
 # Input:
@@ -705,7 +780,11 @@ Controls which line-ending sequence is written to the output.
 - **`"lf"`**: Unix-style `\n`.
 - **`"crlf"`**: Windows-style `\r\n`.
 - **`"auto"`**: Detect the dominant line ending in the input file and preserve it.
-  If the file has no line endings (single-line file), default to `"lf"`.
+  "Dominant" means the line-ending sequence (`\n` vs `\r\n`) that occurs most frequently.
+  On equal counts, `\n` (LF) wins as tiebreaker.
+  If the file has no line endings (e.g., single-line file, empty file, or zero bytes), default to `"lf"`.
+
+Bare carriage returns (`\r` not followed by `\n`) are treated as ordinary characters, not line endings. They are not counted in dominant-line-ending detection and are not normalized by the `lineEnding` option.
 
 ### 7.2 `finalNewline`
 
@@ -725,6 +804,19 @@ When `false`, do not add a trailing newline if one is absent. `finalNewline = fa
 whether a *missing* trailing newline is added. Existing trailing newlines are not stripped by this
 option — however, `maxBlankLines` (§3.1) still enforces its limit on consecutive blank lines at EOF
 regardless of `finalNewline`.
+
+When `finalNewline = false` and the input is an empty file (zero bytes), the output is also zero bytes. When `finalNewline = false` and the input is a whitespace-only file, the file is still subject to `trimTrailingWhitespace` and `maxBlankLines`, which may reduce it to empty.
+
+```cmake
+# Input (finalNewline = false, maxBlankLines = 1):
+set(FOO "bar")
+
+
+
+# Output: maxBlankLines collapses 3 blank lines to 1; no trailing newline added
+set(FOO "bar")
+
+```
 
 POSIX convention and most editors expect a trailing newline, so the default is `true`.
 
@@ -760,8 +852,10 @@ message(STATUS "hello")
 | **Default** | `true`    |
 
 When `true`, collapse runs of multiple spaces between arguments on the same line
-to a single space. Does not affect indentation (which is controlled by `indentWidth`)
-or spaces inside quoted strings.
+to a single space. `collapseSpaces` applies during input normalization, before alignment.
+Alignment-generated padding (from `alignPropertyValues`, `alignConsecutiveSet`, `alignArgGroups`,
+or `alignTrailingComments`) is inserted after collapsing and is therefore exempt. Does not affect
+indentation (which is controlled by `indentWidth`) or spaces inside quoted strings.
 
 ```cmake
 # Input:
@@ -770,17 +864,6 @@ set(FOO    "bar"    "baz")
 # Output (collapseSpaces = true):
 set(FOO "bar" "baz")
 ```
-
-### 8.3 Backslash Line Continuations *(fixed behavior, not configurable)*
-
-Backslash line continuations (`\` at end-of-line) are joined before formatting: the backslash and
-the newline character are removed, and any content before the backslash (including trailing spaces)
-is concatenated directly with the content of the next line. For example, `set(FOO \` / `bar)` is
-joined as `set(FOO bar)` — the space before `\` is preserved and becomes the separator.
-The formatter never emits backslash continuations in output.
-
-Backslash characters inside quoted strings (`"...\\..."`) and bracket arguments
-(`[==[...]==]`) are not treated as line continuations — they are preserved as literal content.
 
 ---
 
@@ -815,6 +898,19 @@ set_target_properties(MyTarget PROPERTIES
 
 Only takes effect when properties are rendered one-per-line.
 
+For properties with multiple values (e.g., `LINK_LIBRARIES lib1 lib2`), alignment is based on the first value token. Additional values wrap below at the alignment column:
+
+```cmake
+# alignPropertyValues = true, multi-value property
+set_target_properties(MyTarget PROPERTIES
+  CXX_STANDARD              17
+  LINK_LIBRARIES            lib1
+                            lib2
+                            lib3
+  POSITION_INDEPENDENT_CODE ON
+)
+```
+
 ### 9.2 `alignConsecutiveSet`
 
 |             |           |
@@ -838,6 +934,12 @@ set(BAZ "qux")
 set(LONGER "value")
 ```
 
+All consecutive `set()` calls form an alignment group regardless of their argument structure.
+Alignment is based on the first value argument (the second token after `set(`). For example,
+`set(FOO "bar")` and `set(BAZ "qux" CACHE STRING "")` align on `"bar"` and `"qux"` respectively.
+
+Valueless `set()` calls (e.g., `set(FOO)` which unsets the variable) and keyword-only calls without a value argument (e.g., `set(FOO PARENT_SCOPE)`) are excluded from alignment groups — they have no value column to align.
+
 ### 9.3 `alignArgGroups`
 
 |             |           |
@@ -850,7 +952,7 @@ structural patterns in the argument list and column-align them. The formatter lo
 groups of consecutive lines that share the same number of tokens and attempts to align
 corresponding columns.
 
-More precisely, two consecutive argument lines are candidates for columnar alignment when they contain the same number of whitespace-separated tokens (each token being one CMake argument — a quoted string, unquoted word, or generator expression counted as a single token). Alignment pads each column with spaces to the maximum width of that column across all lines in the group.
+More precisely, two consecutive argument lines are candidates for columnar alignment when they contain the same number of CMake arguments (where each argument is a quoted string, unquoted word, or generator expression — each counted as a single argument regardless of internal content). Alignment pads each column with spaces to the maximum width of that column across all lines in the group.
 
 A "token" in this context is a single CMake argument — a quoted string, unquoted argument,
 or generator expression (including its entire nested content as one token).
@@ -862,6 +964,13 @@ or generator expression (including its entire nested content as one token).
   from alignment and rendered normally.
 - A blank line or a comment line breaks the current group; alignment restarts after it.
 - Arguments under different section keywords are never aligned across keyword boundaries.
+- Additionally, keyword-as-first-token lines are aligned by their keyword column regardless of the total token count on each line. This is separate from the same-token-count alignment of value lines.
+
+> **Known limitation:** The heuristic matches on token count alone and does not verify
+> structural similarity. Two consecutive lines with the same number of tokens but
+> semantically different structure (e.g., a path and a flag) will be aligned. In practice,
+> this rarely produces undesirable results because CMake argument lists are typically
+> homogeneous within a keyword section.
 
 **Example 1 — `install(TARGETS ...)`:**
 
@@ -886,6 +995,8 @@ add_custom_command(
   VERBATIM
 )
 ```
+
+In this example, the keyword-as-first-token lines (`OUTPUT`, `COMMAND`, `DEPENDS`, `COMMENT`) are aligned by their keyword column, regardless of each line's total token count. `VERBATIM` stands alone (no value) and does not participate in alignment.
 
 **Example 3 — `set()` with tabular data:**
 
@@ -931,8 +1042,8 @@ Controls whether generator expressions (`$<...>`) are eligible for multi-line fo
 
 - **`"cascade"`** (default): Generator expressions follow the same cascading wrapping
   algorithm as command arguments. Each nesting level adds `genexIndentWidth` (or
-  `indentWidth`) spaces. Condition/value separation and closing `>` placement follow
-  consistent rules.
+  `indentWidth`) spaces. See "Generator Expression Argument Boundaries" below for
+  how the internal structure of a genex maps to the cascade algorithm.
 
 - **`"never"`**: Generator expressions are always kept on a single line, regardless
   of length. This applies recursively to all nesting levels —
@@ -947,6 +1058,45 @@ target_compile_definitions(MyLib
 )
 ```
 
+#### Generator Expression Argument Boundaries
+
+Generator expressions use different delimiters than command invocations. The following rules define how genex internals map to the cascade algorithm:
+
+- **Colon (`:`)** separates the condition/name part from the value part. In `$<condition:value>`, the colon acts as the primary split point. The condition part always stays on the `$<` opening line; if the value part causes overflow, wrapping occurs after the colon.
+- **Semicolons (`;`)** separate list items and are treated as argument separators for wrapping purposes. In `$<$<CONFIG:Debug>:DEBUG_MODE=1;VERBOSE_LOG=1>`, the semicolons delimit `DEBUG_MODE=1` and `VERBOSE_LOG=1` as separate arguments that can each occupy their own line.
+- **Commas (`,`)** separate positional parameters in genexes like `$<IF:condition,true_value,false_value>`. Each comma-separated parameter is an independent argument for wrapping.
+
+When `genexWrap = "cascade"`, the cascade proceeds as:
+
+1. **Single line** — if the entire genex fits within the remaining line width, emit inline.
+2. **Split at primary delimiter** — place the value part on a new line after the colon, indented by `genexIndentWidth` relative to the column where `$<` starts. List items (semicolons) and positional params (commas) pack onto the value line.
+3. **One per line** — if packing still overflows, each list item / positional param gets its own line.
+
+Nested genexes recurse: `$<` opens a new bracket scope and `>` closes it, analogous to `(`/`)` in commands.
+
+```cmake
+# genexWrap = "cascade" — single line (fits)
+target_compile_definitions(MyLib PRIVATE $<$<CONFIG:Debug>:DEBUG_MODE=1>)
+
+# genexWrap = "cascade" — split at colon, semicolons as separate args
+target_compile_definitions(MyLib
+  PRIVATE
+    $<$<CONFIG:Debug>:
+      DEBUG_MODE=1
+      VERBOSE_LOG=1
+    >
+)
+
+# genexWrap = "cascade" — $<IF:...> with comma-separated params
+target_link_libraries(MyLib
+  PRIVATE
+    $<IF:$<CONFIG:Debug>,
+      debug_lib,
+      release_lib
+    >
+)
+```
+
 ### 10.2 `genexClosingAngleNewline`
 
 |             |           |
@@ -955,6 +1105,7 @@ target_compile_definitions(MyLib
 | **Default** | `true`    |
 
 Analogous to `closingParenNewline` but for the closing `>` of generator expressions.
+This setting applies recursively to every closing `>` at every nesting level of generator expressions.
 
 - `true` (default): Closing `>` on its own line, aligned with the `$<` opener.
 - `false`: Closing `>` stays on the last content line.
@@ -1019,7 +1170,7 @@ The exact options overridable via `perCommandConfig` are: `lineWidth`, `wrapStyl
 `firstArgSameLine`, `wrapArgThreshold`, `magicTrailingNewline`, `indentWidth`,
 `indentStyle`, `continuationIndentWidth`, `genexIndentWidth`, `commandCase`, `keywordCase`,
 `customKeywords`, `literalCase`, `closingParenNewline`, `spaceBeforeParen`,
-`spaceInsideParen`, `trailingSpaceInParens`, `commentPreservation`, `commentWidth`,
+`spaceInsideParen`, `commentPreservation`, `commentWidth`,
 `alignTrailingComments`, `commentGap`, `alignPropertyValues`, `alignConsecutiveSet`,
 `alignArgGroups`, `genexWrap`, `genexClosingAngleNewline`, `sortArguments`, and
 `sortKeywordSections`.
@@ -1042,9 +1193,10 @@ reduces merge conflicts.
 - `false` (default): No sorting.
 - `true`: Sort arguments in all recognized section keyword groups. A keyword section is
   sortable if its keyword appears in the formatter's keyword dictionary (§4.2) and its
-  arguments are simple values (not sub-keyword structures). In practice this covers:
-  SOURCES, PRIVATE, PUBLIC, INTERFACE, FILES, DEPENDS, COMPONENTS, TARGETS,
-  CONFIGURATIONS, and any keywords added via `customKeywords` (§4.3).
+  arguments are simple values (not sub-keyword structures). For example, this covers
+  keywords such as SOURCES, PRIVATE, PUBLIC, INTERFACE, FILES, DEPENDS, COMPONENTS,
+  TARGETS, CONFIGURATIONS, and any keywords added via `customKeywords` (§4.3). The
+  general rule (keyword in dictionary + simple values) is normative; the list above is illustrative.
 - `["SOURCES", "FILES"]`: Only sort arguments under the listed keyword sections.
 
 Sorting is case-insensitive. Arguments that compare equal after case-folding retain their
@@ -1055,6 +1207,8 @@ Duplicate arguments are preserved. The stable sort retains duplicates in their o
 A comment is considered "attached" to an argument if it immediately precedes the argument
 with no blank line between them, or if it is a trailing comment on the same line as the
 argument. Attached comments travel with the argument during sorting.
+
+Unattached comments (comments separated from the following argument by one or more blank lines) act as group boundaries — sorting only occurs within sub-groups between unattached comments. The unattached comments and blank lines remain in place.
 
 Arguments containing generator expressions (`$<...>`) and variable references (`${...}`)
 are sorted by their literal text representation (the unexpanded source text). The formatter
@@ -1078,6 +1232,8 @@ target_sources(MyApp
 )
 ```
 
+Commands without recognized keyword sections are not affected by `sortArguments`. For example, `set(VAR c a b)` retains its original argument order regardless of this setting.
+
 ### 12.2 `sortKeywordSections`
 
 |             |           |
@@ -1092,8 +1248,14 @@ When `true`, reorder keyword sections within a command to a canonical order. For
 This is an opinionated option and off by default.
 
 The canonical section order is defined per-command in the formatter's keyword dictionary.
+All commands with PUBLIC/INTERFACE/PRIVATE sections use the same canonical order:
+PUBLIC → INTERFACE → PRIVATE, unless a different order is explicitly listed in Appendix F.
 For commands not in the dictionary, no reordering is performed. See Appendix F for the
 full per-command canonical order.
+
+Positional arguments preceding the first keyword section remain in place and are not subject to reordering.
+
+Comments attached to a keyword section (comments immediately preceding the keyword with no blank line between them, or trailing comments on the keyword line) travel with the section during reordering, mirroring the attached-comment rule in §12.1.
 
 ```cmake
 # Input:
@@ -1138,7 +1300,7 @@ Where `toml-inline-table` follows [TOML inline table syntax](https://toml.io/en/
 - One pragma per line. No code on the same line.
 - The prefix `cmakefmt:` is case-sensitive, lowercase.
 - Whitespace between `#` and `cmakefmt:` is optional: `#cmakefmt: off` and `# cmakefmt: off` are both valid.
-- `push` takes an inline TOML table: `push { lineWidth = 120 }`. Braces are always required; bare `push` without braces is forbidden. `push {}` creates an empty save-point. Values use TOML scalar syntax: `80` (integer), `true`/`false` (boolean), `"lower"` (string). Arrays use TOML inline-array syntax (e.g., `push { spaceBeforeParen = ["if", "elseif"] }`).
+- `push` takes an inline TOML table: `push { lineWidth = 120 }`. Braces are always required; bare `push` without braces is forbidden. `push {}` creates an empty save-point. Values use TOML scalar syntax: `80` (integer), `true`/`false` (boolean), `"lower"` (string). Arrays use TOML inline-array syntax (e.g., `push { spaceBeforeParen = ["if", "elseif"] }`). TOML inline tables are supported for table-typed options (e.g., `push { perCommandConfig = { set = { wrapStyle = "vertical" } } }`).
 - Trailing content after a valid pragma is a warning and is ignored.
 
 ### 13.2 `off` / `on`
@@ -1187,6 +1349,8 @@ ExternalProject_Add(googletest
 - Blank lines and comments between `skip` and the target command are allowed and preserved.
 - `skip` before EOF with no subsequent command is a warning.
 - `skip` does not accept inline overrides or interact with the `push`/`pop` stack.
+- If `# cmakefmt: off` appears between a `skip` pragma and the next command, the off-region starts immediately and the pending `skip` is consumed (cancelled). After `# cmakefmt: on`, the `skip` does not persist.
+- `push`/`pop` pragmas between `skip` and the target command are processed normally. `skip` only suppresses formatting of the next command invocation; it does not create an inert zone for other pragmas.
 
 ### 13.4 `push` / `pop`
 
@@ -1206,6 +1370,8 @@ set_target_properties(MyTarget PROPERTIES
 ```
 
 `push {}` (empty table) creates a save-point with no changes.
+
+When `push` includes `perCommandConfig`, the pushed table shallow-merges with the current effective `perCommandConfig` at the command-key level (same semantics as `extends` §15.2): top-level command keys in the pushed table override the existing entry for that command entirely. Command entries not present in the pushed table are preserved from the current frame. Step 2 of the resolution order (§13.4.4) consults this effective merged `perCommandConfig`.
 
 #### 13.4.2 `pop`
 
@@ -1240,11 +1406,15 @@ A `push` override always takes priority over `perCommandConfig`.
 ### 13.5 Pragma-Settable Options
 
 The options settable via `push` include all formatting options listed in the Summary Table. Only `disableFormatting`,
-`extends`, and `$schema` cannot be set in a pragma — these control configuration
-infrastructure, not formatting behavior. Setting any of these produces a warning and is
+`extends`, `$schema`, and `ignorePatterns` cannot be set in a pragma — these control configuration
+infrastructure or file-level routing, not formatting behavior. Setting any of these produces a warning and is
 ignored. Note that `push` has broader scope than `perCommandConfig` (§11.1): it can also
 set file-level options such as `maxBlankLines`, `lineEnding`, `finalNewline`,
-`trimTrailingWhitespace`, and `collapseSpaces`.
+`trimTrailingWhitespace`, `collapseSpaces`, `endCommandArgs`, and `indentBlockBody`.
+`ignoreCommands` is settable via `push`, enabling local command suppression within a file
+region. These file-level and flow-control options are excluded from `perCommandConfig`
+because they apply to document structure or block boundaries, not to individual command
+invocations.
 
 ### 13.6 Diagnostics
 
@@ -1293,28 +1463,7 @@ add_subdirectory(tests)
 endif()
 ```
 
-### 14.2 `elseOnNewline`
-
-|             |           |
-| ----------- | --------- |
-| **Type**    | `boolean` |
-| **Default** | `true`    |
-
-Whether `else()` / `elseif()` always starts on its own line. This is almost universally
-`true` for CMake, but the option exists for completeness.
-
-```cmake
-# elseOnNewline = true (default)
-if(FOO)
-  do_foo()
-else()
-  do_bar()
-endif()
-```
-
-When `true`, `else()` and `elseif()` always start on their own line, which is standard CMake style.
-
-### 14.3 `endCommandArgs`
+### 14.2 `endCommandArgs`
 
 |             |                                     |
 | ----------- | ----------------------------------- |
@@ -1322,20 +1471,25 @@ When `true`, `else()` and `elseif()` always start on their own line, which is st
 | **Default** | `"remove"`                          |
 
 Controls the arguments inside block-closing commands (`endif()`, `endfunction()`,
-`endforeach()`, `endmacro()`, `endwhile()`, `endblock()`). Older CMake required repeating the
+`endforeach()`, `endmacro()`, `endwhile()`, `endblock()`) and intermediate flow-control
+commands (`else()`, `elseif()`). Older CMake required repeating the
 condition/name; modern CMake does not.
 
-- **`"remove"`** (default): Strip arguments from closing commands.
-  `endif(condition)` → `endif()`.
+- **`"remove"`** (default): Strip arguments from closing commands and `else()`.
+  `endif(condition)` → `endif()`; `else(condition)` → `else()`.
+  `elseif()` is unaffected by `"remove"` — its condition is its own, not a repetition.
 - **`"preserve"`**: Keep whatever arguments are present.
-- **`"match"`**: Copies the full argument list verbatim from the corresponding opening
-  command. `endwhile(x AND y)` matches `while(x AND y)`; `endfunction(my_func)` matches
-  `function(my_func)`. Complex conditions with AND/OR/parentheses are copied as-is. If
-  the closing command has no argument, one is added; if it has a mismatched argument, it
-  is corrected.
+- **`"match"`**: For closing commands, copies the full argument list verbatim from the
+  corresponding opening command. `endwhile(x AND y)` matches `while(x AND y)`;
+  `endfunction(my_func)` matches `function(my_func)`. Complex conditions with
+  AND/OR/parentheses are copied as-is. If the closing command has no argument, one is
+  added; if it has a mismatched argument, it is corrected.
+  For `else()`, `"match"` copies the `if()`-condition from the enclosing `if` block.
+  `elseif()` is unaffected by `"match"` — it has its own condition expression.
 
-For `block()`/`endblock()`: since `block()` takes `SCOPE_FOR` and `PROPAGATE` clauses,
-`endCommandArgs = "match"` copies the arguments verbatim from the opening `block()` command.
+For `block()`/`endblock()`: since `block()` has no positional name argument (only keyword clauses like `SCOPE_FOR` and `PROPAGATE`), `endCommandArgs = "match"` produces `endblock()` unconditionally.
+
+For `else()`: under `"remove"`, legacy arguments are stripped (`else(condition)` → `else()`). Under `"match"`, the condition from the enclosing `if()` is copied into `else()`. Under `"preserve"`, existing arguments are kept as-is. `elseif()` always retains its own condition expression — `"remove"` and `"match"` do not alter it because its condition is definitional, not a repetition of the opening command.
 
 The copied arguments are subject to normal wrapping rules — if the closing command with
 its matched arguments exceeds `lineWidth`, it wraps like any other command invocation.
@@ -1355,43 +1509,15 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 ```
 
-### 14.4 Empty Commands
+### 14.3 Empty Commands
 
 Commands with no arguments (`endif()`, `else()`, `return()`, `endforeach()`, etc.) are always
 formatted on a single line. Wrapping and indentation options do not apply to empty argument lists.
 
 ---
+## 15 · Configuration Meta
 
-## 15 · Quote Style
-
-### 15.1 `quoteUnquotedPaths`
-
-|             |           |
-| ----------- | --------- |
-| **Type**    | `boolean` |
-| **Default** | `false`   |
-
-When `true`, wrap unquoted arguments that look like file paths (containing `/`, `\`,
-or `.`) in double quotes. This prevents subtle bugs with paths containing spaces on
-some platforms.
-
-Arguments containing variable references (e.g., `${CMAKE_SOURCE_DIR}/foo`) are also quoted
-if the expanded-form pattern matches. The quoting wraps the entire argument including the
-variable reference: `"${CMAKE_SOURCE_DIR}/foo"`.
-
-```cmake
-# Input:
-install(FILES src/config.ini DESTINATION etc/myapp)
-
-# Output (quoteUnquotedPaths = true):
-install(FILES "src/config.ini" DESTINATION "etc/myapp")
-```
-
----
-
-## 16 · Configuration Meta
-
-### 16.1 `$schema`
+### 15.1 `$schema`
 
 |             |          |
 | ----------- | -------- |
@@ -1405,7 +1531,7 @@ formatter itself.
 "$schema" = "https://raw.githubusercontent.com/yourorg/cmakefmt/main/schema.json"
 ```
 
-### 16.2 `extends`
+### 15.2 `extends`
 
 |             |          |
 | ----------- | -------- |
@@ -1414,14 +1540,16 @@ formatter itself.
 
 Path to another `.cmakefmt.toml` file to use as a base. Options from the current file
 override the base. Allows sharing a common config across a monorepo while permitting
-per-directory tweaks. Circular references are detected and produce an error.
+per-directory tweaks. Direct or transitive circular references in the `extends` chain are detected and produce an error.
+Implementations should impose a reasonable maximum depth for `extends` chains (e.g., 32 levels) to guard against pathological configurations. Exceeding this limit produces an error.
 
 The path is resolved relative to the directory containing the config file that declares it.
 Absolute paths are used as-is.
 
-**Merge strategy:** Scalars in the child override the base. Arrays (`customKeywords`,
-`ignorePatterns`, `ignoreCommands`) in the child replace the base array entirely. Tables
-(`perCommandConfig`) are shallow-merged: top-level command keys in the child override the
+**Merge strategy:** Scalars in the child override the base. Any option with an array value in the child
+replaces the base array entirely (this applies to all array-typed option values, including `customKeywords`,
+`ignorePatterns`, `ignoreCommands`, `sortArguments` when array-valued, and `spaceBeforeParen` when
+array-valued). Tables (`perCommandConfig`) are shallow-merged: top-level command keys in the child override the
 base entry for that command *entirely* (not field-by-field). Base command entries not present
 in the child are preserved.
 
@@ -1432,7 +1560,7 @@ extends = "../../.cmakefmt.toml"
 wrapStyle = "vertical"
 ```
 
-### 16.3 Unknown Keys
+### 15.3 Unknown Keys
 
 |              |         |
 | ------------ | ------- |
@@ -1446,9 +1574,9 @@ Unknown keys inside `perCommandConfig` tables follow the same policy.
 
 ---
 
-## 17 · Suppression & Ignore Options
+## 16 · Suppression & Ignore Options
 
-### 17.1 `disableFormatting`
+### 16.1 `disableFormatting`
 
 |             |           |
 | ----------- | --------- |
@@ -1467,7 +1595,7 @@ SET(  FOO   "bar"  )
 SET(  FOO   "bar"  )
 ```
 
-### 17.2 `ignorePatterns`
+### 16.2 `ignorePatterns`
 
 |             |            |
 | ----------- | ---------- |
@@ -1476,7 +1604,7 @@ SET(  FOO   "bar"  )
 
 Glob patterns for files that should be skipped entirely. Patterns are resolved
 relative to the configuration file's directory. When patterns are inherited via
-`extends` (§16.2), each pattern is resolved relative to the config file in which
+`extends` (§15.2), each pattern is resolved relative to the config file in which
 it appears, not relative to the extending file.
 
 Patterns use gitignore-style glob syntax: `*` matches any sequence except `/`, `**` matches
@@ -1490,7 +1618,7 @@ ignorePatterns = [
 ]
 ```
 
-### 17.3 `ignoreCommands`
+### 16.3 `ignoreCommands`
 
 |             |            |
 | ----------- | ---------- |
@@ -1527,53 +1655,50 @@ ExternalProject_Add(googletest
 
 ## Summary Table
 
-| #    | Option                       | Type                                | Default       |
-| ---- | ---------------------------- | ----------------------------------- | ------------- |
-| 1.1  | `lineWidth`                  | `integer`                           | `80`          |
-| 1.2  | `wrapStyle`                  | `"cascade" \| "vertical"`           | `"cascade"`   |
-| 1.3  | `firstArgSameLine`           | `boolean`                           | `true`        |
-| 1.4  | `wrapArgThreshold`           | `integer`                           | `0`           |
-| 1.5  | `magicTrailingNewline`       | `boolean`                           | `true`        |
-| 2.1  | `indentWidth`                | `integer`                           | `2`           |
-| 2.2  | `indentStyle`                | `"space" \| "tab"`                  | `"space"`     |
-| 2.3  | `continuationIndentWidth`    | `integer \| null`                   | `null`        |
-| 2.4  | `genexIndentWidth`           | `integer \| null`                   | `null`        |
-| 3.1  | `maxBlankLines`              | `integer`                           | `1`           |
-| 3.2  | `minBlankLinesBetweenBlocks` | `integer`                           | `0`           |
-| 3.3  | `blankLineBetweenSections`   | `boolean`                           | `false`       |
-| 4.1  | `commandCase`                | `"lower" \| "upper" \| "unchanged"` | `"lower"`     |
-| 4.2  | `keywordCase`                | `"lower" \| "upper" \| "unchanged"` | `"upper"`     |
-| 4.3  | `customKeywords`             | `string[]`                          | `[]`          |
-| 4.4  | `literalCase`                | `"upper" \| "lower" \| "unchanged"` | `"unchanged"` |
-| 5.1  | `closingParenNewline`        | `boolean`                           | `true`        |
-| 5.2  | `spaceBeforeParen`           | `boolean \| string[]`               | `false`       |
-| 5.3  | `spaceInsideParen`           | `boolean`                           | `false`       |
-| 5.4  | `trailingSpaceInParens`      | `"remove" \| "preserve"`            | `"remove"`    |
-| 6.1  | `commentPreservation`        | `"preserve" \| "reflow" \| "strip"` | `"preserve"`  |
-| 6.2  | `commentWidth`               | `integer \| null`                   | `null`        |
-| 6.3  | `alignTrailingComments`      | `boolean`                           | `false`       |
-| 6.4  | `commentGap`                 | `integer`                           | `1`           |
-| 7.1  | `lineEnding`                 | `"lf" \| "crlf" \| "auto"`          | `"auto"`      |
-| 7.2  | `finalNewline`               | `boolean`                           | `true`        |
-| 8.1  | `trimTrailingWhitespace`     | `boolean`                           | `true`        |
-| 8.2  | `collapseSpaces`             | `boolean`                           | `true`        |
-| 9.1  | `alignPropertyValues`        | `boolean`                           | `false`       |
-| 9.2  | `alignConsecutiveSet`        | `boolean`                           | `false`       |
-| 9.3  | `alignArgGroups`             | `boolean`                           | `false`       |
-| 10.1 | `genexWrap`                  | `"cascade" \| "never"`              | `"cascade"`   |
-| 10.2 | `genexClosingAngleNewline`   | `boolean`                           | `true`        |
-| 11.1 | `perCommandConfig`           | `table`                             | `{}`          |
-| 12.1 | `sortArguments`              | `boolean \| string[]`               | `false`       |
-| 12.2 | `sortKeywordSections`        | `boolean`                           | `false`       |
-| 14.1 | `indentBlockBody`            | `boolean`                           | `true`        |
-| 14.2 | `elseOnNewline`              | `boolean`                           | `true`        |
-| 14.3 | `endCommandArgs`             | `"remove" \| "preserve" \| "match"` | `"remove"`    |
-| 15.1 | `quoteUnquotedPaths`         | `boolean`                           | `false`       |
-| 16.1 | `$schema`                    | `string`                            | —             |
-| 16.2 | `extends`                    | `string`                            | —             |
-| 17.1 | `disableFormatting`          | `boolean`                           | `false`       |
-| 17.2 | `ignorePatterns`             | `string[]`                          | `[]`          |
-| 17.3 | `ignoreCommands`             | `string[]`                          | `[]`          |
+| #    | Option                       | Type                                 | Default       |
+| ---- | ---------------------------- | ------------------------------------ | ------------- |
+| 1.1  | `lineWidth`                  | `integer`                            | `80`          |
+| 1.2  | `wrapStyle`                  | `"cascade" \| "vertical"`            | `"cascade"`   |
+| 1.3  | `firstArgSameLine`           | `boolean`                            | `true`        |
+| 1.4  | `wrapArgThreshold`           | `integer`                            | `0`           |
+| 1.5  | `magicTrailingNewline`       | `boolean`                            | `true`        |
+| 2.1  | `indentWidth`                | `integer`                            | `2`           |
+| 2.2  | `indentStyle`                | `"space" \| "tab"`                   | `"space"`     |
+| 2.3  | `continuationIndentWidth`    | `integer \| null`                    | `null`        |
+| 2.4  | `genexIndentWidth`           | `integer \| null`                    | `null`        |
+| 3.1  | `maxBlankLines`              | `integer`                            | `1`           |
+| 3.2  | `minBlankLinesBetweenBlocks` | `integer`                            | `0`           |
+| 3.3  | `blankLineBetweenSections`   | `boolean`                            | `false`       |
+| 4.1  | `commandCase`                | `"lower" \| "upper" \| "unchanged"`  | `"lower"`     |
+| 4.2  | `keywordCase`                | `"lower" \| "upper" \| "unchanged"`  | `"upper"`     |
+| 4.3  | `customKeywords`             | `string[]`                           | `[]`          |
+| 4.4  | `literalCase`                | `"upper" \| "lower" \| "unchanged"`  | `"unchanged"` |
+| 5.1  | `closingParenNewline`        | `boolean`                            | `true`        |
+| 5.2  | `spaceBeforeParen`           | `boolean \| string[]`                | `false`       |
+| 5.3  | `spaceInsideParen`           | `"insert" \| "remove" \| "preserve"` | `"remove"`    |
+| 6.1  | `commentPreservation`        | `"preserve" \| "reflow"`             | `"preserve"`  |
+| 6.2  | `commentWidth`               | `integer \| null`                    | `null`        |
+| 6.3  | `alignTrailingComments`      | `boolean`                            | `false`       |
+| 6.4  | `commentGap`                 | `integer`                            | `1`           |
+| 7.1  | `lineEnding`                 | `"lf" \| "crlf" \| "auto"`           | `"auto"`      |
+| 7.2  | `finalNewline`               | `boolean`                            | `true`        |
+| 8.1  | `trimTrailingWhitespace`     | `boolean`                            | `true`        |
+| 8.2  | `collapseSpaces`             | `boolean`                            | `true`        |
+| 9.1  | `alignPropertyValues`        | `boolean`                            | `false`       |
+| 9.2  | `alignConsecutiveSet`        | `boolean`                            | `false`       |
+| 9.3  | `alignArgGroups`             | `boolean`                            | `false`       |
+| 10.1 | `genexWrap`                  | `"cascade" \| "never"`               | `"cascade"`   |
+| 10.2 | `genexClosingAngleNewline`   | `boolean`                            | `true`        |
+| 11.1 | `perCommandConfig`           | `table`                              | `{}`          |
+| 12.1 | `sortArguments`              | `boolean \| string[]`                | `false`       |
+| 12.2 | `sortKeywordSections`        | `boolean`                            | `false`       |
+| 14.1 | `indentBlockBody`            | `boolean`                            | `true`        |
+| 14.2 | `endCommandArgs`             | `"remove" \| "preserve" \| "match"`  | `"remove"`    |
+| 15.1 | `$schema`                    | `string`                             | —             |
+| 15.2 | `extends`                    | `string`                             | —             |
+| 16.1 | `disableFormatting`          | `boolean`                            | `false`       |
+| 16.2 | `ignorePatterns`             | `string[]`                           | `[]`          |
+| 16.3 | `ignoreCommands`             | `string[]`                           | `[]`          |
 
 ---
 
@@ -1600,8 +1725,7 @@ customKeywords = []
 literalCase = "unchanged"
 closingParenNewline = true
 spaceBeforeParen = false
-spaceInsideParen = false
-trailingSpaceInParens = "remove"
+spaceInsideParen = "remove"
 commentPreservation = "preserve"
 # commentWidth — inherits lineWidth
 alignTrailingComments = false
@@ -1615,15 +1739,14 @@ alignConsecutiveSet = false
 alignArgGroups = false
 genexWrap = "cascade"
 genexClosingAngleNewline = true
+# perCommandConfig — empty table by default
 sortArguments = false
 sortKeywordSections = false
 disableFormatting = false
 ignorePatterns = []
 ignoreCommands = []
 indentBlockBody = true
-elseOnNewline = true
 endCommandArgs = "remove"
-quoteUnquotedPaths = false
 ```
 
 ---
@@ -1672,16 +1795,33 @@ command_name(arg1 KEYWORD arg2 arg3 KEYWORD2 arg4)
 - If `wrapArgThreshold > 0` and the command has more than `wrapArgThreshold` arguments, skip directly to Step 3 (one-per-line).
 - If `magicTrailingNewline = true` (§1.5) and the closing `)` was on its own line in the input, preserve the expanded layout — do not collapse to a single line.
 
-**Step 1 — Single line.** Compute the rendered width. If ≤ `lineWidth`, emit on one line.
+**Step 1 — Single line.** Compute the rendered width of the entire line, including block-nesting indentation (the leading whitespace from enclosing `if`/`foreach`/`function`/etc. blocks). If ≤ `lineWidth`, emit on one line.
 
 **Step 2 — Keyword breaks.** Place each keyword on a new line, indented by `indentWidth`
 relative to the command's own indentation column. Pack that keyword's value arguments onto the same line. If any keyword
-line still exceeds `lineWidth`, escalate to step 3 for that keyword group.
+line still exceeds `lineWidth`, escalate to Step 3 for that keyword group.
+
+**Pre-keyword positional arguments** (arguments before the first keyword, e.g., the target name) form an implicit group. With `firstArgSameLine = true`, the first positional argument stays on the opening line and remaining pre-keyword positional arguments pack onto the same line. If the packed line exceeds `lineWidth`, pre-keyword positional arguments escalate to one-per-line (same escalation rule as keyword groups). With `firstArgSameLine = false`, all pre-keyword positional arguments start on the line after the opening `(` and follow the same packing/escalation rules.
 
 ```cmake
 target_link_libraries(MyTarget
   PRIVATE Boost::filesystem Threads::Threads
   PUBLIC some_other_lib
+)
+```
+
+Step 2 with multiple pre-keyword positional arguments:
+
+```cmake
+# firstArgSameLine = true — pre-keyword args pack on the opening line
+some_command(arg1 arg2 arg3
+  KEYWORD val1 val2
+)
+
+# firstArgSameLine = false — pre-keyword args start on next line, pack together
+some_command(
+  arg1 arg2 arg3
+  KEYWORD val1 val2
 )
 ```
 
@@ -1752,9 +1892,11 @@ and `>` as a closing bracket, with `genexIndentWidth` controlling nested indenta
 
 When `wrapStyle = "vertical"` (§1.2), the algorithm simplifies:
 
+**Step 0 — Pre-checks.** Identical to cascade Step 0: `wrapArgThreshold` and `magicTrailingNewline` pre-checks apply. If `wrapArgThreshold` triggers, skip directly to Step 3. If `magicTrailingNewline` triggers, skip Step 1.
+
 **Step 1 — Single line.** Identical to cascade Step 1: if the entire invocation fits within `lineWidth`, emit on one line.
 
-**Step 3 — One per line.** If Step 1 fails, skip directly to one-argument-per-line layout. Step 2 (keyword breaks with packed arguments) is never attempted.
+**Step 3 — One per line.** If Step 1 fails (or is skipped), go directly to one-argument-per-line layout. Step 2 (keyword breaks with packed arguments) is never attempted.
 
 Indentation rules are identical to cascade Step 3: keywords indent by `indentWidth` relative to the command, values indent by `continuationIndentWidth` (or `indentWidth`) relative to the keyword.
 
@@ -1854,28 +1996,29 @@ as TOML to stdout. Useful for debugging.
 This appendix documents interactions between options where the combined behavior is not
 obvious from reading each option's description in isolation.
 
-| Options                                                   | Interaction                                                                                                                                                                                                                                                       |
-| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `spaceInsideParen` + `trailingSpaceInParens`              | `trailingSpaceInParens = "remove"` takes precedence: even when `spaceInsideParen = true` adds a space after `(`, `trailingSpaceInParens = "remove"` strips the space before `)`. The two options control opposite ends of the parenthesized region independently. |
-| `sortArguments` + `alignArgGroups`                        | Sorting is applied first, then alignment. Arguments are reordered within their keyword section, and the resulting layout is then column-aligned if `alignArgGroups` is enabled.                                                                                   |
-| `commentPreservation = "strip"` + `alignTrailingComments` | When comments are stripped, there are no trailing comments to align. `alignTrailingComments` is effectively a no-op.                                                                                                                                              |
-| `indentStyle = "tab"` + alignment options                 | When `indentStyle = "tab"`, alignment padding (the spaces after the leading tab indentation that align columns) always uses space characters, never tabs. Leading indentation uses tabs; alignment columns use spaces.                                            |
-| `disableFormatting = true` + all other options            | `disableFormatting` takes absolute precedence. Output is byte-for-byte identical to input. No other option has any effect.                                                                                                                                        |
-| `wrapArgThreshold` + `magicTrailingNewline`               | Both are pre-checks before single-line layout (Appendix C, Step 0). Either condition independently forces expansion. When both trigger, the result is the same: one-per-line layout.                                                                              |
-| `wrapStyle = "vertical"` + `wrapArgThreshold`             | `wrapArgThreshold` forces expansion regardless of `wrapStyle`. Under `"vertical"`, the result is always one-per-line (Step 3). Under `"cascade"`, `wrapArgThreshold` skips directly to Step 3. In practice, the outcome is identical.                             |
-| `genexWrap = "never"` + `genexClosingAngleNewline`        | `genexClosingAngleNewline` has no effect when `genexWrap = "never"` because generator expressions are always single-line.                                                                                                                                         |
-| `genexWrap = "never"` + `genexIndentWidth`                | `genexIndentWidth` has no effect when `genexWrap = "never"` because generator expressions are never expanded to multiple lines.                                                                                                                                   |
-| `commentPreservation = "preserve"` + `commentWidth`       | `commentWidth` has no effect unless `commentPreservation = "reflow"`.                                                                                                                                                                                             |
-| `firstArgSameLine` + single-line commands                 | `firstArgSameLine` only affects commands that wrap. Single-line commands always have the first argument on the same line.                                                                                                                                         |
-| `closingParenNewline` + single-line commands              | `closingParenNewline` only affects commands that wrap. Single-line commands always have `)` on the same line.                                                                                                                                                     |
-| `blankLineBetweenSections` + single-section commands      | No blank lines inserted when a command has only one section.                                                                                                                                                                                                      |
-| `alignPropertyValues` + single-line property commands     | `alignPropertyValues` only takes effect when properties are rendered one-per-line.                                                                                                                                                                                |
-| `sortArguments` + `commentPreservation = "strip"`         | When comments are stripped, there are no attached comments to travel with arguments during sorting.                                                                                                                                                               |
-| `perCommandConfig` + `push` pragma                        | Per §13.4.4: `push` stack overrides always take priority over `perCommandConfig`.                                                                                                                                                                                 |
-| `ignoreCommands` + `perCommandConfig`                     | If a command is in `ignoreCommands`, it is preserved verbatim. `perCommandConfig` entries for that command are not applied.                                                                                                                                       |
-| `ignoreCommands` + pragmas (`off`/`skip`)                 | Both suppress formatting. `ignoreCommands` applies globally to all invocations; pragmas apply to specific locations. They do not conflict — either one is sufficient to suppress formatting.                                                                      |
-| `finalNewline` + `maxBlankLines`                          | `maxBlankLines` enforces its limit on consecutive blank lines at EOF regardless of `finalNewline`. `finalNewline = false` only controls whether a missing trailing newline is added.                                                                              |
-| `ignoreCommands` + sorting/alignment                      | Ignored commands are preserved verbatim; `sortArguments`, `sortKeywordSections`, and alignment options do not apply to them.                                                                                                                                      |
+| Options                                               | Interaction                                                                                                                                                                                                                                                                                                        |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `sortArguments` + `alignArgGroups`                    | Sorting is applied first, then alignment. Arguments are reordered within their keyword section, and the resulting layout is then column-aligned if `alignArgGroups` is enabled.                                                                                                                                    |
+| `indentStyle = "tab"` + alignment options             | When `indentStyle = "tab"`, alignment padding (the spaces after the leading tab indentation that align columns) always uses space characters, never tabs. Leading indentation uses tabs; alignment columns use spaces.                                                                                             |
+| `disableFormatting = true` + all other options        | `disableFormatting` takes absolute precedence. Output is byte-for-byte identical to input. No other option has any effect.                                                                                                                                                                                         |
+| `wrapArgThreshold` + `magicTrailingNewline`           | Both are Step 0 pre-checks (Appendix C). `wrapArgThreshold` skips directly to Step 3 (one-per-line). `magicTrailingNewline` skips Step 1 only — Step 2 (keyword breaks) is still attempted for keyword-bearing commands before escalating to Step 3. When both trigger, `wrapArgThreshold` wins (Step 3 directly). |
+| `wrapStyle = "vertical"` + `wrapArgThreshold`         | `wrapArgThreshold` forces expansion regardless of `wrapStyle`. Under `"vertical"`, the result is always one-per-line (Step 3). Under `"cascade"`, `wrapArgThreshold` skips directly to Step 3. In practice, the outcome is identical.                                                                              |
+| `genexWrap = "never"` + `genexClosingAngleNewline`    | `genexClosingAngleNewline` has no effect when `genexWrap = "never"` because generator expressions are always single-line.                                                                                                                                                                                          |
+| `genexWrap = "never"` + `genexIndentWidth`            | `genexIndentWidth` has no effect when `genexWrap = "never"` because generator expressions are never expanded to multiple lines.                                                                                                                                                                                    |
+| `commentPreservation = "preserve"` + `commentWidth`   | `commentWidth` has no effect unless `commentPreservation = "reflow"`.                                                                                                                                                                                                                                              |
+| `firstArgSameLine` + single-line commands             | `firstArgSameLine` only affects commands that wrap. Single-line commands always have the first argument on the same line.                                                                                                                                                                                          |
+| `closingParenNewline` + single-line commands          | `closingParenNewline` only affects commands that wrap. Single-line commands always have `)` on the same line.                                                                                                                                                                                                      |
+| `blankLineBetweenSections` + single-section commands  | No blank lines inserted when a command has only one section.                                                                                                                                                                                                                                                       |
+| `alignPropertyValues` + single-line property commands | `alignPropertyValues` only takes effect when properties are rendered one-per-line.                                                                                                                                                                                                                                 |
+| `perCommandConfig` + `push` pragma                    | Per §13.4.4: `push` stack overrides always take priority over `perCommandConfig`.                                                                                                                                                                                                                                  |
+| `ignoreCommands` + `perCommandConfig`                 | If a command is in `ignoreCommands`, it is preserved verbatim. `perCommandConfig` entries for that command are not applied.                                                                                                                                                                                        |
+| `ignoreCommands` + pragmas (`off`/`skip`)             | Both suppress formatting. `ignoreCommands` applies globally to all invocations; pragmas apply to specific locations. They do not conflict — either one is sufficient to suppress formatting.                                                                                                                       |
+| `finalNewline` + `maxBlankLines`                      | `maxBlankLines` enforces its limit on consecutive blank lines at EOF regardless of `finalNewline`. `finalNewline = false` only controls whether a missing trailing newline is added.                                                                                                                               |
+| `ignoreCommands` + sorting/alignment                  | Ignored commands are preserved verbatim; `sortArguments`, `sortKeywordSections`, and alignment options do not apply to them.                                                                                                                                                                                       |
+| `blankLineBetweenSections` + `maxBlankLines`          | When `blankLineBetweenSections = true`, the inserted blank lines take precedence over `maxBlankLines` within argument lists, analogous to `minBlankLinesBetweenBlocks` (§3.2).                                                                                                                                     |
+| `alignTrailingComments` + `commentGap`                | When `alignTrailingComments = true`, the alignment column uses `commentGap` as the minimum gap between the longest code segment and the `#` marker.                                                                                                                                                                |
+| `collapseSpaces` + alignment options                  | `collapseSpaces` applies during input normalization (before layout). Alignment-generated padding (`alignPropertyValues`, `alignConsecutiveSet`, `alignArgGroups`, `alignTrailingComments`) is inserted after collapsing and is exempt.                                                                             |
+| `alignArgGroups` + `blankLineBetweenSections`         | When both are enabled, `blankLineBetweenSections` inserts blank lines between sections first, then `alignArgGroups` detects column patterns within each section independently. The blank line acts as an alignment group boundary.                                                                                 |
 
 ---
 
@@ -1893,12 +2036,12 @@ keyword-structured commands.
 
 ### Commands with canonical section orders
 
-| Command                 | Canonical Section Order                                                                                                                |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `target_link_libraries` | `PUBLIC` → `INTERFACE` → `PRIVATE` → `LINK_PUBLIC` → `LINK_PRIVATE` → `LINK_INTERFACE_LIBRARIES`                                       |
-| `target_sources`        | `PUBLIC` → `INTERFACE` → `PRIVATE`                                                                                                     |
-| `install`               | Sections: `ARCHIVE`, `LIBRARY`, `RUNTIME`, `OBJECTS`, `FRAMEWORK`, `BUNDLE`, `PUBLIC_HEADER`, `PRIVATE_HEADER`, `RESOURCE`, `FILE_SET` |
-| `export`                | Sections: `PACKAGE_DEPENDENCY`, `TARGET`, `VERSION`                                                                                    |
+| Command                 | Canonical Section Order                                                                                                               |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `target_link_libraries` | `PUBLIC` → `INTERFACE` → `PRIVATE` → `LINK_PUBLIC` → `LINK_PRIVATE` → `LINK_INTERFACE_LIBRARIES`                                      |
+| `target_sources`        | `PUBLIC` → `INTERFACE` → `PRIVATE`                                                                                                    |
+| `install`               | `ARCHIVE` → `LIBRARY` → `RUNTIME` → `OBJECTS` → `FRAMEWORK` → `BUNDLE` → `PUBLIC_HEADER` → `PRIVATE_HEADER` → `RESOURCE` → `FILE_SET` |
+| `export`                | `PACKAGE_DEPENDENCY` → `TARGET` → `VERSION`                                                                                           |
 
 ### Other recognized commands
 
