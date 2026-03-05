@@ -10,7 +10,7 @@ A fresh agent session starts here. Read this file first, then follow the phases 
 
 | File            | Purpose                                                                                   | Phase   |
 | --------------- | ----------------------------------------------------------------------------------------- | ------- |
-| `docs/specs.md` | Authoritative formatting specification. Every behavior and config option is defined here. | Phase 1 |
+| `docs/specs/` | Authoritative formatting specification (split into per-section files). See `docs/specs/README.md` for index. | Phase 1 |
 | `docs/plan.md`  | Implementation plan. Ordered list of work items derived from the spec.                    | Phase 2 |
 | `docs/tasks.md` | Task breakdown. Granular, individually-committable units of work.                         | Phase 3 |
 | `FEATURES.md`   | High-level feature inventory (reference only — spec is authoritative).                    | —       |
@@ -22,11 +22,11 @@ If `docs/plan.md` or `docs/tasks.md` do not exist yet, create them during the ap
 
 ## Phase 1: Spec Validation
 
-**Goal:** Ensure `docs/specs.md` is complete and accurate before any implementation begins.
+**Goal:** Ensure `docs/specs/` is complete and accurate before any implementation begins.
 
 ### Steps
 
-1. Read `docs/specs.md` in full.
+1. Read the relevant section files under `docs/specs/` (see `docs/specs/README.md` for index).
 2. Identify ambiguities, contradictions, or missing edge cases.
 3. If the user's request introduces new behavior, update the spec **first** — implementation follows the spec, never the reverse.
 4. When a spec section grows beyond ~150 lines, split it into subsections with clear cross-references.
@@ -70,7 +70,7 @@ some_command(
 
 ### Steps
 
-1. Read the current spec (`docs/specs.md`) and existing codebase (`src/`).
+1. Read the current spec (`docs/specs/`) and existing codebase (`src/`).
 2. Use Plan Mode (Oh My Pi) or structured reasoning to decompose the spec into implementation milestones.
 3. Write `docs/plan.md` with this structure:
 
@@ -171,7 +171,7 @@ Example subagent dispatch for two independent formatting rules:
 
 ```
 Task tool:
-  context: "Implementing formatting rules from docs/specs.md. Config struct is in src/config.rs. Tests go in tests/."
+  context: "Implementing formatting rules from docs/specs/. Config struct is in src/config.rs. Tests go in tests/."
   tasks:
     - IndentWidth: "Implement indentWidth (spec §2.1) in src/indent.rs"
     - IndentStyle: "Implement indentStyle (spec §2.2) in src/indent.rs"
@@ -215,7 +215,7 @@ Run this at the start of every coding session. No exceptions.
 
 ```
 1. [ ] Read this file (AGENTS.md)
-2. [ ] Read docs/specs.md — or the sections relevant to today's work
+2. [ ] Read docs/specs/ — or the sections relevant to today's work (see docs/specs/README.md)
 3. [ ] Read docs/plan.md — know where you are in the plan
 4. [ ] Read docs/tasks.md — identify the next task(s)
 5. [ ] Run `cargo test` — confirm the tree is green before you touch anything
@@ -276,9 +276,9 @@ Every task that changes behavior must update the affected documentation **before
 
 | What changed               | Update                                                    |
 | -------------------------- | --------------------------------------------------------- |
-| New config option          | `docs/specs.md` (add section), `FEATURES.md` (add bullet) |
-| Behavior change            | `docs/specs.md` (update section, examples)                |
-| Bug fix to spec'd behavior | `docs/specs.md` (clarify if ambiguous)                    |
+| New config option          | `docs/specs/<section>.md` (add/update section), `FEATURES.md` (add bullet) |
+| Behavior change            | `docs/specs/<section>.md` (update section, examples)                       |
+| Bug fix to spec'd behavior | `docs/specs/<section>.md` (clarify if ambiguous)                           |
 | Task completed             | `docs/tasks.md` (check the box)                           |
 | Milestone completed        | `docs/plan.md` (mark done), `docs/tasks.md`               |
 | Architectural change       | `docs/plan.md` (update affected milestones)               |
