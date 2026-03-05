@@ -1,0 +1,10 @@
+# cmakefmt: push { sortArguments = true, lineWidth = 40 }
+target_sources(MyApp
+  PRIVATE
+    zebra.cpp
+    alpha.cpp
+
+    delta.cpp
+    beta.cpp
+)
+# cmakefmt: pop

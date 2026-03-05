@@ -1,0 +1,6 @@
+crlf/crlf.in.cmake binary
+crlf/crlf.out.cmake binary
+auto_dominant/auto_dominant.in.cmake binary
+auto_dominant/auto_dominant.out.cmake binary
+auto_equal_lf_wins/auto_equal_lf_wins.in.cmake binary
+auto_equal_lf_wins/auto_equal_lf_wins.out.cmake binary

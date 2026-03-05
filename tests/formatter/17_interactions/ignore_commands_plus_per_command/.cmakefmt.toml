@@ -1,0 +1,4 @@
+ignoreCommands = ["ExternalProject_Add"]
+
+[perCommandConfig.ExternalProject_Add]
+lineWidth = 120

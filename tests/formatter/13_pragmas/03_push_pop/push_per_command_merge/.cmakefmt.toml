@@ -1,0 +1,5 @@
+[perCommandConfig.if]
+spaceBeforeParen = true
+
+[perCommandConfig.set]
+commandCase = "upper"

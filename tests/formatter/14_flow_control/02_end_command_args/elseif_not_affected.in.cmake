@@ -1,0 +1,5 @@
+if(WIN32)
+  message(STATUS "Windows")
+elseif(APPLE)
+  message(STATUS "Apple")
+endif()

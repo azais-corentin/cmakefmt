@@ -1,0 +1,5 @@
+if(A)
+  if(B)
+    message(STATUS "nested")
+  endif()
+endif()

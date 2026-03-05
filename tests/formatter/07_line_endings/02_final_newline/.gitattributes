@@ -1,0 +1,5 @@
+true_adds.in.cmake binary
+false_no_add/false_no_add.in.cmake binary
+false_no_add/false_no_add.out.cmake binary
+false_empty/false_empty_stays_empty.in.cmake binary
+false_empty/false_empty_stays_empty.out.cmake binary
