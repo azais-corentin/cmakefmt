@@ -8,13 +8,12 @@ A fresh agent session starts here. Read this file first, then follow the phases 
 
 ## Project Documentation Map
 
-| File            | Purpose                                                                                   | Phase   |
-| --------------- | ----------------------------------------------------------------------------------------- | ------- |
-| `docs/specs/` | Authoritative formatting specification (split into per-section files). See `docs/specs/README.md` for index. | Phase 1 |
-| `docs/plan.md`  | Implementation plan. Ordered list of work items derived from the spec.                    | Phase 2 |
-| `docs/tasks.md` | Task breakdown. Granular, individually-committable units of work.                         | Phase 3 |
-| `FEATURES.md`   | High-level feature inventory (reference only — spec is authoritative).                    | —       |
-| `Cargo.toml`    | Rust project manifest. Uses `dprint-core` for formatting infrastructure.                  | —       |
+| File            | Purpose                                                                                                      | Phase   |
+| --------------- | ------------------------------------------------------------------------------------------------------------ | ------- |
+| `docs/specs/`   | Authoritative formatting specification (split into per-section files). See `docs/specs/README.md` for index. | Phase 1 |
+| `docs/plan.md`  | Implementation plan. Ordered list of work items derived from the spec.                                       | Phase 2 |
+| `docs/tasks.md` | Task breakdown. Granular, individually-committable units of work.                                            | Phase 3 |
+| `Cargo.toml`    | Rust project manifest. Uses `dprint-core` for formatting infrastructure.                                     | —       |
 
 If `docs/plan.md` or `docs/tasks.md` do not exist yet, create them during the appropriate phase.
 
@@ -274,13 +273,13 @@ Names describe the scenario and expected outcome. No `test_1`, `test_2`.
 
 Every task that changes behavior must update the affected documentation **before** the task is marked complete.
 
-| What changed               | Update                                                    |
-| -------------------------- | --------------------------------------------------------- |
-| New config option          | `docs/specs/<section>.md` (add/update section), `FEATURES.md` (add bullet) |
-| Behavior change            | `docs/specs/<section>.md` (update section, examples)                       |
-| Bug fix to spec'd behavior | `docs/specs/<section>.md` (clarify if ambiguous)                           |
-| Task completed             | `docs/tasks.md` (check the box)                           |
-| Milestone completed        | `docs/plan.md` (mark done), `docs/tasks.md`               |
-| Architectural change       | `docs/plan.md` (update affected milestones)               |
+| What changed               | Update                                               |
+| -------------------------- | ---------------------------------------------------- |
+| New config option          | `docs/specs/<section>.md` (add/update section)       |
+| Behavior change            | `docs/specs/<section>.md` (update section, examples) |
+| Bug fix to spec'd behavior | `docs/specs/<section>.md` (clarify if ambiguous)     |
+| Task completed             | `docs/tasks.md` (check the box)                      |
+| Milestone completed        | `docs/plan.md` (mark done), `docs/tasks.md`          |
+| Architectural change       | `docs/plan.md` (update affected milestones)          |
 
 Documentation is not optional. A task with code changes and no doc updates is incomplete.
