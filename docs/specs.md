@@ -42,6 +42,8 @@ Default 80 matches common convention across build-system files and terminal widt
 When a single token (command name, argument, string literal) exceeds `lineWidth`, the line
 is emitted as-is. The formatter never breaks within a single token.
 
+When indentation alone exceeds `lineWidth` due to deep nesting, the line is emitted at the computed indentation column regardless. The formatter never caps or reduces indentation.
+
 ### 1.2 `wrapStyle`
 
 |             |                           |
@@ -131,6 +133,7 @@ The command name is not counted. Only tokens inside the parentheses count — th
 keywords and value arguments, including the first positional argument (e.g., the target name). For example,
 `target_link_libraries(MyTarget PRIVATE foo bar)` has 4 arguments (`MyTarget`, `PRIVATE`, `foo`, `bar`).
 A value of `4` means any command with 5+ arguments always wraps.
+A generator expression counts as a single argument regardless of its internal structure.
 
 Useful for keeping commands like `set()` compact while forcing long `target_link_libraries()` invocations to expand.
 
@@ -158,11 +161,10 @@ set(MY_VAR a b c d e)
 | **Type**    | `boolean` |
 | **Default** | `true`    |
 
-When `true`, a "magic trailing newline" is treated as an explicit signal to keep the
-expanded layout, even if the invocation would fit on a single line. A magic trailing
+When `true`, a "magic trailing newline" is treated as an explicit signal to prevent single-line collapse, even if the invocation would fit on a single line. A magic trailing
 newline is detected in the **input** when the closing `)` appears on its own line — that is, preceded only by whitespace (or nothing) on that line. This is an input-layout signal; it does not describe the output format.
 
-A trailing newline on a wrapped invocation serves as an author-intent signal to keep the expanded layout.
+A trailing newline on a wrapped invocation serves as an author-intent signal to prevent single-line collapse.
 
 Magic trailing newline skips Step 1 (single-line) only. The cascade still attempts Step 2 (keyword breaks) for keyword-bearing commands before escalating to Step 3. Under `wrapStyle = "vertical"`, since Step 2 does not exist, magic trailing newline skips Step 1 and proceeds directly to Step 3 (one-per-line). For example:
 
@@ -335,9 +337,11 @@ Maximum number of **consecutive** blank lines preserved between top-level statem
 Runs exceeding this count are collapsed. A value of `0` collapses *all* blank lines between statements.
 See §3.2 for interaction with `minBlankLinesBetweenBlocks`.
 
-Author-placed blank lines inside command argument lists are discarded during reformatting. Only `blankLineBetweenSections` (§3.3) can insert blank lines within a command's argument list. `maxBlankLines` does not apply inside argument lists.
+Author-placed blank lines inside command argument lists are discarded during reformatting, except where they serve as sorting group boundaries (§12.1) — those blank lines are preserved when `sortArguments` is enabled. Only `blankLineBetweenSections` (§3.3) can insert blank lines within a command's argument list. `maxBlankLines` does not apply inside argument lists.
 
-Leading blank lines at the beginning of the file are always stripped entirely, independent of `maxBlankLines`.
+Leading blank lines at the beginning of the file are always stripped entirely, independent of `maxBlankLines`. Trailing blank lines at end-of-file are also subject to this limit.
+
+> **Note:** Leading blank lines are removed unconditionally — even `maxBlankLines = 100` does not preserve them.
 
 ```cmake
 # Input (3 consecutive blank lines):
@@ -535,7 +539,7 @@ These tokens are normalized *everywhere* they appear as unquoted arguments, not 
 Any unquoted argument matching one of the listed tokens (case-insensitive match) is subject to `literalCase` normalization.
 Literal case normalization applies only to unquoted arguments. Content inside quoted strings is never modified.
 
-When a token appears in both the keyword dictionary and the literal list (e.g., `TARGET`, `COMMAND`, `POLICY`, `TEST`), keyword classification takes precedence when the token serves a structural role in the current command's keyword dictionary. `literalCase` only applies when the token is used as a plain argument value.
+When a token appears in both the keyword dictionary and the literal list (e.g., `TARGET`, `COMMAND`, `POLICY`, `TEST`), keyword classification takes precedence when the token is parsed as a keyword (not as a value argument to another keyword) according to the current command's keyword dictionary. `literalCase` only applies when the token is used as a plain argument value.
 
 ```cmake
 # Input:
@@ -655,27 +659,33 @@ Controls how the formatter handles comments.
   comment lines inside argument lists (between arguments) are re-indented to match the
   surrounding indentation level and prevent single-line collapse of the command.
 
+  ```cmake
+  # commentPreservation = "preserve" — standalone comment prevents collapse
+  # Input:
+  set(FOO
+    # This comment prevents single-line collapse
+    "bar"
+  )
+
+  # Output (not collapsed despite fitting on one line):
+  set(FOO
+    # This comment prevents single-line collapse
+    "bar"
+  )
+  ```
+
 - **`"reflow"`**: Comment text is reflowed to fit within `lineWidth`, respecting the
   current indentation. Leading `#` markers and any initial whitespace pattern are preserved.
   Block comments (consecutive `#` lines) are treated as a single paragraph for reflow.
-  Paragraph breaks within a comment block are detected by: (a) a blank comment line (a line
-  containing only `#` with optional trailing whitespace), or (b) a change in leading
-  whitespace pattern after the `#` marker (e.g., indented sub-lists).
   Formatting pragma comments (§13) are never reflowed regardless of this setting.
-  Lines indented with 4+ spaces relative to the comment block's baseline are treated as
-  code and are not reflowed — they are preserved as-is within the paragraph flow.
-  Additionally, lines enclosed in triple-backtick fences (` ``` `) within a comment block
-  are treated as fenced code blocks: all lines between the opening and closing fence
-  (inclusive) are preserved verbatim and never reflowed. If an opening fence has no
-  matching closing fence before the end of the comment block, all remaining lines from
-  the opening fence to the end of the block are treated as code (greedy match).
 
-  Lines that begin with a list marker (`-`, `*`, `+`, or a digit followed by `.` or `)`) after
-  the `#` and optional whitespace are treated as individual list items. List items are not reflowed
-  across item boundaries — each item is treated as its own paragraph.
-  Continuation lines of a list item — lines indented deeper than the list marker — belong to the same
-  item paragraph and are exempt from paragraph-break rule (b). Only a new list marker at the same or
-  lesser indentation starts a new paragraph.
+  Paragraph detection follows these rules:
+
+  1. **Paragraph breaks.** A blank comment line (a line containing only `#` with optional trailing whitespace), or a change in leading whitespace pattern after the `#` marker (e.g., indented sub-lists), starts a new paragraph.
+
+  2. **Code blocks.** Lines indented with 4+ spaces relative to the comment block's baseline are treated as code and are not reflowed — they are preserved as-is within the paragraph flow. Additionally, lines enclosed in triple-backtick fences (` ``` `) within a comment block are treated as fenced code blocks: all lines between the opening and closing fence (inclusive) are preserved verbatim and never reflowed. If an opening fence has no matching closing fence before the end of the comment block, all remaining lines from the opening fence to the end of the block are treated as code (greedy match).
+
+  3. **List items.** Lines that begin with a list marker (`-`, `*`, `+`, or a digit followed by `.` or `)`) after the `#` and optional whitespace are treated as individual list items. List items are not reflowed across item boundaries — each item is treated as its own paragraph. Continuation lines of a list item — lines indented deeper than the list marker — belong to the same item paragraph and are exempt from paragraph-break rule (1). Only a new list marker at the same or lesser indentation starts a new paragraph.
 
   > **Known limitation:** Nested list markers (sub-lists indented under a parent item) are
   > treated as continuation lines of the parent item, not as independent list items. Deeply
@@ -716,9 +726,9 @@ across the entire file.
 
 ```cmake
 # alignTrailingComments = true
-set(FOO "bar")         # The foo variable
-set(BAZ_LONG "qux")   # The baz variable
-set(X "y")             # Short one
+set(FOO "bar")       # The foo variable
+set(BAZ_LONG "qux")  # The baz variable
+set(X "y")           # Short one
 
 # alignTrailingComments = false (default)
 set(FOO "bar") # The foo variable
@@ -919,7 +929,7 @@ set_target_properties(MyTarget PROPERTIES
 | **Default** | `false`   |
 
 When `true`, align the values of consecutive `set()` commands that form a logical group
-(not separated by blank lines or non-`set` commands). This applies only to `set()` —
+(not separated by blank lines, standalone comment lines, or non-`set` commands). This applies only to `set()` —
 `option()`, `cmake_dependent_option()`, and other variable-setting commands are not included.
 
 ```cmake
@@ -934,11 +944,13 @@ set(BAZ "qux")
 set(LONGER "value")
 ```
 
-All consecutive `set()` calls form an alignment group regardless of their argument structure.
+All consecutive `set()` calls form an alignment group.
 Alignment is based on the first value argument (the second token after `set(`). For example,
 `set(FOO "bar")` and `set(BAZ "qux" CACHE STRING "")` align on `"bar"` and `"qux"` respectively.
 
-Valueless `set()` calls (e.g., `set(FOO)` which unsets the variable) and keyword-only calls without a value argument (e.g., `set(FOO PARENT_SCOPE)`) are excluded from alignment groups — they have no value column to align.
+A blank line, a standalone comment line, or any non-`set()` command breaks the alignment group.
+
+Valueless `set()` calls (e.g., `set(FOO)` which unsets the variable) and keyword-only calls without a value argument (e.g., `set(FOO PARENT_SCOPE)`) are skipped — they are formatted normally (unaligned) in place but do not break the alignment group. Surrounding `set()` calls with values continue to align across the skipped call.
 
 ### 9.3 `alignArgGroups`
 
@@ -1062,7 +1074,7 @@ target_compile_definitions(MyLib
 
 Generator expressions use different delimiters than command invocations. The following rules define how genex internals map to the cascade algorithm:
 
-- **Colon (`:`)** separates the condition/name part from the value part. In `$<condition:value>`, the colon acts as the primary split point. The condition part always stays on the `$<` opening line; if the value part causes overflow, wrapping occurs after the colon.
+- **Colon (`:`)** separates the condition/name part from the value part. In `$<condition:value>`, the colon acts as the primary split point. If the value part causes overflow, wrapping occurs after the colon — everything after the colon moves to the next line. For `$<IF:cond,a,b>`, all three comma-separated parameters are on the value side of the colon and wrap together.
 - **Semicolons (`;`)** separate list items and are treated as argument separators for wrapping purposes. In `$<$<CONFIG:Debug>:DEBUG_MODE=1;VERBOSE_LOG=1>`, the semicolons delimit `DEBUG_MODE=1` and `VERBOSE_LOG=1` as separate arguments that can each occupy their own line.
 - **Commas (`,`)** separate positional parameters in genexes like `$<IF:condition,true_value,false_value>`. Each comma-separated parameter is an independent argument for wrapping.
 
@@ -1090,7 +1102,8 @@ target_compile_definitions(MyLib
 # genexWrap = "cascade" — $<IF:...> with comma-separated params
 target_link_libraries(MyLib
   PRIVATE
-    $<IF:$<CONFIG:Debug>,
+    $<IF:
+      $<CONFIG:Debug>,
       debug_lib,
       release_lib
     >
@@ -1213,6 +1226,8 @@ Unattached comments (comments separated from the following argument by one or mo
 Arguments containing generator expressions (`$<...>`) and variable references (`${...}`)
 are sorted by their literal text representation (the unexpanded source text). The formatter
 does not evaluate or expand variables before sorting.
+
+Multi-line arguments (e.g., bracket arguments or arguments containing embedded newlines) are compared by their original input text as-is, with internal whitespace preserved.
 
 ```cmake
 # Input:
@@ -1401,6 +1416,8 @@ When resolving an option's effective value for a given command:
 3. **Config file value** — the value from `.cmakefmt.toml`.
 4. **Built-in default** — the hardcoded fallback.
 
+A frame "explicitly sets" an option only if the option's key appeared in that frame's `push` pragma inline table. Options not mentioned in the pragma are transparent — the frame does not override them.
+
 A `push` override always takes priority over `perCommandConfig`.
 
 ### 13.5 Pragma-Settable Options
@@ -1411,6 +1428,7 @@ infrastructure or file-level routing, not formatting behavior. Setting any of th
 ignored. Note that `push` has broader scope than `perCommandConfig` (§11.1): it can also
 set file-level options such as `maxBlankLines`, `lineEnding`, `finalNewline`,
 `trimTrailingWhitespace`, `collapseSpaces`, `endCommandArgs`, and `indentBlockBody`.
+Changing `indentBlockBody` via `push` affects only blocks opened after the push, not the currently enclosing block.
 `ignoreCommands` is settable via `push`, enabling local command suppression within a file
 region. These file-level and flow-control options are excluded from `perCommandConfig`
 because they apply to document structure or block boundaries, not to individual command
@@ -1490,6 +1508,25 @@ condition/name; modern CMake does not.
 For `block()`/`endblock()`: since `block()` has no positional name argument (only keyword clauses like `SCOPE_FOR` and `PROPAGATE`), `endCommandArgs = "match"` produces `endblock()` unconditionally.
 
 For `else()`: under `"remove"`, legacy arguments are stripped (`else(condition)` → `else()`). Under `"match"`, the condition from the enclosing `if()` is copied into `else()`. Under `"preserve"`, existing arguments are kept as-is. `elseif()` always retains its own condition expression — `"remove"` and `"match"` do not alter it because its condition is definitional, not a repetition of the opening command.
+
+```cmake
+# endCommandArgs = "match" — else() copies enclosing if() condition
+# Input:
+if(WIN32)
+  message("Windows")
+else()
+  message("Other")
+endif()
+
+# Output:
+if(WIN32)
+  message("Windows")
+else(WIN32)
+  message("Other")
+endif(WIN32)
+```
+
+Block matching follows CMake's syntactic nesting — each closing command is paired with the nearest unmatched opening command of the corresponding type.
 
 The copied arguments are subject to normal wrapping rules — if the closing command with
 its matched arguments exceeds `lineWidth`, it wraps like any other command invocation.
@@ -1793,7 +1830,7 @@ command_name(arg1 KEYWORD arg2 arg3 KEYWORD2 arg4)
 **Step 0 — Pre-checks.** Before attempting single-line layout, two conditions force expansion:
 
 - If `wrapArgThreshold > 0` and the command has more than `wrapArgThreshold` arguments, skip directly to Step 3 (one-per-line).
-- If `magicTrailingNewline = true` (§1.5) and the closing `)` was on its own line in the input, preserve the expanded layout — do not collapse to a single line.
+- If `magicTrailingNewline = true` (§1.5) and the closing `)` was on its own line in the input, skip Step 1 (single-line) — do not collapse to a single line.
 
 **Step 1 — Single line.** Compute the rendered width of the entire line, including block-nesting indentation (the leading whitespace from enclosing `if`/`foreach`/`function`/etc. blocks). If ≤ `lineWidth`, emit on one line.
 
@@ -2019,6 +2056,8 @@ obvious from reading each option's description in isolation.
 | `alignTrailingComments` + `commentGap`                | When `alignTrailingComments = true`, the alignment column uses `commentGap` as the minimum gap between the longest code segment and the `#` marker.                                                                                                                                                                |
 | `collapseSpaces` + alignment options                  | `collapseSpaces` applies during input normalization (before layout). Alignment-generated padding (`alignPropertyValues`, `alignConsecutiveSet`, `alignArgGroups`, `alignTrailingComments`) is inserted after collapsing and is exempt.                                                                             |
 | `alignArgGroups` + `blankLineBetweenSections`         | When both are enabled, `blankLineBetweenSections` inserts blank lines between sections first, then `alignArgGroups` detects column patterns within each section independently. The blank line acts as an alignment group boundary.                                                                                 |
+| `maxBlankLines` + `sortArguments`                     | Blank lines inside argument lists that serve as sorting group boundaries (§12.1) are preserved when `sortArguments` is enabled, overriding the normal §3.1 rule that discards blank lines inside argument lists.                                                                                                   |
+| `sortKeywordSections` + `blankLineBetweenSections`    | When both are enabled, section reordering (`sortKeywordSections`) is applied first, then blank-line insertion (`blankLineBetweenSections`).                                                                                                                                                                        |
 
 ---
 
