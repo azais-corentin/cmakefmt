@@ -21,3 +21,15 @@ run = ["cargo clippy -- -D warnings", "cargo fmt --check"]
 [tasks.size]
 description = "Report WASM binary size"
 run = "ls -lh target/wasm32-unknown-unknown/release/*.wasm"
+
+[tasks.test-diff]
+run = """
+find tests -name '*.in.cmake' -print0 \
+     | sed -z 's/\\.in\\.cmake$//' \
+     | sort -z \
+     | fzf --read0 \
+           --preview 'diff --color=always -u {}.in.cmake {}.out.cmake || true' \
+           --preview-window 'right,70%,wrap' \
+           --header 'ENTER: open full side-by-side diff  |  ESC: quit' \
+           --bind 'enter:execute(diff -y --color=always {}.in.cmake {}.out.cmake | less -R)'
+"""
