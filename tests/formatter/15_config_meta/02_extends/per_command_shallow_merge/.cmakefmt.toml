@@ -1,0 +1,4 @@
+extends = "../per_command_base.cmakefmt.toml"
+
+[perCommandConfig.set]
+wrapStyle = "cascade"

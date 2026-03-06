@@ -1,0 +1,7 @@
+if(A)
+  message(STATUS "a")
+elseif(B)
+  message(STATUS "b")
+else()
+  message(STATUS "other")
+endif()

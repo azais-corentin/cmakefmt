@@ -1,0 +1,3 @@
+[perCommandConfig.set]
+commandCase = "upper"
+nonExistentOption = true

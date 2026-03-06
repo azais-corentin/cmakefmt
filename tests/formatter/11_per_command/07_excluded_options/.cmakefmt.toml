@@ -1,0 +1,4 @@
+[perCommandConfig.set]
+maxBlankLines = 0
+finalNewline = false
+trimTrailingWhitespace = false

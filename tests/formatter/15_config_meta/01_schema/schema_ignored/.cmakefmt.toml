@@ -1,0 +1,2 @@
+"$schema" = "https://example.com/cmakefmt-schema.json"
+commandCase = "upper"

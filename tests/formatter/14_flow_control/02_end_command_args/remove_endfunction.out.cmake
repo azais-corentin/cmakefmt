@@ -1,0 +1,6 @@
+function(my_func ARG1)
+  message(STATUS ${ARG1})
+endfunction()
+macro(my_macro)
+  message(STATUS "macro")
+endmacro()

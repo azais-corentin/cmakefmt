@@ -1,0 +1,6 @@
+[perCommandConfig.set]
+wrapStyle = "vertical"
+closingParenNewline = false
+
+[perCommandConfig.message]
+commandCase = "upper"

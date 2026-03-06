@@ -1,0 +1,10 @@
+target_sources(MyApp
+  PRIVATE
+    zebra.cpp
+    alpha.cpp
+    middle.cpp
+)
+set(MY_SOURCES
+  zebra.cpp
+  alpha.cpp
+)

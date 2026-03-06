@@ -3,3 +3,5 @@ false_no_add/false_no_add.in.cmake binary
 false_no_add/false_no_add.out.cmake binary
 false_empty/false_empty_stays_empty.in.cmake binary
 false_empty/false_empty_stays_empty.out.cmake binary
+false_whitespace_only/false_whitespace_only.in.cmake binary
+false_whitespace_only/false_whitespace_only.out.cmake binary

@@ -1,0 +1,3 @@
+IF (FOO)
+    MESSAGE(STATUS "hello")
+ENDIF()
