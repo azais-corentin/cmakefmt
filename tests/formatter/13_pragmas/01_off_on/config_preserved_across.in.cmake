@@ -1,6 +1,6 @@
 # cmakefmt: push { commandCase = "upper" }
 # cmakefmt: off
-verbatim stuff
+SET(   RAW_VALUE    "kept"   )
 # cmakefmt: on
 set(FOO "bar")
 # cmakefmt: pop
