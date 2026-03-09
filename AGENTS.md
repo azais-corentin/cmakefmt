@@ -177,6 +177,7 @@ Task tool:
 ```
 
 Do **not** parallelize tasks that touch the same file unless you use `isolated: true`.
+- **Never delegate file reading:** Do not use tasks/subagents to read full files verbatim. Use the `read` tool directly instead — it is faster, cheaper, and avoids unnecessary context duplication.
 
 ### Commit Discipline
 
