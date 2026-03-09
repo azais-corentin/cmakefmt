@@ -47,12 +47,17 @@ condition/name; modern CMake does not.
   `endfunction(my_func)` matches `function(my_func)`. Complex conditions with
   AND/OR/parentheses are copied as-is. If the closing command has no argument, one is
   added; if it has a mismatched argument, it is corrected.
-  For `else()`, `"match"` copies the `if()`-condition from the enclosing `if` block.
-  `elseif()` is unaffected by `"match"` — it has its own condition expression.
+  For `else()`, `"match"` copies the `if()` condition from the nearest unmatched enclosing
+  `if()` in syntactic nesting order. `elseif()` is unaffected by `"match"` — it has its
+  own condition expression.
+
+For `else()`: under `"remove"`, legacy arguments are stripped (`else(condition)` → `else()`).
+Under `"match"`, the nearest unmatched enclosing `if()` condition is copied into `else()`.
+Under `"preserve"`, existing arguments are kept as-is. `elseif()` always retains its own
+condition expression — `"remove"` and `"match"` do not alter it because its condition is
+definitional, not a repetition of the opening command.
 
 For `block()`/`endblock()`: since `block()` has no positional name argument (only keyword clauses like `SCOPE_FOR` and `PROPAGATE`), `endCommandArgs = "match"` produces `endblock()` unconditionally.
-
-For `else()`: under `"remove"`, legacy arguments are stripped (`else(condition)` → `else()`). Under `"match"`, the condition from the enclosing `if()` is copied into `else()`. Under `"preserve"`, existing arguments are kept as-is. `elseif()` always retains its own condition expression — `"remove"` and `"match"` do not alter it because its condition is definitional, not a repetition of the opening command.
 
 ```cmake
 # endCommandArgs = "match" — else() copies enclosing if() condition
@@ -71,7 +76,7 @@ else(WIN32)
 endif(WIN32)
 ```
 
-Block matching follows CMake's syntactic nesting — each closing command is paired with the nearest unmatched opening command of the corresponding type.
+Block matching follows CMake's syntactic nesting — each closing command is paired with the nearest unmatched opening command of the corresponding type, and each `else()`/`elseif()` is associated with the nearest unmatched enclosing `if()`.
 
 The copied arguments are subject to normal wrapping rules — if the closing command with
 its matched arguments exceeds `lineWidth`, it wraps like any other command invocation.

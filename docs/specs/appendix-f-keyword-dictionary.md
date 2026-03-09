@@ -1,60 +1,92 @@
 ## Appendix F — Keyword Dictionary
 
-> **Note:** The keyword dictionary in `src/generation/signatures.rs` is the authoritative reference.
-> This appendix provides a condensed overview of recognized commands and canonical section orders
-> used by `sortKeywordSections` (§12.2). Full keyword tables per command are intentionally omitted
-> to avoid drift from the source of truth.
+> This appendix is normative. Keyword classification, sortable sections (§12.1),
+> canonical section ordering (§12.2), and keyword-vs-literal precedence (§4.4)
+> are defined here.
 
-### Condition-syntax commands
+### F.1 Command classes
 
-`if`, `elseif`, `else`, `endif`, `while`, `endwhile` — parsed as condition expressions, not
-keyword-structured commands.
+#### F.1.1 Condition-syntax commands
 
-### Commands with canonical section orders
+> Arguments are parsed as condition expressions, not keyword/value sections.
 
-| Command                 | Canonical Section Order                                                                                                               |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `target_link_libraries` | `PUBLIC` → `INTERFACE` → `PRIVATE` → `LINK_PUBLIC` → `LINK_PRIVATE` → `LINK_INTERFACE_LIBRARIES`                                      |
-| `target_sources`        | `PUBLIC` → `INTERFACE` → `PRIVATE`                                                                                                    |
-| `install`               | `ARCHIVE` → `LIBRARY` → `RUNTIME` → `OBJECTS` → `FRAMEWORK` → `BUNDLE` → `PUBLIC_HEADER` → `PRIVATE_HEADER` → `RESOURCE` → `FILE_SET` |
-| `export`                | `PACKAGE_DEPENDENCY` → `TARGET` → `VERSION`                                                                                           |
+- `if`
+- `elseif`
+- `else`
+- `endif`
+- `while`
+- `endwhile`
 
-### Other recognized commands
+#### F.1.2 Simple commands (no keyword sections)
 
-The following commands are in the keyword dictionary with their own keyword/section definitions:
+These commands are parsed as positional-only argument lists. They have no keyword sections,
+so `sortArguments` and `sortKeywordSections` never apply to them unless keywords are introduced
+through `customKeywords` (§4.3).
 
-**Target commands:** `target_compile_definitions`, `target_compile_options`, `target_compile_features`,
-`target_link_options`, `target_include_directories`, `add_executable`, `add_library`,
-`set_target_properties`, `set_source_files_properties`, `set_tests_properties`, `set_directory_properties`
+- `add_compile_definitions`
+- `add_compile_options`
+- `add_definitions`
+- `add_dependencies`
+- `add_link_options`
+- `aux_source_directory`
+- `enable_testing`
+- `fltk_wrap_ui`
+- `get_source_file_property`
+- `get_target_property`
+- `get_test_property`
+- `include_regular_expression`
+- `remove_definitions`
 
-**Project & package:** `project`, `find_package`, `cmake_minimum_required`, `cmake_pkg_config`
+#### F.1.3 Keyword-structured commands
 
-**Custom commands:** `add_custom_command`, `add_custom_target`, `execute_process`
+The tables below are exhaustive for keyword-structured behavior defined by this spec.
+If a command is not listed below and not added via `customKeywords`, its arguments are treated
+as positional values only.
 
-**Variables & properties:** `set`, `unset`, `option`, `return`, `mark_as_advanced`,
-`define_property`, `get_property`, `set_property`, `get_directory_property`,
-`get_filename_component`, `set_package_properties`
+### F.2 Per-command keyword sections
 
-**Control flow:** `foreach`, `block`
+`Sortable` indicates whether `sortArguments = true` is allowed to reorder values inside that
+section. Only simple-value sections are sortable.
 
-**String/list/file:** `string`, `list`, `file`, `cmake_path`, `cmake_language`,
-`cmake_host_system_information`, `math`, `separate_arguments`
+| Command family | Section keywords | Sortable sections | Canonical section order (`sortKeywordSections`) |
+| --- | --- | --- | --- |
+| `target_link_libraries` | `PUBLIC`, `INTERFACE`, `PRIVATE`, `LINK_PUBLIC`, `LINK_PRIVATE`, `LINK_INTERFACE_LIBRARIES` | all listed sections | `PUBLIC` → `INTERFACE` → `PRIVATE` → `LINK_PUBLIC` → `LINK_PRIVATE` → `LINK_INTERFACE_LIBRARIES` |
+| `target_sources` | `PUBLIC`, `INTERFACE`, `PRIVATE` | direct values under `PUBLIC`/`INTERFACE`/`PRIVATE` only | `PUBLIC` → `INTERFACE` → `PRIVATE` |
+| `target_compile_definitions` / `target_compile_options` / `target_compile_features` / `target_link_options` / `target_include_directories` | `PUBLIC`, `INTERFACE`, `PRIVATE` | all listed sections | none (original section order preserved) |
+| `install` | `ARCHIVE`, `LIBRARY`, `RUNTIME`, `OBJECTS`, `FRAMEWORK`, `BUNDLE`, `PUBLIC_HEADER`, `PRIVATE_HEADER`, `RESOURCE`, `FILE_SET` | no (sections contain nested option structures) | `ARCHIVE` → `LIBRARY` → `RUNTIME` → `OBJECTS` → `FRAMEWORK` → `BUNDLE` → `PUBLIC_HEADER` → `PRIVATE_HEADER` → `RESOURCE` → `FILE_SET` |
+| `export` | `PACKAGE_DEPENDENCY`, `TARGET`, `VERSION` | no | `PACKAGE_DEPENDENCY` → `TARGET` → `VERSION` |
+| `add_custom_command` | `OUTPUT`, `COMMAND`, `DEPENDS`, `BYPRODUCTS`, `WORKING_DIRECTORY`, `COMMENT`, `VERBATIM`, `APPEND` | `DEPENDS`, `BYPRODUCTS` | none (original section order preserved) |
+| `find_package` | `REQUIRED`, `QUIET`, `EXACT`, `MODULE`, `CONFIG`, `COMPONENTS`, `OPTIONAL_COMPONENTS` | `COMPONENTS`, `OPTIONAL_COMPONENTS` | none (original section order preserved) |
+| `cmake_minimum_required` | `VERSION` | no | none |
+| `set_target_properties` / `set_source_files_properties` / `set_tests_properties` / `set_directory_properties` | `PROPERTIES` | no (alternating key/value structure) | none |
+| `foreach` | `IN`, `ITEMS`, `LISTS`, `RANGE` | no | none |
+| `block` | `SCOPE_FOR`, `PROPAGATE` | no | none |
 
-**Build & test:** `add_test`, `gtest_discover_tests`, `build_command`, `try_compile`, `try_run`,
-`message`, `source_group`, `configure_file`, `include`, `add_subdirectory`,
-`enable_language`, `load_cache`, `create_test_sourcelist`,
-`include_external_msproject`, and the `ctest_*` family.
+### F.3 Nested section structures (non-sortable)
 
-**Find modules:** `find_library`, `find_file`, `find_path`, `find_program`,
-`cmake_parse_arguments`
+The following nested structures are recognized and are never value-sorted by `sortArguments`:
 
-### Simple commands (no keywords)
+- `target_sources(... FILE_SET <name> BASE_DIRS ... FILES ...)`
+- `install(...)` sections (`ARCHIVE`, `LIBRARY`, `RUNTIME`, etc.) with nested destination/options
+- `set_*_properties(... PROPERTIES <key> <value> ...)` alternating property pairs
 
-`add_compile_definitions`, `add_compile_options`, `add_definitions`, `add_dependencies`,
-`add_link_options`, `aux_source_directory`, `enable_testing`, `fltk_wrap_ui`,
-`get_source_file_property`, `get_target_property`, `get_test_property`,
-`include_regular_expression`, `remove_definitions`
+### F.4 Block closers
 
-### Block closers
+The following commands are block closers and accept zero or one positional argument in source:
 
-`endforeach`, `endfunction`, `endmacro`, `endblock` — accept 0 or 1 positional argument.
+- `endforeach`
+- `endfunction`
+- `endmacro`
+- `endblock`
+
+`endCommandArgs` (§14.2) governs whether those optional arguments are removed/preserved/matched.
+
+### F.5 Keyword vs literal overlap
+
+Tokens that appear in both keyword sections and the literal list (notably `TARGET`, `COMMAND`,
+`POLICY`, `TEST`) follow this precedence rule:
+
+1. If the current command/position is a recognized keyword slot per this appendix, treat token as a keyword (`keywordCase` applies).
+2. Otherwise, treat token as a plain value token (`literalCase` may apply if listed in §4.4).
+
+> `customKeywords` (§4.3) extends keyword recognition and also takes precedence over `literalCase`.

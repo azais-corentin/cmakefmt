@@ -9,6 +9,10 @@
 
 Controls which line-ending sequence is written to the output.
 
+BOM handling scope: a UTF-8 BOM is stripped only when the three-byte BOM sequence appears at
+byte offset 0 of the file input (unless formatting is suppressed per §16.1). U+FEFF characters
+appearing anywhere else in the file are treated as ordinary content and preserved.
+
 - **`"lf"`**: Unix-style `\n`.
 - **`"crlf"`**: Windows-style `\r\n`.
 - **`"auto"`**: Detect the dominant line ending in the input file and preserve it.

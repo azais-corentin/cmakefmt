@@ -30,11 +30,10 @@ cmake_minimum_required(VERSION 3.20)
 | **Type**    | `"lower" \| "upper" \| "unchanged"` |
 | **Default** | `"upper"`                           |
 
-Casing applied to recognized keywords. The formatter ships with a built-in keyword
-dictionary covering standard CMake keywords (e.g., `VERSION`, `PRIVATE`, `PUBLIC`,
-`INTERFACE`, `PROPERTIES`, `REQUIRED`, `COMPONENTS`, `CONFIG`, `TARGETS`,
-`DESTINATION`, `NAMESPACE`). The full keyword dictionary is defined in the source code
-(`src/generation/signatures.rs`) and is the authoritative reference.
+Casing applied to recognized keywords. The formatter uses the normative keyword dictionary
+defined in Appendix F (including section keywords and command-specific keyword slots).
+Examples include `VERSION`, `PRIVATE`, `PUBLIC`, `INTERFACE`, `PROPERTIES`, `REQUIRED`,
+`COMPONENTS`, `CONFIG`, `TARGETS`, `DESTINATION`, and `NAMESPACE`.
 
 - `"upper"` (default): All keywords uppercased.
 - `"lower"`: All keywords lowercased.

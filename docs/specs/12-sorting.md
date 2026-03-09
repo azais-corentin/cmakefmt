@@ -12,12 +12,12 @@ primarily useful for dependency lists and source-file lists, where a canonical o
 reduces merge conflicts.
 
 - `false` (default): No sorting.
-- `true`: Sort arguments in all recognized section keyword groups. A keyword section is
-  sortable if its keyword appears in the formatter's keyword dictionary (§4.2) and its
-  arguments are simple values (not sub-keyword structures). For example, this covers
-  keywords such as SOURCES, PRIVATE, PUBLIC, INTERFACE, FILES, DEPENDS, COMPONENTS,
-  TARGETS, CONFIGURATIONS, and any keywords added via `customKeywords` (§4.3). The
-  general rule (keyword in dictionary + simple values) is normative; the list above is illustrative.
+- `true`: Sort arguments only in sections marked as sortable in Appendix F (§F.2), plus
+  sections introduced via `customKeywords` (§4.3) when those sections contain simple values.
+  Nested section structures are never value-sorted (Appendix F §F.3). Concretely, this means
+  sections such as `PRIVATE`/`PUBLIC`/`INTERFACE` (for supported target commands), `DEPENDS`,
+  `BYPRODUCTS`, `COMPONENTS`, and `OPTIONAL_COMPONENTS` are sortable, while structures such as
+  `FILE_SET ... BASE_DIRS ... FILES ...` and `PROPERTIES <key> <value> ...` are not.
 - `["SOURCES", "FILES"]`: Only sort arguments under the listed keyword sections.
 
 Sorting is case-insensitive. Arguments that compare equal after case-folding retain their

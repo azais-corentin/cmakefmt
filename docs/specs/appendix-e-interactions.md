@@ -3,6 +3,32 @@
 This appendix documents interactions between options where the combined behavior is not
 obvious from reading each option's description in isolation.
 
+### E.1 Normative global formatting pipeline order
+
+Unless explicitly suppressed by `disableFormatting` (§16.1) or pragma regions (§13.1), the formatter
+applies transformations in this total order:
+
+1. Evaluate suppression gates (`disableFormatting`, ignored files/regions/commands).
+2. Strip UTF-8 BOM only when present at byte 0 (see §7.1).
+3. Detect dominant line ending for `lineEnding = "auto"`.
+4. Resolve active config for each command (`push` stack → `perCommandConfig` → file config → defaults).
+5. Apply section/value sorting (`sortArguments`, then `sortKeywordSections`).
+6. Apply casing normalization (`commandCase`, `keywordCase`, `literalCase`, `customKeywords`).
+7. Normalize intra-token spacing (`collapseSpaces`, excluding verbatim regions).
+8. Apply wrapping/layout decisions (Appendix C; includes genex layout rules).
+9. Apply indentation (`indentWidth`, `indentStyle`, continuation/genex indentation).
+10. Apply flow-control shaping (`indentBlockBody`, then `endCommandArgs`).
+11. Apply parenthesis spacing/newline options (§5).
+12. Apply blank-line policies (`minBlankLinesBetweenBlocks`, `blankLineBetweenSections`, `maxBlankLines`).
+13. Apply alignment options (`alignPropertyValues`, `alignConsecutiveSet`, `alignArgGroups`, `alignTrailingComments`).
+14. Apply comment formatting/preservation behavior (`commentPreservation`, `commentWidth`, `commentGap`).
+15. Trim trailing whitespace (`trimTrailingWhitespace`).
+16. Emit configured line endings (`lineEnding`).
+17. Enforce final newline policy (`finalNewline`).
+
+Rows in §E.2 describe pairwise consequences of this order.
+### E.2 Pairwise interaction rules
+
 | Options                                               | Interaction                                                                                                                                                                                                                                                                                                        |
 | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `sortArguments` + `alignArgGroups`                    | Sorting is applied first, then alignment. Arguments are reordered within their keyword section, and the resulting layout is then column-aligned if `alignArgGroups` is enabled.                                                                                                                                    |
