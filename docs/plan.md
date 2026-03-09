@@ -51,17 +51,14 @@ CST node types:
 **Tests:** Implicitly tested through all formatter fixtures
 
 ### 4. Keyword Dictionary (`keywords`)
-**Responsibility:** Define which tokens are recognized as keywords for each command, canonical section orders, and condition-syntax commands.
+**Responsibility:** Encode the normative Appendix F model: command classes, per-command keyword sections, sortable vs non-sortable structures, canonical section orders, block closers, and keyword-vs-literal precedence.
 
 Data:
-- Per-command keyword lists (which args are structural keywords vs values)
-- Canonical section orders for `sortKeywordSections` (PUBLIC→INTERFACE→PRIVATE, etc.) — 4 commands with explicit canonical orders (Appendix F)
-- Condition-syntax commands (if, elseif, else, endif, while, endwhile — args are expressions, not keyword-value pairs)
-- Literal constants list for `literalCase` (ON, OFF, TRUE, FALSE, AND, OR, NOT, COMMAND, POLICY, TARGET, TEST, DEFINED, EXISTS, IS_NEWER_THAN, etc.)
-- Block-opening/closing command pairs (if↔endif, foreach↔endforeach, while↔endwhile, function↔endfunction, macro↔endmacro, block↔endblock)
-- Simple commands (no keywords) — ~15 commands listed in Appendix F
-- Context-sensitive tokens (TARGET, COMMAND, POLICY, TEST) that appear in both keyword dict and literal constants list
-
+- Command classes from Appendix F §F.1: condition-syntax commands, simple commands, and the exhaustive keyword-structured command families
+- Per-command section metadata from §F.2: recognized section keywords, which sections are simple-value sortable under `sortArguments`, and canonical section orders for `sortKeywordSections`
+- Nested non-sortable structures from §F.3, such as `FILE_SET ... BASE_DIRS ... FILES ...`, `install(...)` destination blocks, and alternating `PROPERTIES <key> <value>` pairs
+- Condition-syntax commands from §F.1.1 plus the explicit block-closing commands in §F.4, together with the pairing metadata needed by `endCommandArgs`
+- Literal constants used by `literalCase`, together with Appendix F §F.5 overlap precedence for tokens like `TARGET`, `COMMAND`, `POLICY`, and `TEST`
 **Spec:** §4 (casing), §12 (sorting), §14 (flow control), Appendix F (keyword dictionary)
 **Tests:** `tests/formatter/04_casing/`, `tests/formatter/12_sorting/`, `tests/formatter/14_flow_control/`
 
@@ -105,51 +102,50 @@ Resolution chain: push stack → perCommandConfig[command_name] → config file 
 
 This is the largest module, orchestrating all formatting passes in the correct order.
 
-#### Pipeline Order (validated against all 23 Appendix E interaction rules):
-1. **Suppression check:** `disableFormatting` → byte-for-byte passthrough (E3: absolute precedence)
-2. **BOM handling:** Strip BOM (unless `disableFormatting`)
-3. **Line ending detection:** Count LF vs CRLF for `auto` mode; LF wins ties; no-line-endings file → LF; bare CR not counted
-4. **Pragma parsing:** Identify off/on regions, skip targets, push/pop stack (E15: pragmas + ignoreCommands don't conflict)
-5. **Per-command config resolution:** Build effective config per command (E13: push > perCommandConfig; E14: ignoreCommands > perCommandConfig)
-6. **Sorting:** `sortArguments` then `sortKeywordSections` (E1: sort before align; E23: sortSections before blankBetweenSections; E22: sort group boundaries override maxBlankLines)
-7. **Casing:** Apply `commandCase`, `keywordCase`, `literalCase`, `customKeywords`
-8. **Whitespace normalization:** `collapseSpaces` (E20: before alignment padding)
-9. **Wrapping/layout:** The cascade/vertical algorithm (§1.2, Appendix C)
-   - Step 0 pre-checks (E4: threshold wins over magic; E5: vertical+threshold → Step 3)
-   - Step 1: try single line (E9: firstArgSameLine no-op; E10: closingParenNewline no-op; E11: blankBetweenSections no-op)
-   - Step 2: keyword breaks (cascade only; E6-7: genexWrap=never → inline)
-   - Step 3: one per line
-   - Genex wrapping (§10) applied recursively within arguments
-10. **Indentation:** Apply `indentWidth`, `indentStyle`, `continuationIndentWidth`, `genexIndentWidth` (E2: tabs for indent, spaces for alignment)
-11. **Block body indentation:** `indentBlockBody` (§14.1)
-12. **End command args:** `endCommandArgs` remove/preserve/match (§14.2)
-13. **Parentheses spacing:** `closingParenNewline`, `spaceBeforeParen`, `spaceInsideParen` (§5)
-14. **Blank line management:** `maxBlankLines`, `minBlankLinesBetweenBlocks`, `blankLineBetweenSections` (E18: blankBetweenSections > maxBlankLines in arg lists; E16: maxBlankLines enforced at EOF regardless of finalNewline; E21: blankBetweenSections acts as alignArgGroups group boundary)
-15. **Alignment:** `alignPropertyValues`, `alignConsecutiveSet`, `alignArgGroups`, `alignTrailingComments` (E1: after sorting; E12: alignPropertyValues no-op on single-line; E19: alignTrailingComments uses commentGap as minimum gap; E20: padding exempt from collapseSpaces)
-16. **Comment formatting:** `commentPreservation`/reflow, `commentWidth` (E8: commentWidth only with reflow), `commentGap` for non-alignment gap
-17. **Trailing whitespace:** `trimTrailingWhitespace`
-18. **Line endings:** Apply chosen line ending
-19. **Final newline:** `finalNewline` (E15: maxBlankLines still enforced)
+#### Pipeline Order (refines normative Appendix E.1 and is cross-checked against Appendix E.2):
+1. **Suppression gates:** `disableFormatting`, ignored files, ignored commands, and pragma-defined verbatim regions short-circuit formatting where applicable
+2. **BOM handling:** Strip a UTF-8 BOM only when present at byte offset 0 and formatting is active
+3. **Line ending detection:** Count LF vs CRLF for `lineEnding = "auto"`; LF wins ties; files with no line endings default to LF; bare CR is not counted
+4. **Active-config resolution:** Scan pragmas (`off`/`on`, `skip`, `push`/`pop`) and resolve the effective config for each command (`push` stack → `perCommandConfig` → file config → defaults)
+5. **Sorting:** Apply `sortArguments`, then `sortKeywordSections`
+6. **Casing:** Apply `commandCase`, `keywordCase`, `literalCase`, and `customKeywords`
+7. **Whitespace normalization:** Apply `collapseSpaces` to non-verbatim content before any alignment padding is inserted
+8. **Wrapping/layout:** Apply Appendix C cascade/vertical layout, including genex wrapping rules
+   - Step 0 pre-checks (`wrapArgThreshold`, `magicTrailingNewline`)
+   - Step 1 single-line attempt
+   - Step 2 keyword-group breaking for cascade mode
+   - Step 3 one-per-line expansion
+9. **Indentation:** Apply `indentWidth`, `indentStyle`, `continuationIndentWidth`, and `genexIndentWidth`
+10. **Flow-control shaping:** Apply `indentBlockBody`, then `endCommandArgs`
+11. **Parenthesis spacing/newlines:** Apply `closingParenNewline`, `spaceBeforeParen`, `spaceInsideParen`
+12. **Blank-line policies:** Apply `minBlankLinesBetweenBlocks`, `blankLineBetweenSections`, and `maxBlankLines`
+13. **Alignment:** Apply `alignPropertyValues`, `alignConsecutiveSet`, `alignArgGroups`, and `alignTrailingComments`
+14. **Comment formatting:** Apply `commentPreservation`, `commentWidth`, and `commentGap`
+15. **Trailing whitespace:** Apply `trimTrailingWhitespace`
+16. **Line endings:** Emit the configured line-ending sequence
+17. **Final newline:** Enforce `finalNewline`
 
-**Note on `commentGap`:** When `alignTrailingComments = true`, `commentGap` is used as the minimum gap during alignment (step 15, rule E18). When `alignTrailingComments = false`, `commentGap` is applied as simple spacing (step 16). The option participates in both steps depending on context.
+**Note on Appendix E:** Appendix E.1 is the authoritative user-visible order. The pragma scan in step 4 is an implementation refinement of Appendix E.1's suppression/config-resolution stages, not an alternative pipeline.
 
-**Note on dprint-core:** Steps 9–16 are deeply interleaved in practice. The dprint-core IR (print items) may handle many of these declaratively rather than as sequential passes. The exact architecture depends on how dprint-core's `PrintItems` API is used.
+**Note on `commentGap`:** When `alignTrailingComments = true`, `commentGap` supplies the minimum gap during step 13. When trailing-comment alignment is off, `commentGap` applies as ordinary comment spacing in step 14.
+
+**Note on dprint-core:** Steps 8–14 are likely to be expressed through dprint-core print items rather than as rigid, isolated passes. The implementation still must preserve the Appendix E.1 ordering semantics above.
 
 **Spec:** All sections (§1–§16), Appendix C (cascade algorithm), Appendix E (interactions)
-**Tests:** All `tests/formatter/` directories (326 fixture pairs total)
+**Tests:** All `tests/formatter/` directories (329 fixture pairs total)
 
 ### 8. Suppression (`suppression`)
-**Responsibility:** Handle `disableFormatting`, `ignorePatterns`, `ignoreCommands`, and pragma off/on/skip regions.
-- `disableFormatting=true` → output = input (byte-for-byte, BOM preserved)
-- `ignorePatterns` → skip files matching gitignore-style globs
-- `ignoreCommands` → preserve matched commands verbatim (case-insensitive)
-- Pragma off/on → byte-preserve regions within a file
-- Pragma skip → verbatim next command
-- `ignoreCommands` takes precedence over `perCommandConfig` (E13)
-- `ignoreCommands` suppresses sorting/alignment for that command (E16)
+**Responsibility:** Enforce byte-preserving escape hatches at file, region, and command granularity.
+- `disableFormatting=true` → output = input byte-for-byte; overrides pragmas and every normalization/formatting pass, including BOM stripping
+- `ignorePatterns` → skip files via gitignore-style globs, resolved relative to the config file that defined each pattern (including inherited patterns via `extends`)
+- `ignoreCommands` → preserve matched invocations verbatim (case-insensitive) while surrounding commands still format normally
+- Pragma off/on → byte-preserve explicit regions within a file
+- Pragma skip → preserve the next command only
+- `ignoreCommands` takes precedence over `perCommandConfig`
+- Ignored commands are excluded from sorting/alignment and other command-local formatting
 
 **Spec:** §16 (suppression), §13 (pragmas)
-**Tests:** `tests/formatter/16_suppression/` (14 pairs, including `ignorePatterns`), `tests/formatter/13_pragmas/01_off_on/`, `tests/formatter/13_pragmas/02_skip/`
+**Tests:** `tests/formatter/16_suppression/` (14 pairs, including inherited `ignorePatterns` cases), `tests/formatter/13_pragmas/01_off_on/`, `tests/formatter/13_pragmas/02_skip/`
 
 ### 9. CLI (`cli`)
 **Responsibility:** Command-line interface using `clap`.
@@ -216,13 +212,12 @@ These modules can be built in parallel.
 **Tests:** Unit tests for token streams
 
 #### Milestone 3: Keyword Dictionary
-- Per-command keyword tables (~50 recognized commands from Appendix F)
-- Canonical section orders (4 commands: target_link_libraries, target_sources, install, export)
+- Command classes from Appendix F §F.1: condition-syntax commands, simple commands, and the exhaustive keyword-structured families
+- Per-command keyword-section tables from Appendix F §F.2, including sortable simple-value sections and canonical section orders where defined
+- Nested non-sortable structures from Appendix F §F.3 (`FILE_SET ... FILES`, `install(...)` destination blocks, `PROPERTIES <key> <value>` pairs)
+- Condition-syntax commands plus the explicit block-closing commands from Appendix F §F.4, with pairing metadata for `endCommandArgs`
 - Literal constants list (ON, OFF, TRUE, FALSE, etc.)
-- Block command pairs (6 pairs: if/endif, foreach/endforeach, while/endwhile, function/endfunction, macro/endmacro, block/endblock)
-- Condition-syntax command set (if, elseif, else, endif, while, endwhile)
-- Simple commands (~15 commands with no keywords)
-- Context-sensitive classification for tokens appearing in both keyword and literal lists (TARGET, COMMAND, POLICY, TEST)
+- Context-sensitive keyword-vs-literal overlap precedence from Appendix F §F.5 (TARGET, COMMAND, POLICY, TEST, plus `customKeywords`)
 
 **Spec:** §4, §12, §14, Appendix F
 **Tests:** Unit tests for keyword lookup
@@ -262,12 +257,13 @@ The heart of the formatter. Implement the cascade/vertical wrapping algorithm an
 
 #### Milestone 6: Casing & Simple Transforms
 - `commandCase`, `keywordCase`, `literalCase`
-- `customKeywords` classification (affects section detection and sorting beyond just casing — §4.3)
+- `customKeywords` classification: affects section detection, layout, and sorting globally, not only casing
+- `customKeywords` take precedence over `literalCase` when a token could be either
 - `spaceBeforeParen` (bool for all commands, or string[] for selective), `spaceInsideParen`
 - `endCommandArgs` (remove/preserve/match)
-  - match for `else()` copies enclosing `if()` condition (requires block tracking)
+  - match for `else()` copies the nearest unmatched enclosing `if()` condition in syntactic nesting order
   - match for `block()/endblock()` always produces empty `endblock()`
-  - `elseif()` unaffected by endCommandArgs
+  - `elseif()` is unaffected because its condition is definitional, not repeated
 - `commentGap`
 - Empty commands always single-line (§14.3)
 
@@ -283,13 +279,14 @@ The heart of the formatter. Implement the cascade/vertical wrapping algorithm an
 - `blankLineBetweenSections` (insert even between zero-arg sections, precedence over maxBlankLines in arg lists)
 - `trimTrailingWhitespace`
 - `collapseSpaces` (before alignment, exempt alignment padding)
-- `lineEnding` (auto detection by frequency, LF wins ties, bare CR is ordinary character)
-- `finalNewline` (add/preserve/empty-file edge cases; false only suppresses adding, does NOT strip existing; empty+false → zero bytes)
-- BOM stripping (byte 0 only; inside bracket arg: not stripped)
+- `lineEnding` (auto detection by frequency, LF wins ties, files with no line endings default to LF; bare CR is ordinary content)
+- BOM stripping (only a UTF-8 BOM at byte offset 0; interior U+FEFF is preserved as content)
+- `finalNewline` (true => exactly one trailing newline; false => do not add a missing newline, do not strip existing ones, and still honor EOF blank-line limits)
+- Empty-file and whitespace-only EOF behavior under `finalNewline` true/false
 - Line endings inside quoted strings/bracket args NOT normalized
 
 **Spec:** §3 (blank lines), §7 (line endings), §8 (whitespace)
-**Tests:** `tests/formatter/03_blank_lines/` (21 pairs), `tests/formatter/07_line_endings/` (16 pairs), `tests/formatter/08_whitespace/` (8 pairs)
+**Tests:** `tests/formatter/03_blank_lines/` (21 pairs), `tests/formatter/07_line_endings/` (17 pairs), `tests/formatter/08_whitespace/` (8 pairs)
 **Depends on:** Milestone 5 (wrapping determines line layout)
 
 ### Phase 5: Advanced Features (depends on Phases 3–4)
@@ -336,18 +333,19 @@ These milestones can be built in parallel since they don't depend on each other 
 **Depends on:** Milestone 5 (wrapping), Milestone 7 (collapseSpaces interaction)
 
 #### Milestone 11: Sorting
-- `sortArguments`: case-insensitive, stable, per-keyword-section
+- `sortArguments`: case-insensitive, stable, and limited to Appendix F sortable sections plus custom-keyword sections that contain simple values
 - Attached comments travel with arguments
-- Group boundaries (blank lines, unattached comments)
+- Unattached comments and blank lines create sorting group boundaries
 - Selective keyword sorting (string[] variant)
-- Generator expressions and variable references sorted by literal text
+- Generator expressions and variable references sorted by literal source text
+- Nested recognized structures are never value-sorted
 - Commands without recognized keyword sections unaffected
-- `sortKeywordSections`: canonical order reordering (4 commands with explicit orders in Appendix F)
-- Comments attached to a section travel with it; positional args before first keyword untouched
-- Sorting runs before formatting (Appendix E)
+- `sortKeywordSections`: reorder only commands with canonical Appendix F section orders
+- Comments attached to a section travel with it; positional args before the first keyword remain fixed
+- Sorting runs before later layout/alignment passes per Appendix E.1
 
 **Spec:** §12 (sorting), Appendix F (canonical orders)
-**Tests:** `tests/formatter/12_sorting/` (2 subdirs, 26 pairs)
+**Tests:** `tests/formatter/12_sorting/` (2 subdirs, 27 pairs)
 **Depends on:** Milestone 3 (keyword dictionary), Milestone 4 (parser)
 
 ### Phase 6: Pragma & Per-Command (depends on Phase 1; sequenced here for integration clarity)
@@ -378,12 +376,13 @@ These milestones can be built in parallel since they don't depend on each other 
 ### Phase 7: Suppression (depends on Phase 6)
 
 #### Milestone 14: Suppression
-- `disableFormatting` passthrough (BOM preserved)
-- `ignorePatterns` glob matching (gitignore-style)
+- `disableFormatting` passthrough (byte-for-byte; BOM preserved; overrides pragmas and all normalization)
+- `ignorePatterns` glob matching (gitignore-style, resolved relative to the config file that declared each pattern, including inherited patterns via `extends`)
 - `ignoreCommands` per-command verbatim preservation (case-insensitive)
+- Ignored commands preserve only matching invocations; surrounding commands still format normally
 - Integration with pragma off/on and skip
-- `ignoreCommands` precedence over `perCommandConfig` (E13)
-- `ignoreCommands` suppresses sorting/alignment (E16)
+- `ignoreCommands` precedence over `perCommandConfig` (Appendix E.2)
+- `ignoreCommands` suppresses sorting/alignment and other command-local formatting
 
 **Spec:** §16 (suppression)
 **Tests:** `tests/formatter/16_suppression/` (14 pairs)
@@ -392,9 +391,9 @@ These milestones can be built in parallel since they don't depend on each other 
 ### Phase 8: Integration (depends on all above)
 
 #### Milestone 15: Cross-Feature Interactions
-- All 23 interaction rules from Appendix E (see pipeline validation below)
-- Pipeline ordering verification
-- Edge cases where features intersect
+- Validate Appendix E.1 as the authoritative global pipeline order
+- Cross-check Appendix E.2 pairwise consequences against the refined formatter pipeline described below
+- Cover edge cases where suppression, sorting, wrapping, blank lines, alignment, comments, and config overrides intersect
 
 **Spec:** Appendix E (interactions)
 **Tests:** `tests/formatter/17_interactions/` (20 pairs)
@@ -433,61 +432,60 @@ These milestones can be built in parallel since they don't depend on each other 
 
 ## Pipeline Order Validation Against Appendix E
 
-All 23 Appendix E interaction rules mapped to pipeline steps:
+Appendix E.1 defines the normative total order. The table below maps the §E.2 pairwise rules onto the refined 17-step pipeline in the formatter section:
 
 | # | Rule (Options) | Pipeline Step(s) | Satisfied |
 |---|---|---|---|
-| 1 | `sortArguments` + `alignArgGroups` | sort=6, align=15 | Yes: 6 < 15 |
-| 2 | `indentStyle="tab"` + alignment | indent=10, align=15 | Yes: architectural (tabs indent, spaces align) |
+| 1 | `sortArguments` + `alignArgGroups` | sort=5, align=13 | Yes: 5 < 13 |
+| 2 | `indentStyle="tab"` + alignment | indent=9, align=13 | Yes: tabs for indentation, spaces for alignment padding |
 | 3 | `disableFormatting` + all | suppression=1 | Yes: step 1 short-circuits |
-| 4 | `wrapArgThreshold` + `magicTrailingNewline` | both in wrap=9 (Step 0) | Yes: threshold wins per spec |
-| 5 | `wrapStyle="vertical"` + `wrapArgThreshold` | both in wrap=9 | Yes: both → Step 3 |
-| 6 | `genexWrap="never"` + `genexClosingAngleNewline` | wrap=9 | Yes: never → inline, angle inert |
-| 7 | `genexWrap="never"` + `genexIndentWidth` | wrap=9 | Yes: never → inline, indent inert |
-| 8 | `commentPreservation="preserve"` + `commentWidth` | comment=16 | Yes: width only with reflow |
-| 9 | `firstArgSameLine` + single-line | wrap=9 | Yes: no-op on single-line |
-| 10 | `closingParenNewline` + single-line | wrap=9/parens=13 | Yes: no-op on single-line |
-| 11 | `blankLineBetweenSections` + single-section | blank=14 | Yes: no-op on single section |
-| 12 | `alignPropertyValues` + single-line | align=15 | Yes: no-op on single-line |
-| 13 | `perCommandConfig` + `push` pragma | resolve=5 | Yes: push > perCommandConfig |
-| 14 | `ignoreCommands` + `perCommandConfig` | resolve=5 | Yes: ignore > perCommandConfig |
-| 15 | `ignoreCommands` + pragmas | suppress=1, pragma=4 | Yes: either sufficient |
-| 16 | `finalNewline` + `maxBlankLines` | blank=14, final=19 | Yes: maxBlankLines at EOF regardless |
-| 17 | `ignoreCommands` + sorting/alignment | suppress=1, sort=6, align=15 | Yes: ignored → verbatim |
-| 18 | `blankLineBetweenSections` + `maxBlankLines` | blank=14 | Yes: blankBetweenSections wins in arg lists |
-| 19 | `alignTrailingComments` + `commentGap` | align=15 | Yes: commentGap as min gap |
-| 20 | `collapseSpaces` + alignment | collapse=8, align=15 | Yes: 8 < 15, padding exempt |
-| 21 | `alignArgGroups` + `blankLineBetweenSections` | blank=14, align=15 | Yes: 14 < 15, blank = group boundary |
-| 22 | `maxBlankLines` + `sortArguments` | sort=6, blank=14 | Yes: sort boundaries override blank discard |
-| 23 | `sortKeywordSections` + `blankLineBetweenSections` | sort=6, blank=14 | Yes: 6 < 14, sort first then insert |
+| 4 | `wrapArgThreshold` + `magicTrailingNewline` | wrap=8 (Step 0) | Yes: threshold wins per Appendix C |
+| 5 | `wrapStyle="vertical"` + `wrapArgThreshold` | wrap=8 | Yes: both force Step 3 output |
+| 6 | `genexWrap="never"` + `genexClosingAngleNewline` | wrap=8 | Yes: inline genex leaves closing-angle rule inert |
+| 7 | `genexWrap="never"` + `genexIndentWidth` | wrap=8 | Yes: inline genex leaves indent rule inert |
+| 8 | `commentPreservation="preserve"` + `commentWidth` | comment=14 | Yes: width matters only during reflow |
+| 9 | `firstArgSameLine` + single-line | wrap=8 | Yes: no-op on single-line output |
+| 10 | `closingParenNewline` + single-line | wrap=8, parens=11 | Yes: no-op on single-line output |
+| 11 | `blankLineBetweenSections` + single-section | blank=12 | Yes: no extra blank line inserted |
+| 12 | `alignPropertyValues` + single-line | align=13 | Yes: no-op on single-line property commands |
+| 13 | `perCommandConfig` + `push` pragma | resolve=4 | Yes: push overrides per-command config |
+| 14 | `ignoreCommands` + `perCommandConfig` | suppression=1, resolve=4 | Yes: ignored commands bypass command-local config effects |
+| 15 | `ignoreCommands` + pragmas | suppression=1, resolve=4 | Yes: either suppression mechanism is sufficient; no conflict |
+| 16 | `finalNewline` + `maxBlankLines` | blank=12, final=17 | Yes: EOF blank-line limits apply before final-newline enforcement |
+| 17 | `ignoreCommands` + sorting/alignment | suppression=1, sort=5, align=13 | Yes: ignored commands remain verbatim |
+| 18 | `blankLineBetweenSections` + `maxBlankLines` | blank=12 | Yes: inserted section separators win inside argument lists |
+| 19 | `alignTrailingComments` + `commentGap` | align=13 | Yes: `commentGap` supplies the minimum alignment gap |
+| 20 | `collapseSpaces` + alignment | collapse=7, align=13 | Yes: collapse happens first; alignment padding is exempt |
+| 21 | `alignArgGroups` + `blankLineBetweenSections` | blank=12, align=13 | Yes: inserted blank lines become alignment group boundaries |
+| 22 | `maxBlankLines` + `sortArguments` | sort=5, blank=12 | Yes: sort-group boundaries are preserved through blank-line handling |
+| 23 | `sortKeywordSections` + `blankLineBetweenSections` | sort=5, blank=12 | Yes: reorder sections before inserting separators |
 
-**Result:** All 23 rules satisfied by the proposed 19-step pipeline order.
-
+**Result:** All 23 pairwise rules are satisfied by a refinement of the normative Appendix E.1 pipeline, not by a competing inferred order.
 ---
 
 ## Test Fixture Inventory
 
-Total: **326 test pairs** across 17 directories.
+Total: **329 test pairs** across 17 directories.
 
 | Directory | Spec Sections | Pairs | Description |
 |---|---|---|---|
 | `01_wrapping/` | §1, Appendix C | 41 | line_width, cascade steps 1-3, vertical, firstArgSameLine, wrapArgThreshold, magicTrailingNewline |
 | `02_indentation/` | §2 | 21 | indent_width, indent_style (space/tab/mixed), continuationIndent, genexIndent |
 | `03_blank_lines/` | §3 | 21 | maxBlankLines, minBlankLinesBetweenBlocks, blankLineBetweenSections |
-| `04_casing/` | §4 | 20 | commandCase, keywordCase, customKeywords, literalCase |
+| `04_casing/` | §4 | 20 | commandCase, keywordCase, customKeywords driving section detection/layout/sorting, literalCase, keyword precedence over literalCase |
 | `05_parens_spacing/` | §5 | 14 | closingParenNewline, spaceBeforeParen, spaceInsideParen |
 | `06_comments/` | §6 | 34 | preservation, reflow, trailing alignment, commentGap, verbatim |
-| `07_line_endings/` | §7 | 16 | auto/lf/crlf detection, finalNewline, BOM |
+| `07_line_endings/` | §7 | 17 | lf/crlf/auto detection, bare CR ignored for auto-detect, byte-0 BOM stripping only, interior U+FEFF preserved, finalNewline true/false edge cases |
 | `08_whitespace/` | §8 | 8 | trimTrailingWhitespace, collapseSpaces |
 | `09_alignment/` | §9 | 24 | propertyValues, consecutiveSet, argGroups |
 | `10_genex/` | §10 | 10 | genex wrap cascade/never, closingAngle, nesting |
 | `11_per_command/` | §11 | 9 | override wrap/space/sorting/alignment/width, push merge, case-insensitive match |
-| `12_sorting/` | §12 | 26 | sortArguments (selective, groups, comments), sortKeywordSections |
+| `12_sorting/` | §12 | 27 | sortArguments (stable ordering, comment attachment/boundaries, literal-text genex/vars, custom keyword sections, nested non-sortable structures), sortKeywordSections |
 | `13_pragmas/` | §13 | 23 | off/on, skip, push/pop |
-| `14_flow_control/` | §14 | 19 | indentBlockBody, endCommandArgs (remove/preserve/match), empty commands |
-| `15_config_meta/` | §15 | 6 | `$schema` ignored, `extends` merge semantics (scalar override, array replace, shallow per-command merge), relative-path resolution |
-| `16_suppression/` | §16 | 14 | disableFormatting, ignoreCommands, ignorePatterns (including inherited relative-path behavior through `extends`) |
-| `17_interactions/` | Appendix E | 20 | Cross-feature interaction tests |
+| `14_flow_control/` | §14 | 20 | indentBlockBody; endCommandArgs remove/preserve/match with nearest-unmatched `else()` behavior, nested/mixed blocks, `block()/endblock()`, empty commands |
+| `15_config_meta/` | §15 | 6 | `$schema` ignored, `extends` scalar/array/perCommandConfig merge semantics, relative-path resolution |
+| `16_suppression/` | §16 | 14 | disableFormatting overrides pragmas and normalization, ignoreCommands case-insensitive with surrounding formatting preserved, ignorePatterns including inherited relative-path behavior |
+| `17_interactions/` | Appendix E | 20 | Appendix E.1 global-order checks plus Appendix E.2 pairwise interaction fixtures |
 
 ### Config Override Mechanisms in Tests
 - **`.cmakefmt.toml` files:** Present in multiple test subdirectories
@@ -497,34 +495,19 @@ Total: **326 test pairs** across 17 directories.
 
 ## Ambiguities and Gaps in the Spec
 
-### Confirmed Gaps
-1. **`endCommandArgs = "match"` for `else()` requires stateful block tracking.** The formatter must track the enclosing `if()` condition through nested blocks to copy it into `else()`. The spec doesn't describe how deeply this should nest or what happens with `else()` inside `function()`/`macro()` bodies. Additionally, `block()/endblock()` always produces empty `endblock()` under match — edge case that's specified but easy to miss.
-2. **Keyword dictionary authority split.** Appendix F says the authoritative source is `src/generation/signatures.rs`, but since we're rewriting src/, we need the spec to define keywords independently. The spec gives ~50 recognized commands but not exhaustive per-command keyword lists.
-3. **`sortArguments = true` scope.** "All recognized keyword sections" — but what counts as recognized depends on the keyword dictionary, which is only partially specified. Need to define which commands have sortable sections.
-4. **Pipeline ordering.** The spec describes individual features but doesn't specify the exact ordering of all formatting passes. Appendix E gives 23 pairwise interaction rules but not a complete total order. The pipeline order in this plan has been validated against all 23 rules (see table above).
-5. **`collapseSpaces` timing.** §8.2 says it runs "during input normalization before alignment" — but it also says alignment padding is "exempt." Resolution: collapse runs first (step 8), alignment runs after (step 15) and inserts its own padding which is never re-collapsed.
-6. **`perCommandConfig` excluded options.** §11 defines exclusion by category (file-level concerns) but not with a definitive option list. The pragma `push` has broader scope per §13.5. The plan defines: perCommandConfig covers 27 options (§1, §2, §4, §5, §6, §9, §10, §12); push covers all except `disableFormatting`, `extends`, `$schema`, `ignorePatterns`.
-7. **`spaceInsideParen = "preserve"` on collapse.** §5.3 says preserve falls back to remove on collapse-to-single-line. What counts as "collapse" should be explicit: fallback applies when the formatter actively collapses a multi-line command to single-line, not when input was already single-line.
+The refreshed spec suite resolves the older plan-level uncertainties around Appendix E ordering, Appendix F authority, `endCommandArgs = "match"` nesting, pragma spacing variants, and `finalNewline = false`. Remaining work is mostly implementation-risk management rather than spec gap-filling.
 
-### Minor Ambiguities
-8. **BOM stripping.** README says UTF-8 BOM is stripped. BOM is only at byte 0 of file — not inside bracket args.
-9. **`maxBlankLines` at EOF with `finalNewline = false`.** §7.2 says maxBlankLines still enforced at EOF. Interpretation: trailing blanks reduced to min(existing, maxBlankLines), then no newline added.
-10. **Pragma comment whitespace variants.** §13 shows `# cmakefmt:` with a space after `#`. Test `no_space_variant` confirms `#cmakefmt:` (no space) is also recognized. The spec should explicitly list accepted variants.
-11. **`alignArgGroups` and `blankLineBetweenSections` interaction.** Appendix E rule 21 says blank lines from blankLineBetweenSections act as alignArgGroups group boundaries. This means alignment is re-computed per section.
-
-### Additional Risks (from spec close-reading)
-12. **Dual-type config parsing.** `sortArguments` (bool|string[]) and `spaceBeforeParen` (bool|string[]) require custom serde deserialization. Type mismatch errors must be clear.
-13. **Cascade Step 2 escalation is per-keyword-group.** Appendix C says "escalate to Step 3 for that keyword group" — partial escalation within one command is possible. Some groups at Step 2, others at Step 3.
-14. **`continuationIndentWidth` is relative to the KEYWORD position, not the command name.** Common misread that would produce wrong indentation.
-15. **`genexIndentWidth` is relative to the `$<` column, not line start.** Requires column tracking through the formatting pipeline.
-16. **`wrapArgThreshold` counts ALL tokens in parens.** Including keywords and the first positional arg. Generator expression = 1 token. Not just value args.
-17. **Leading blank lines at file start are ALWAYS stripped.** Regardless of `maxBlankLines` value, even at `maxBlankLines=100`.
-18. **`minBlankLinesBetweenBlocks` requires backward scan.** To find topmost attached comment for correct insertion point.
-19. **Tokens in both keyword dict and literal list.** TARGET, COMMAND, POLICY, TEST need context-sensitive classification based on which command they appear in.
-20. **Tab + fractional continuation.** When `indentStyle=tab` and continuation differs from indentWidth: tabs for whole multiples, spaces for remainder.
-21. **Sorting runs before wrapping.** Pipeline step 6 before 9. Alignment after wrapping at step 15.
-22. **Bare CR (`\r` not followed by `\n`) is ordinary character.** Not a line ending, not counted, not normalized.
-
+### Remaining Implementation Risks
+1. **`collapseSpaces` timing still needs a concrete normalization boundary.** Appendix E.1/E.2 now specifies that collapsing happens before alignment and that alignment padding is exempt; the implementation still needs a clean place to enforce that.
+2. **`perCommandConfig` excluded options should become an explicit allowlist.** The spec describes the category boundary and the broader `push` scope, but the code should materialize an obvious option set rather than re-derive it ad hoc.
+3. **`spaceInsideParen = "preserve"` on collapse-to-single-line needs a precise trigger.** The fallback-to-remove rule applies when the formatter actively collapses a multi-line command, not when the input was already single-line.
+4. **Dual-type config parsing needs careful diagnostics.** `sortArguments` (bool|string[]) and `spaceBeforeParen` (bool|string[]) require custom serde paths with clear error messages.
+5. **Cascade Step 2 escalation is per keyword group.** Appendix C allows one group to remain at Step 2 while another escalates to Step 3 inside the same command.
+6. **Indentation widths are column-relative, not line-relative.** `continuationIndentWidth` is relative to the keyword column and `genexIndentWidth` is relative to the `$<` column.
+7. **`wrapArgThreshold` counts every token inside the parentheses.** Keywords and the first positional argument count; a full generator expression counts as one token.
+8. **Blank-line insertion rules need context-aware scanning.** Leading file blank lines are always stripped, and `minBlankLinesBetweenBlocks` requires a backward scan to keep attached comments with the following block opener.
+9. **Keyword/literal overlap remains context-sensitive in implementation.** Tokens like `TARGET`, `COMMAND`, `POLICY`, and `TEST` must follow Appendix F slot classification before falling back to `literalCase`.
+10. **Tabs with fractional continuation widths need mixed indentation output.** Under `indentStyle = "tab"`, whole multiples use tabs and the remainder uses spaces.
 ---
 
 ## Dependency Graph (simplified)
