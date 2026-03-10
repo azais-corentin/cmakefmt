@@ -8,6 +8,7 @@ Use Cargo for all routine development tasks:
 - Run all tests: `cargo test`
 - Run a single test file: `cargo test --test {test_name}`
 - Run a specific test: `cargo test {test_function_name}`
+- Filter formatter fixtures: `CMAKEFMT_TEST_FILTER={substring} cargo test --test formatter_tests`
 - Lint: `cargo clippy -- -D warnings`
 - Format check: `cargo fmt -- --check`
 
