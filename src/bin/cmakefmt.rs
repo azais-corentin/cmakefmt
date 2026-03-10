@@ -4,8 +4,8 @@ use std::process::ExitCode;
 
 use clap::Parser;
 use cmakefmt::{
-    CaseStyle, ConfigLoadResult, Configuration, NewLineKind, format_text,
-    load_from_cli,
+    CaseStyle, ConfigLoadResult, Configuration, IndentStyle, NewLineKind, SortArguments,
+    SpaceBeforeParen, format_text, load_from_cli,
 };
 
 #[derive(Parser)]
@@ -67,17 +67,41 @@ struct Cli {
 
 impl Cli {
     fn to_config(&self) -> ConfigLoadResult {
+        let space_before_paren = if self.space_before_paren.is_empty() {
+            SpaceBeforeParen::Never
+        } else {
+            SpaceBeforeParen::CommandList(
+                self.space_before_paren
+                    .iter()
+                    .map(|value| value.to_ascii_lowercase())
+                    .collect(),
+            )
+        };
+
+        let sort_arguments = if self.sort_lists {
+            SortArguments::Enabled
+        } else {
+            SortArguments::Disabled
+        };
+
         load_from_cli(Configuration {
             line_width: self.line_width,
             indent_width: self.indent_width,
             use_tabs: self.use_tabs,
+            indent_style: if self.use_tabs {
+                IndentStyle::Tab
+            } else {
+                IndentStyle::Space
+            },
             new_line_kind: self.new_line_kind,
             command_case: self.command_case,
             keyword_case: self.keyword_case,
             closing_paren_newline: self.closing_paren_newline,
             sort_lists: self.sort_lists,
+            sort_arguments,
             max_blank_lines: self.max_blank_lines,
-            space_before_paren: self.space_before_paren.iter().map(|s| s.to_ascii_lowercase()).collect(),
+            space_before_paren,
+            ..Configuration::default()
         })
     }
 }

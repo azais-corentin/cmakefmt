@@ -352,7 +352,7 @@ pub fn gen_command(
 
     // Build and optionally sort argument list
     let mut arguments = build_argument_list(cmd, source, config);
-    if config.sort_lists && is_sortable_command(raw_name) {
+    if config.should_sort_arguments_for(raw_name) && is_sortable_command(raw_name) {
         sort_argument_groups(&mut arguments);
     }
 
@@ -1198,11 +1198,11 @@ fn gen_known_multi_line(
         && let Some(ArgGroup::Positional(args)) = groups.first_mut()
         && let Some(first) = args.first().copied()
     {
-            front_pos.push(first);
-            args.remove(0);
-            if args.is_empty() {
-                groups.remove(0);
-            }
+        front_pos.push(first);
+        args.remove(0);
+        if args.is_empty() {
+            groups.remove(0);
+        }
     }
 
     let base_indent = (indent_depth as usize + 1) * config.indent_width as usize;
@@ -3125,12 +3125,7 @@ fn format_genex_node(items: &mut PrintItems, node: &GenexNode) {
 
 /// Internal: format a genex node, appending `close_suffix` after the closing `>`.
 /// This is used by ConditionGenex to merge condition's `>` with `:`.
-fn format_genex_impl(
-    items: &mut PrintItems,
-    node: &GenexNode,
-    close_suffix: &str,
-    depth: usize,
-) {
+fn format_genex_impl(items: &mut PrintItems, node: &GenexNode, close_suffix: &str, depth: usize) {
     match node {
         GenexNode::Text(s) => {
             items.extend(ir_helpers::gen_from_raw_string(s));
@@ -3163,7 +3158,8 @@ fn format_genex_impl(
                     }
                 }
                 items.extend(ir_helpers::with_indent(inner));
-                let compact_close = close_suffix == ":" && condition_genex_prefers_compact_close(node);
+                let compact_close =
+                    close_suffix == ":" && condition_genex_prefers_compact_close(node);
                 if compact_close {
                     let closer = format!(">{close_suffix}");
                     items.extend(ir_helpers::gen_from_raw_string(&closer));

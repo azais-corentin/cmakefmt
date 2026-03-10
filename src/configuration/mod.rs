@@ -1,10 +1,13 @@
-mod resolve;
 mod load;
+mod resolve;
 mod types;
 
-pub use resolve::resolve_config;
 pub use load::{
     ConfigDiagnostic, ConfigDiagnosticSeverity, ConfigLoadResult, load_from_cli, load_from_dprint,
-    load_from_header,
+    load_from_header, load_from_toml, load_from_toml_path,
 };
-pub use types::{CaseStyle, Configuration, NewLineKind};
+pub use resolve::resolve_config;
+pub use types::{
+    CaseStyle, CommandConfiguration, CommentPreservation, Configuration, EndCommandArgs, GenexWrap,
+    IndentStyle, NewLineKind, SortArguments, SpaceBeforeParen, SpaceInsideParen, WrapStyle,
+};

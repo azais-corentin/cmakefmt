@@ -85,7 +85,7 @@ fn test_formatter_files() {
                     Vec::new(),
                     false,
                 )
-        };
+            };
         let cmake_path = Path::new("CMakeLists.txt");
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -99,10 +99,7 @@ fn test_formatter_files() {
                     .map(|s| s.as_str())
                     .or_else(|| panic_info.downcast_ref::<&str>().copied())
                     .unwrap_or("(no message)");
-                failures.push(format!(
-                    "PANIC: {}\n{msg}",
-                    in_path.display()
-                ));
+                failures.push(format!("PANIC: {}\n{msg}", in_path.display()));
                 count += 1;
             }
             Ok(Ok(Some(formatted))) => {
@@ -199,10 +196,7 @@ fn test_formatter_files() {
                 }
             }
             Ok(Err(e)) => {
-                failures.push(format!(
-                    "PARSE ERROR: {}\n{e}",
-                    in_path.display()
-                ));
+                failures.push(format!("PARSE ERROR: {}\n{e}", in_path.display()));
                 count += 1;
             }
         }
@@ -455,7 +449,6 @@ fn parse_config_header(header: &str) -> ParsedConfigHeader {
     }
 }
 
-
 #[cfg(test)]
 mod invisible_diff_tests {
     use super::*;
@@ -538,9 +531,8 @@ mod config_header_tests {
 
     #[test]
     fn test_parse_config_header_json_collects_overrides_and_config() {
-        let parsed = parse_config_header(
-            r#"{"commandCase":"upper","lineWidth":100,"sortLists":true}"#,
-        );
+        let parsed =
+            parse_config_header(r#"{"commandCase":"upper","lineWidth":100,"sortLists":true}"#);
 
         assert_eq!(
             parsed.overrides,
@@ -582,7 +574,10 @@ mod config_header_tests {
     fn test_parse_config_header_gersemi_removed_aliases_emit_diagnostics() {
         let parsed = parse_config_header("{line_length: 120, newline: lf}");
 
-        assert_eq!(parsed.config.line_width, Configuration::default().line_width);
+        assert_eq!(
+            parsed.config.line_width,
+            Configuration::default().line_width
+        );
         assert_eq!(
             parsed.config.new_line_kind,
             Configuration::default().new_line_kind
@@ -601,8 +596,9 @@ mod config_header_tests {
     #[test]
     fn test_with_config_context_applies_only_for_custom_header() {
         let config = Configuration::default();
-        let base = "MISMATCH: tests/formatter/sample.in.cmake\n--- expected\n+++ actual\n@@ -1 +1 @@"
-            .to_string();
+        let base =
+            "MISMATCH: tests/formatter/sample.in.cmake\n--- expected\n+++ actual\n@@ -1 +1 @@"
+                .to_string();
         let without_header = with_config_context(base.clone(), false, &[], &config, &[]);
         assert_eq!(without_header, base);
 
@@ -624,9 +620,10 @@ mod config_header_tests {
             &config,
             &["Unknown property in configuration (line_length)".to_string()],
         );
-        assert!(with_diagnostics.contains(
-            "Header diagnostics: Unknown property in configuration (line_length)"
-        ));
+        assert!(
+            with_diagnostics
+                .contains("Header diagnostics: Unknown property in configuration (line_length)")
+        );
         let overrides_index = with_header.find("Header overrides:").unwrap();
         let diff_index = with_header.find("--- expected").unwrap();
         assert!(overrides_index < diff_index);

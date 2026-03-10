@@ -25,9 +25,9 @@
           "test_filter": "test_formatter_files",
           "dependencies": [],
           "complexity": "large",
-          "status": "pending",
+          "status": "stuck",
           "passes": false,
-          "notes": ""
+          "notes": "Feature-specific configuration loader tests pass, but required formatter suite command (`cargo test --test formatter_tests test_formatter_files`) still fails after 5 iterations due many unrelated pending formatter features outside F001 scope."
         }
       ]
     },

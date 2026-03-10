@@ -7,7 +7,10 @@ mod parser;
 mod wasm_plugin;
 
 pub use configuration::{
-    CaseStyle, ConfigDiagnostic, ConfigDiagnosticSeverity, ConfigLoadResult, Configuration,
-    NewLineKind, load_from_cli, load_from_dprint, load_from_header, resolve_config,
+    CaseStyle, CommandConfiguration, CommentPreservation, ConfigDiagnostic,
+    ConfigDiagnosticSeverity, ConfigLoadResult, Configuration, EndCommandArgs, GenexWrap,
+    IndentStyle, NewLineKind, SortArguments, SpaceBeforeParen, SpaceInsideParen, WrapStyle,
+    load_from_cli, load_from_dprint, load_from_header, load_from_toml, load_from_toml_path,
+    resolve_config,
 };
 pub use format_text::format_text;

@@ -230,7 +230,10 @@ fn parse_arguments(p: &mut Parser) -> Result<Vec<Argument>> {
                     other => {
                         let offset = p.peek_span().map(|s| s.start).unwrap_or(0);
                         let (line, col) = byte_offset_to_line_col(p.source, offset);
-                        bail!("expected ')' to close paren group at {line}:{col}, got {}", describe_token(other));
+                        bail!(
+                            "expected ')' to close paren group at {line}:{col}, got {}",
+                            describe_token(other)
+                        );
                     }
                 }
                 args.push(Argument::ParenGroup { arguments: inner });
@@ -301,7 +304,10 @@ fn parse_single_argument(p: &mut Parser) -> Result<Argument> {
         other => {
             let offset = p.peek_span().map(|s| s.start).unwrap_or(0);
             let (line, col) = byte_offset_to_line_col(p.source, offset);
-            bail!("expected argument at {line}:{col}, got {}", describe_token(other));
+            bail!(
+                "expected argument at {line}:{col}, got {}",
+                describe_token(other)
+            );
         }
     }
 }
