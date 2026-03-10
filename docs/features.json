@@ -55,9 +55,9 @@
             "F001"
           ],
           "complexity": "large",
-          "status": "pending",
+          "status": "stuck",
           "passes": false,
-          "notes": ""
+          "notes": "Implemented config discovery walk-up and extends resolution (scalar override, array replace, perCommandConfig shallow merge, cycle/depth diagnostics) in src/configuration/load.rs with new unit coverage. Required formatter suite command still fails due unrelated pending formatter features outside F002 scope (alignment/sorting/pragmas/flow-control/suppression)."
         },
         {
           "id": "F003",

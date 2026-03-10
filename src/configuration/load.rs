@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 use dprint_core::configuration::{
     ConfigKeyMap, ConfigKeyValue, GlobalConfiguration, NewLineKind as DprintNewLineKind,
@@ -49,15 +50,150 @@ pub fn load_from_dprint(
     loader.finish()
 }
 
+const MAX_EXTENDS_DEPTH: usize = 32;
+const DOTFILE_CONFIG_NAME: &str = ".cmakefmt.toml";
+const PLAIN_CONFIG_NAME: &str = "cmakefmt.toml";
+
 /// Parses a `.cmakefmt.toml` document into formatter configuration plus diagnostics.
 pub fn load_from_toml(toml: &str) -> ConfigLoadResult {
-    let mut loader = Loader::new(Configuration::default());
+    load_from_toml_with_base(toml, Configuration::default(), "<toml>")
+}
+
+/// Reads and parses configuration from disk into formatter configuration plus diagnostics.
+///
+/// When `path` points to a CMake source file instead of a config file, this performs config
+/// discovery by walking parent directories and selecting the first `.cmakefmt.toml`/`cmakefmt.toml`
+/// found (`.cmakefmt.toml` takes precedence when both are present).
+pub fn load_from_toml_path(path: &Path) -> ConfigLoadResult {
+    let config_path = if is_config_file_name(path) {
+        Some(path.to_path_buf())
+    } else {
+        discover_toml_path(path)
+    };
+
+    match config_path {
+        Some(config_path) => load_from_toml_path_with_context(&config_path, &mut Vec::new(), 0),
+        None => ConfigLoadResult {
+            config: Configuration::default(),
+            diagnostics: Vec::new(),
+            overrides: Vec::new(),
+        },
+    }
+}
+
+fn load_from_toml_path_with_context(
+    path: &Path,
+    resolution_stack: &mut Vec<PathBuf>,
+    depth: usize,
+) -> ConfigLoadResult {
+    if depth >= MAX_EXTENDS_DEPTH {
+        return ConfigLoadResult {
+            config: Configuration::default(),
+            diagnostics: vec![ConfigDiagnostic {
+                key: path.display().to_string(),
+                message: format!(
+                    "Exceeded maximum extends depth ({MAX_EXTENDS_DEPTH}) while resolving configuration"
+                ),
+                severity: ConfigDiagnosticSeverity::Warning,
+            }],
+            overrides: Vec::new(),
+        };
+    }
+
+    let canonical_path = canonicalize_for_resolution(path);
+    if let Some(cycle_start) = resolution_stack
+        .iter()
+        .position(|entry| entry == &canonical_path)
+    {
+        let chain = resolution_stack[cycle_start..]
+            .iter()
+            .map(|entry| entry.display().to_string())
+            .chain(std::iter::once(canonical_path.display().to_string()))
+            .collect::<Vec<_>>()
+            .join(" -> ");
+
+        return ConfigLoadResult {
+            config: Configuration::default(),
+            diagnostics: vec![ConfigDiagnostic {
+                key: path.display().to_string(),
+                message: format!("Circular extends reference detected: {chain}"),
+                severity: ConfigDiagnosticSeverity::Warning,
+            }],
+            overrides: Vec::new(),
+        };
+    }
+
+    let contents = match std::fs::read_to_string(path) {
+        Ok(contents) => contents,
+        Err(error) => {
+            return ConfigLoadResult {
+                config: Configuration::default(),
+                diagnostics: vec![ConfigDiagnostic {
+                    key: path.display().to_string(),
+                    message: format!("Failed to read TOML document: {error}"),
+                    severity: ConfigDiagnosticSeverity::Warning,
+                }],
+                overrides: Vec::new(),
+            };
+        }
+    };
+
+    let parsed = match toml::from_str::<toml::Table>(&contents) {
+        Ok(table) => table,
+        Err(error) => {
+            return ConfigLoadResult {
+                config: Configuration::default(),
+                diagnostics: vec![ConfigDiagnostic {
+                    key: path.display().to_string(),
+                    message: format!("Failed to parse TOML document: {error}"),
+                    severity: ConfigDiagnosticSeverity::Warning,
+                }],
+                overrides: Vec::new(),
+            };
+        }
+    };
+
+    resolution_stack.push(canonical_path);
+    let base_result = match resolve_extends_path(path, &parsed) {
+        Some(base_path) => {
+            load_from_toml_path_with_context(&base_path, resolution_stack, depth + 1)
+        }
+        None => ConfigLoadResult {
+            config: Configuration::default(),
+            diagnostics: Vec::new(),
+            overrides: Vec::new(),
+        },
+    };
+    resolution_stack.pop();
+
+    let mut loader = Loader::new(base_result.config);
+    apply_toml_table(&mut loader, parsed);
+
+    let mut result = loader.finish();
+    let mut diagnostics = base_result.diagnostics;
+    diagnostics.append(&mut result.diagnostics);
+    result.diagnostics = diagnostics;
+
+    let mut overrides = base_result.overrides;
+    overrides.append(&mut result.overrides);
+    overrides.sort_by(|left, right| left.0.cmp(&right.0));
+    result.overrides = overrides;
+
+    result
+}
+
+fn load_from_toml_with_base(
+    toml: &str,
+    base: Configuration,
+    diagnostic_key: &str,
+) -> ConfigLoadResult {
+    let mut loader = Loader::new(base);
 
     let parsed = match toml::from_str::<toml::Table>(toml) {
         Ok(table) => table,
         Err(error) => {
             loader.diagnostics.push(ConfigDiagnostic {
-                key: "<toml>".to_string(),
+                key: diagnostic_key.to_string(),
                 message: format!("Failed to parse TOML document: {error}"),
                 severity: ConfigDiagnosticSeverity::Warning,
             });
@@ -65,6 +201,11 @@ pub fn load_from_toml(toml: &str) -> ConfigLoadResult {
         }
     };
 
+    apply_toml_table(&mut loader, parsed);
+    loader.finish()
+}
+
+fn apply_toml_table(loader: &mut Loader, parsed: toml::Table) {
     for (key, value) in parsed {
         match serde_json::to_value(value) {
             Ok(value) => loader.apply_raw_value(&key, RawConfigValue::Json(value)),
@@ -75,23 +216,66 @@ pub fn load_from_toml(toml: &str) -> ConfigLoadResult {
             }),
         }
     }
-
-    loader.finish()
 }
 
-/// Reads and parses a `.cmakefmt.toml` file from disk into formatter configuration plus diagnostics.
-pub fn load_from_toml_path(path: &std::path::Path) -> ConfigLoadResult {
-    match std::fs::read_to_string(path) {
-        Ok(contents) => load_from_toml(&contents),
-        Err(error) => ConfigLoadResult {
-            config: Configuration::default(),
-            diagnostics: vec![ConfigDiagnostic {
-                key: path.display().to_string(),
-                message: format!("Failed to read TOML document: {error}"),
-                severity: ConfigDiagnosticSeverity::Warning,
-            }],
-            overrides: Vec::new(),
-        },
+fn resolve_extends_path(config_path: &Path, parsed: &toml::Table) -> Option<PathBuf> {
+    let raw_extends = parsed.get("extends")?.as_str()?;
+    let extends_path = PathBuf::from(raw_extends);
+    if extends_path.is_absolute() {
+        Some(extends_path)
+    } else {
+        let config_dir = config_path.parent().unwrap_or_else(|| Path::new("."));
+        Some(config_dir.join(extends_path))
+    }
+}
+
+fn canonicalize_for_resolution(path: &Path) -> PathBuf {
+    match std::fs::canonicalize(path) {
+        Ok(path) => path,
+        Err(_) => {
+            if path.is_absolute() {
+                path.to_path_buf()
+            } else {
+                match std::env::current_dir() {
+                    Ok(current_dir) => current_dir.join(path),
+                    Err(_) => path.to_path_buf(),
+                }
+            }
+        }
+    }
+}
+
+fn is_config_file_name(path: &Path) -> bool {
+    matches!(
+        path.file_name().and_then(|name| name.to_str()),
+        Some(DOTFILE_CONFIG_NAME) | Some(PLAIN_CONFIG_NAME)
+    )
+}
+
+fn discover_toml_path(start_path: &Path) -> Option<PathBuf> {
+    let mut current_dir = if start_path.is_dir() {
+        start_path.to_path_buf()
+    } else {
+        match start_path.parent() {
+            Some(parent) if !parent.as_os_str().is_empty() => parent.to_path_buf(),
+            _ => PathBuf::from("."),
+        }
+    };
+
+    loop {
+        let dotfile_path = current_dir.join(DOTFILE_CONFIG_NAME);
+        if dotfile_path.is_file() {
+            return Some(dotfile_path);
+        }
+
+        let plain_path = current_dir.join(PLAIN_CONFIG_NAME);
+        if plain_path.is_file() {
+            return Some(plain_path);
+        }
+
+        if !current_dir.pop() {
+            return None;
+        }
     }
 }
 
@@ -742,7 +926,11 @@ impl Loader {
             parsed.insert(command_name.to_ascii_lowercase(), command_config);
         }
 
-        self.config.per_command_config = parsed;
+        for (command_name, command_config) in parsed {
+            self.config
+                .per_command_config
+                .insert(command_name, command_config);
+        }
         self.record_override(
             key,
             format!(
@@ -1312,9 +1500,38 @@ fn split_respecting_brackets(s: &str) -> Vec<&str> {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
     use dprint_core::configuration::ConfigKeyMap;
 
     use super::*;
+
+    struct TempDirGuard {
+        path: PathBuf,
+    }
+
+    impl TempDirGuard {
+        fn new(prefix: &str) -> Self {
+            let unique = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock before UNIX_EPOCH")
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!(
+                "cmakefmt_{prefix}_{}_{}",
+                std::process::id(),
+                unique
+            ));
+            std::fs::create_dir_all(&path).expect("failed to create temporary test directory");
+            Self { path }
+        }
+    }
+
+    impl Drop for TempDirGuard {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.path);
+        }
+    }
 
     #[test]
     fn parses_canonical_keys_from_json_header() {
@@ -1703,6 +1920,141 @@ spaceBeforeParen = true
         .expect("formatting failed");
 
         assert_eq!(formatted.as_deref(), Some(expected.as_str()));
+    }
+
+    #[test]
+    fn discovers_nearest_config_with_dotfile_precedence() {
+        let temp = TempDirGuard::new("config_discovery");
+        let repo_root = temp.path.join("repo");
+        let nested = repo_root.join("src/module");
+        std::fs::create_dir_all(&nested).expect("failed to create nested fixture directory");
+
+        let parent_plain = repo_root.join(PLAIN_CONFIG_NAME);
+        std::fs::write(&parent_plain, "indentWidth = 4\n")
+            .expect("failed to write parent plain config");
+
+        let discovered_plain =
+            discover_toml_path(&nested.join("CMakeLists.txt")).expect("expected discovered config");
+        assert_eq!(discovered_plain, parent_plain);
+
+        let parent_dotfile = repo_root.join(DOTFILE_CONFIG_NAME);
+        std::fs::write(&parent_dotfile, "indentWidth = 6\n")
+            .expect("failed to write parent dotfile config");
+
+        let discovered_dotfile = discover_toml_path(&nested.join("CMakeLists.txt"))
+            .expect("expected discovered dotfile");
+        assert_eq!(discovered_dotfile, parent_dotfile);
+    }
+
+    #[test]
+    fn resolves_extends_scalar_override_fixture() {
+        let config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/formatter/15_config_meta/02_extends/scalar_override/.cmakefmt.toml");
+
+        let result = load_from_toml_path(&config_path);
+        assert!(result.diagnostics.is_empty());
+        assert_eq!(result.config.command_case, CaseStyle::Lower);
+        assert_eq!(result.config.indent_width, 4);
+    }
+
+    #[test]
+    fn resolves_extends_array_replacement_fixture() {
+        let config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/formatter/15_config_meta/02_extends/array_replaces/.cmakefmt.toml");
+
+        let result = load_from_toml_path(&config_path);
+        assert!(result.diagnostics.is_empty());
+        assert_eq!(result.config.command_case, CaseStyle::Upper);
+        assert_eq!(
+            result.config.space_before_paren,
+            SpaceBeforeParen::CommandList(vec!["if".to_string()])
+        );
+    }
+
+    #[test]
+    fn resolves_extends_per_command_shallow_merge_fixture() {
+        let config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+            "tests/formatter/15_config_meta/02_extends/per_command_shallow_merge/.cmakefmt.toml",
+        );
+
+        let result = load_from_toml_path(&config_path);
+        assert!(result.diagnostics.is_empty());
+
+        let set_override = result
+            .config
+            .per_command_config
+            .get("set")
+            .expect("expected set override");
+        assert_eq!(set_override.wrap_style, Some(WrapStyle::Cascade));
+        assert_eq!(set_override.closing_paren_newline, None);
+
+        let message_override = result
+            .config
+            .per_command_config
+            .get("message")
+            .expect("expected message override");
+        assert_eq!(message_override.command_case, Some(CaseStyle::Upper));
+    }
+
+    #[test]
+    fn detects_circular_extends_references() {
+        let temp = TempDirGuard::new("cycle_extends");
+        let first_dir = temp.path.join("first");
+        let second_dir = temp.path.join("second");
+        std::fs::create_dir_all(&first_dir).expect("failed to create first directory");
+        std::fs::create_dir_all(&second_dir).expect("failed to create second directory");
+
+        let first_config = first_dir.join(DOTFILE_CONFIG_NAME);
+        let second_config = second_dir.join(DOTFILE_CONFIG_NAME);
+
+        std::fs::write(
+            &first_config,
+            "extends = \"../second/.cmakefmt.toml\"\ncommandCase = \"upper\"\n",
+        )
+        .expect("failed to write first config");
+        std::fs::write(
+            &second_config,
+            "extends = \"../first/.cmakefmt.toml\"\nindentWidth = 4\n",
+        )
+        .expect("failed to write second config");
+
+        let result = load_from_toml_path(&first_config);
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .message
+                .contains("Circular extends reference detected")
+        }));
+        assert_eq!(result.config.command_case, CaseStyle::Upper);
+        assert_eq!(result.config.indent_width, 4);
+    }
+
+    #[test]
+    fn detects_extends_depth_limit() {
+        let temp = TempDirGuard::new("depth_extends");
+        let chain_len = MAX_EXTENDS_DEPTH + 2;
+
+        for index in 0..chain_len {
+            let config_dir = temp.path.join(format!("level_{index}"));
+            std::fs::create_dir_all(&config_dir).expect("failed to create level directory");
+            let config_path = config_dir.join(DOTFILE_CONFIG_NAME);
+
+            if index + 1 < chain_len {
+                let next = format!("../level_{}/.cmakefmt.toml", index + 1);
+                std::fs::write(&config_path, format!("extends = \"{next}\"\n"))
+                    .expect("failed to write extends config");
+            } else {
+                std::fs::write(&config_path, "commandCase = \"upper\"\n")
+                    .expect("failed to write tail config");
+            }
+        }
+
+        let root_config = temp.path.join("level_0").join(DOTFILE_CONFIG_NAME);
+        let result = load_from_toml_path(&root_config);
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .message
+                .contains("Exceeded maximum extends depth")
+        }));
     }
 
     #[test]
