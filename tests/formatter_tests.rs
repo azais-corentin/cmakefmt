@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use cmakefmt::{CaseStyle, Configuration, format_text, load_from_header};
+use cmakefmt::{Configuration, format_text};
 
 #[test]
 fn test_formatter_files() {
@@ -10,8 +10,16 @@ fn test_formatter_files() {
     let mut count = 0;
 
     let mut in_files = walk_cmake_files(&formatter_dir, ".in.cmake");
+    let mut out_files = walk_cmake_files(&formatter_dir, ".out.cmake");
+
+    // Optional filter: set CMAKEFMT_TEST_FILTER to run only fixtures whose path contains the value.
+    // e.g. CMAKEFMT_TEST_FILTER=01_wrapping cargo test --test formatter_tests
+    if let Ok(filter) = std::env::var("CMAKEFMT_TEST_FILTER") {
+        in_files.retain(|p| p.to_str().map_or(false, |s| s.contains(&filter)));
+        out_files.retain(|p| p.to_str().map_or(false, |s| s.contains(&filter)));
+    }
+
     in_files.sort();
-    let out_files = walk_cmake_files(&formatter_dir, ".out.cmake");
 
     let in_stems: HashSet<String> = in_files
         .iter()
@@ -54,42 +62,13 @@ fn test_formatter_files() {
             continue;
         }
 
-        let raw_input = std::fs::read_to_string(in_path).unwrap();
+        let input = std::fs::read_to_string(in_path).unwrap();
         let expected = std::fs::read_to_string(&out_path).unwrap();
-
-        // Strip ### header line if present and try to parse config
-        let (input, config, header_overrides, header_diagnostics, has_custom_header) =
-            if raw_input.starts_with("### ") {
-                let header_end = raw_input.find('\n');
-                let header_content = match header_end {
-                    Some(pos) => &raw_input[4..pos],
-                    None => &raw_input[4..],
-                };
-                let remaining = match header_end {
-                    Some(pos) => &raw_input[pos + 1..],
-                    None => "",
-                };
-                let parsed_header = parse_config_header(header_content);
-                (
-                    remaining,
-                    parsed_header.config,
-                    parsed_header.overrides,
-                    parsed_header.diagnostics,
-                    true,
-                )
-            } else {
-                (
-                    raw_input.as_str(),
-                    Configuration::default(),
-                    Vec::new(),
-                    Vec::new(),
-                    false,
-                )
-            };
+        let config = Configuration::default();
         let cmake_path = Path::new("CMakeLists.txt");
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            format_text(cmake_path, input, &config)
+            format_text(cmake_path, &input, &config)
         }));
 
         match result {
@@ -104,16 +83,10 @@ fn test_formatter_files() {
             }
             Ok(Ok(Some(formatted))) => {
                 if formatted != expected {
-                    failures.push(with_config_context(
-                        format!(
-                            "MISMATCH: {}\n--- expected\n+++ actual\n{}",
-                            in_path.display(),
-                            simple_diff(&expected, &formatted)
-                        ),
-                        has_custom_header,
-                        &header_overrides,
-                        &config,
-                        &header_diagnostics,
+                    failures.push(format!(
+                        "MISMATCH: {}\n--- expected\n+++ actual\n{}",
+                        in_path.display(),
+                        simple_diff(&expected, &formatted)
                     ));
                 }
                 // Idempotency: format the output again
@@ -121,29 +94,17 @@ fn test_formatter_files() {
                     Ok(None) => { /* Already formatted — pass */ }
                     Ok(Some(reformatted)) => {
                         if reformatted != formatted {
-                            failures.push(with_config_context(
-                                format!(
-                                    "IDEMPOTENCY: {}\nSecond format produced different output\n{}",
-                                    in_path.display(),
-                                    simple_diff(&formatted, &reformatted)
-                                ),
-                                has_custom_header,
-                                &header_overrides,
-                                &config,
-                                &header_diagnostics,
+                            failures.push(format!(
+                                "IDEMPOTENCY: {}\nSecond format produced different output\n{}",
+                                in_path.display(),
+                                simple_diff(&formatted, &reformatted)
                             ));
                         }
                     }
                     Err(e) => {
-                        failures.push(with_config_context(
-                            format!(
-                                "IDEMPOTENCY ERROR: {}\nSecond format failed: {e}",
-                                in_path.display()
-                            ),
-                            has_custom_header,
-                            &header_overrides,
-                            &config,
-                            &header_diagnostics,
+                        failures.push(format!(
+                            "IDEMPOTENCY ERROR: {}\nSecond format failed: {e}",
+                            in_path.display()
                         ));
                     }
                 }
@@ -151,46 +112,28 @@ fn test_formatter_files() {
             Ok(Ok(None)) => {
                 // No change — input already formatted; it should match expected
                 if input != expected {
-                    failures.push(with_config_context(
-                        format!(
-                            "MISMATCH (no change returned): {}\n--- expected\n+++ input\n{}",
-                            in_path.display(),
-                            simple_diff(&expected, input)
-                        ),
-                        has_custom_header,
-                        &header_overrides,
-                        &config,
-                        &header_diagnostics,
+                    failures.push(format!(
+                        "MISMATCH (no change returned): {}\n--- expected\n+++ input\n{}",
+                        in_path.display(),
+                        simple_diff(&expected, &input)
                     ));
                 }
                 // Idempotency: format input again (it was already formatted)
-                match format_text(cmake_path, input, &config) {
+                match format_text(cmake_path, &input, &config) {
                     Ok(None) => { /* Still formatted — pass */ }
                     Ok(Some(reformatted)) => {
                         if reformatted != input {
-                            failures.push(with_config_context(
-                                format!(
-                                    "IDEMPOTENCY: {}\nRe-formatting already-formatted input changed it\n{}",
-                                    in_path.display(),
-                                    simple_diff(input, &reformatted)
-                                ),
-                                has_custom_header,
-                                &header_overrides,
-                                &config,
-                                &header_diagnostics,
+                            failures.push(format!(
+                                "IDEMPOTENCY: {}\nRe-formatting already-formatted input changed it\n{}",
+                                in_path.display(),
+                                simple_diff(&input, &reformatted)
                             ));
                         }
                     }
                     Err(e) => {
-                        failures.push(with_config_context(
-                            format!(
-                                "IDEMPOTENCY ERROR: {}\nRe-format of unchanged input failed: {e}",
-                                in_path.display()
-                            ),
-                            has_custom_header,
-                            &header_overrides,
-                            &config,
-                            &header_diagnostics,
+                        failures.push(format!(
+                            "IDEMPOTENCY ERROR: {}\nRe-format of unchanged input failed: {e}",
+                            in_path.display()
                         ));
                     }
                 }
@@ -396,59 +339,6 @@ fn make_invisible_visible(s: &str) -> String {
     out
 }
 
-fn with_config_context(
-    base_message: String,
-    has_custom_header: bool,
-    header_overrides: &[(String, String)],
-    config: &Configuration,
-    header_diagnostics: &[String],
-) -> String {
-    if !has_custom_header {
-        return base_message;
-    }
-
-    let overrides = if header_overrides.is_empty() {
-        "<none parsed>".to_string()
-    } else {
-        header_overrides
-            .iter()
-            .map(|(key, value)| format!("{key}={value}"))
-            .collect::<Vec<_>>()
-            .join(", ")
-    };
-    let diagnostics_section = if header_diagnostics.is_empty() {
-        String::new()
-    } else {
-        format!("\nHeader diagnostics: {}", header_diagnostics.join(" | "))
-    };
-    let config_section =
-        format!("Header overrides: {overrides}{diagnostics_section}\nResolved config: {config:#?}");
-
-    if let Some((head, tail)) = base_message.split_once('\n') {
-        format!("{head}\n{config_section}\n{tail}")
-    } else {
-        format!("{base_message}\n{config_section}")
-    }
-}
-struct ParsedConfigHeader {
-    config: Configuration,
-    overrides: Vec<(String, String)>,
-    diagnostics: Vec<String>,
-}
-
-fn parse_config_header(header: &str) -> ParsedConfigHeader {
-    let result = load_from_header(header);
-    ParsedConfigHeader {
-        config: result.config,
-        overrides: result.overrides,
-        diagnostics: result
-            .diagnostics
-            .into_iter()
-            .map(|diagnostic| format!("{} ({})", diagnostic.message, diagnostic.key))
-            .collect(),
-    }
-}
-
 #[cfg(test)]
 mod invisible_diff_tests {
     use super::*;
@@ -522,111 +412,5 @@ mod invisible_diff_tests {
             result.contains('\u{00B7}'),
             "expected middle dot for space in diff"
         );
-    }
-}
-
-#[cfg(test)]
-mod config_header_tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_config_header_json_collects_overrides_and_config() {
-        let parsed =
-            parse_config_header(r#"{"commandCase":"upper","lineWidth":100,"sortLists":true}"#);
-
-        assert_eq!(
-            parsed.overrides,
-            vec![
-                ("commandCase".to_string(), "Upper".to_string()),
-                ("lineWidth".to_string(), "100".to_string()),
-                ("sortLists".to_string(), "true".to_string()),
-            ]
-        );
-        assert_eq!(parsed.config.command_case, CaseStyle::Upper);
-        assert_eq!(parsed.config.line_width, 100);
-        assert!(parsed.config.sort_lists);
-    }
-
-    #[test]
-    fn test_parse_config_header_gersemi_collects_overrides_and_config() {
-        let parsed = parse_config_header(
-            "{indent: tabs, line_width: 120, new_line_kind: lf, keyword_case: preserve, sort_lists: true}",
-        );
-
-        assert_eq!(
-            parsed.overrides,
-            vec![
-                ("indent".to_string(), "tabs".to_string()),
-                ("keyword_case".to_string(), "Preserve".to_string()),
-                ("line_width".to_string(), "120".to_string()),
-                ("new_line_kind".to_string(), "Lf".to_string()),
-                ("sort_lists".to_string(), "true".to_string()),
-            ]
-        );
-        assert!(parsed.config.use_tabs);
-        assert_eq!(parsed.config.line_width, 120);
-        assert_eq!(parsed.config.new_line_kind, cmakefmt::NewLineKind::Lf);
-        assert_eq!(parsed.config.keyword_case, CaseStyle::Preserve);
-        assert!(parsed.config.sort_lists);
-    }
-
-    #[test]
-    fn test_parse_config_header_gersemi_removed_aliases_emit_diagnostics() {
-        let parsed = parse_config_header("{line_length: 120, newline: lf}");
-
-        assert_eq!(
-            parsed.config.line_width,
-            Configuration::default().line_width
-        );
-        assert_eq!(
-            parsed.config.new_line_kind,
-            Configuration::default().new_line_kind
-        );
-        assert!(parsed.overrides.is_empty());
-        assert_eq!(parsed.diagnostics.len(), 2);
-        assert_eq!(
-            parsed.diagnostics,
-            vec![
-                "Unknown property in configuration (line_length)".to_string(),
-                "Unknown property in configuration (newline)".to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn test_with_config_context_applies_only_for_custom_header() {
-        let config = Configuration::default();
-        let base =
-            "MISMATCH: tests/formatter/sample.in.cmake\n--- expected\n+++ actual\n@@ -1 +1 @@"
-                .to_string();
-        let without_header = with_config_context(base.clone(), false, &[], &config, &[]);
-        assert_eq!(without_header, base);
-
-        let with_header = with_config_context(
-            base.clone(),
-            true,
-            &[("lineWidth".to_string(), "100".to_string())],
-            &config,
-            &[],
-        );
-        assert!(with_header.contains("Header overrides: lineWidth=100"));
-        assert!(with_header.contains("Resolved config:"));
-        assert!(!with_header.contains("Header diagnostics:"));
-
-        let with_diagnostics = with_config_context(
-            base.clone(),
-            true,
-            &[("lineWidth".to_string(), "100".to_string())],
-            &config,
-            &["Unknown property in configuration (line_length)".to_string()],
-        );
-        assert!(
-            with_diagnostics
-                .contains("Header diagnostics: Unknown property in configuration (line_length)")
-        );
-        let overrides_index = with_header.find("Header overrides:").unwrap();
-        let diff_index = with_header.find("--- expected").unwrap();
-        assert!(overrides_index < diff_index);
-        assert!(with_header.starts_with("MISMATCH: tests/formatter/sample.in.cmake\n"));
     }
 }
