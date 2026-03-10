@@ -1,8 +1,8 @@
 use dprint_core::formatting::ir_helpers;
 use dprint_core::formatting::{PrintItems, Signal};
 
-use crate::configuration::Configuration;
-use crate::parser::ast::{File, FileElement};
+use crate::configuration::{Configuration, EndCommandArgs, apply_inline_overrides};
+use crate::parser::ast::{Argument, CommandInvocation, File, FileElement};
 
 use super::gen_command::gen_command;
 
@@ -34,12 +34,211 @@ fn is_block_closer(name: &str) -> bool {
     BLOCK_CLOSERS.iter().any(|&s| s.eq_ignore_ascii_case(name))
 }
 
+/// Prefix that marks an inline push directive: `# cmakefmt: push { ... }`
+const PUSH_PREFIX: &str = "# cmakefmt: push";
+/// Marker for an inline pop directive: `# cmakefmt: pop`
+const POP_MARKER: &str = "# cmakefmt: pop";
+/// Marker for a single-command suppression pragma: `# cmakefmt: skip`
+const SKIP_MARKER: &str = "# cmakefmt: skip";
+
+/// Try to parse a push directive from a comment. Returns the override body if found.
+fn parse_push_directive(comment: &str) -> Option<&str> {
+    let trimmed = comment.trim();
+    if !trimmed.starts_with(PUSH_PREFIX) {
+        return None;
+    }
+    let rest = trimmed[PUSH_PREFIX.len()..].trim();
+    if rest.starts_with('{') {
+        Some(rest)
+    } else {
+        None
+    }
+}
+
+/// Check if a comment is a pop directive.
+fn is_pop_directive(comment: &str) -> bool {
+    let trimmed = comment.trim();
+    trimmed == POP_MARKER
+}
+
+fn is_skip_directive(comment: &str) -> bool {
+    comment.trim() == SKIP_MARKER
+}
+
+fn is_ignored_command(command_name: &str, config: &Configuration) -> bool {
+    config
+        .ignore_commands
+        .iter()
+        .any(|configured_name| configured_name.eq_ignore_ascii_case(command_name))
+}
+
+fn command_source_slice<'a>(cmd: &CommandInvocation, source: &'a str) -> &'a str {
+    let line_start = source[..cmd.name.start]
+        .rfind('\n')
+        .map_or(0, |newline_index| newline_index + 1);
+
+    let mut line_end = cmd.close_paren.end;
+    while line_end < source.len() {
+        let byte = source.as_bytes()[line_end];
+        if byte == b'\n' || byte == b'\r' {
+            break;
+        }
+        line_end += 1;
+    }
+
+    &source[line_start..line_end]
+}
+
+/// Returns the corresponding opener name for a block closer.
+fn closer_to_opener(name: &str) -> Option<&'static str> {
+    let lower = name.to_ascii_lowercase();
+    match lower.as_str() {
+        "endif" => Some("if"),
+        "endforeach" => Some("foreach"),
+        "endwhile" => Some("while"),
+        "endfunction" => Some("function"),
+        "endmacro" => Some("macro"),
+        "endblock" => Some("block"),
+        _ => None,
+    }
+}
+
+/// Tracks block openers for endCommandArgs="match" during file traversal.
+/// Stores the opener's AST arguments so they can be copied to the closer.
+struct BlockStack {
+    /// Stack of (opener_name_lower, opener_arguments)
+    entries: Vec<(String, Vec<Argument>)>,
+}
+
+impl BlockStack {
+    fn new() -> Self {
+        Self {
+            entries: Vec::new(),
+        }
+    }
+
+    /// Push a new block opener onto the stack.
+    fn push_opener(&mut self, name: &str, args: Vec<Argument>) {
+        self.entries.push((name.to_ascii_lowercase(), args));
+    }
+
+    /// Pop the most recent block opener.
+    fn pop_opener(&mut self) {
+        self.entries.pop();
+    }
+
+    /// Get the opener args for a given closer command.
+    /// For block closers (endif, endforeach, etc.), returns the nearest matching opener's args.
+    /// For else(), returns the nearest unmatched if()'s args.
+    fn get_opener_args(&self, closer_name: &str) -> Option<&[Argument]> {
+        let lower = closer_name.to_ascii_lowercase();
+
+        if lower == "else" {
+            // else() matches the nearest unmatched if()
+            for entry in self.entries.iter().rev() {
+                if entry.0 == "if" {
+                    return Some(&entry.1);
+                }
+            }
+            None
+        } else if let Some(opener) = closer_to_opener(&lower) {
+            for entry in self.entries.iter().rev() {
+                if entry.0 == opener {
+                    return Some(&entry.1);
+                }
+            }
+            None
+        } else {
+            None
+        }
+    }
+}
+
+/// Apply endCommandArgs policy to a command invocation.
+/// Returns replacement arguments if the command should be modified, or None to keep as-is.
+fn apply_end_command_args(
+    cmd: &CommandInvocation,
+    source: &str,
+    config: &Configuration,
+    block_stack: &BlockStack,
+) -> Option<Vec<Argument>> {
+    let cmd_name = cmd.name.text(source);
+    let lower = cmd_name.to_ascii_lowercase();
+
+    // elseif is never affected by endCommandArgs — its condition is definitional
+    if lower == "elseif" {
+        return None;
+    }
+
+    // Only closers and else() are affected
+    if !is_block_closer(cmd_name) && lower != "else" {
+        return None;
+    }
+
+    match config.end_command_args {
+        EndCommandArgs::Remove => {
+            // Strip all arguments from closing commands and else()
+            if cmd.arguments.is_empty() {
+                None // Already empty
+            } else {
+                Some(Vec::new())
+            }
+        }
+        EndCommandArgs::Preserve => None,
+        EndCommandArgs::Match => {
+            // block()/endblock(): block() has keyword clauses, not a positional name.
+            // endblock() is always empty per §14.2.
+            if lower == "endblock" {
+                if cmd.arguments.is_empty() {
+                    return None;
+                }
+                return Some(Vec::new());
+            }
+
+            if let Some(opener_args) = block_stack.get_opener_args(cmd_name) {
+                if opener_args.is_empty() {
+                    // Opener has no args → closer should be empty too
+                    if cmd.arguments.is_empty() {
+                        None
+                    } else {
+                        Some(Vec::new())
+                    }
+                } else {
+                    // Replace closer's args with opener's args (cloned).
+                    // The Span values in the cloned arguments still point to valid positions
+                    // in the original source text.
+                    Some(opener_args.to_vec())
+                }
+            } else {
+                None
+            }
+        }
+    }
+}
+
+/// Filter out comments from arguments (keep only real arguments for matching).
+fn non_comment_args(args: &[Argument]) -> Vec<Argument> {
+    args.iter()
+        .filter(|a| !matches!(a, Argument::LineComment(_) | Argument::BracketComment(_)))
+        .cloned()
+        .collect()
+}
+
 pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems {
     let mut items = PrintItems::new();
     let mut pending_blanks: u8 = 0;
     let mut indent_level: u32 = 0;
     let mut first = true;
     let mut just_opened_block = false;
+
+    // Config stack for push/pop directives
+    let mut config_stack: Vec<Configuration> = Vec::new();
+    let mut current_config = config.clone();
+
+    // Block stack for endCommandArgs="match"
+    let mut block_stack = BlockStack::new();
+
+    let mut skip_next_command = false;
 
     // Strip trailing blank lines — the formatter adds its own trailing newline
     let elements: &[FileElement] = &file.elements;
@@ -53,7 +252,7 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
     for element in elements {
         if let FileElement::BlankLine = element {
             if !first && !just_opened_block {
-                pending_blanks = (pending_blanks + 1).min(config.max_blank_lines);
+                pending_blanks = (pending_blanks + 1).min(current_config.max_blank_lines);
             }
             continue;
         }
@@ -79,40 +278,105 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
                 let cmd_name = cmd.name.text(source);
 
                 // Adjust indent BEFORE emitting the command for middles/closers
+                let was_in_block = indent_level > 0;
                 if (is_block_closer(cmd_name) || is_block_middle(cmd_name)) && indent_level > 0 {
                     indent_level -= 1;
                 }
 
+                // Track block opener args for endCommandArgs="match"
+                if is_block_opener(cmd_name) {
+                    block_stack.push_opener(cmd_name, non_comment_args(&cmd.arguments));
+                }
+
+                let preserve_verbatim =
+                    skip_next_command || is_ignored_command(cmd_name, &current_config);
+                if skip_next_command {
+                    skip_next_command = false;
+                }
+
                 if !first {
                     items.push_signal(Signal::NewLine);
                 }
                 first = false;
 
-                // Emit indentation
-                let cmd_items = gen_command(cmd, source, config, indent_level);
-                if indent_level > 0 {
-                    items.extend(ir_helpers::with_indent_times(cmd_items, indent_level));
+                if preserve_verbatim {
+                    // Suppressed commands must remain byte-for-byte identical on their own line.
+                    let raw_command = command_source_slice(cmd, source);
+                    items.extend(ir_helpers::gen_from_raw_string(raw_command));
                 } else {
-                    items.extend(cmd_items);
+                    // Apply endCommandArgs policy — may replace the command's arguments
+                    let modified_cmd;
+                    let effective_cmd = if let Some(new_args) =
+                        apply_end_command_args(cmd, source, &current_config, &block_stack)
+                    {
+                        modified_cmd = CommandInvocation {
+                            name: cmd.name,
+                            open_paren: cmd.open_paren,
+                            close_paren: cmd.close_paren,
+                            arguments: new_args,
+                            trailing_comment: cmd.trailing_comment,
+                        };
+                        &modified_cmd
+                    } else {
+                        cmd
+                    };
+
+                    let cmd_items =
+                        gen_command(effective_cmd, source, &current_config, indent_level);
+                    if indent_level > 0 {
+                        items.extend(ir_helpers::with_indent_times(cmd_items, indent_level));
+                    } else {
+                        items.extend(cmd_items);
+                    }
                 }
 
                 // Adjust indent AFTER emitting for openers/middles
-                if is_block_opener(cmd_name) || is_block_middle(cmd_name) {
-                    indent_level += 1;
+                if is_block_opener(cmd_name) {
+                    if current_config.indent_block_body {
+                        indent_level += 1;
+                    }
                     just_opened_block = true;
+                } else if is_block_middle(cmd_name) && was_in_block {
+                    // Only re-indent after a middle if we were actually inside a block
+                    if current_config.indent_block_body {
+                        indent_level += 1;
+                    }
+                    just_opened_block = true;
+                }
+
+                // Pop block stack for closers
+                if is_block_closer(cmd_name) {
+                    block_stack.pop_opener();
                 }
             }
             FileElement::LineComment(span) => {
+                let comment_text = span.text(source).trim_end();
+
+                // Check for push/pop directives
+                if let Some(body) = parse_push_directive(comment_text) {
+                    config_stack.push(current_config.clone());
+                    current_config = apply_inline_overrides(&current_config, body);
+                }
+                let is_pop = is_pop_directive(comment_text);
+                let is_skip = is_skip_directive(comment_text);
                 if !first {
                     items.push_signal(Signal::NewLine);
                 }
                 first = false;
-                let comment_text = span.text(source).trim_end();
                 let comment_items = ir_helpers::gen_from_raw_string(comment_text);
                 if indent_level > 0 {
                     items.extend(ir_helpers::with_indent_times(comment_items, indent_level));
                 } else {
                     items.extend(comment_items);
+                }
+
+                if is_skip {
+                    skip_next_command = true;
+                }
+
+                // Pop config after emitting the pop comment
+                if is_pop && let Some(prev) = config_stack.pop() {
+                    current_config = prev;
                 }
             }
             FileElement::BracketComment(span) => {

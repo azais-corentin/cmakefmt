@@ -55,8 +55,8 @@
             "F001"
           ],
           "complexity": "large",
-          "status": "pending",
-          "passes": false,
+          "status": "done",
+          "passes": true,
           "notes": ""
         },
         {
@@ -82,8 +82,8 @@
             "F001"
           ],
           "complexity": "large",
-          "status": "pending",
-          "passes": false,
+          "status": "done",
+          "passes": true,
           "notes": ""
         }
       ]
@@ -115,8 +115,8 @@
             "F002"
           ],
           "complexity": "medium",
-          "status": "pending",
-          "passes": false,
+          "status": "done",
+          "passes": true,
           "notes": ""
         },
         {

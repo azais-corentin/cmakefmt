@@ -1,251 +1,179 @@
 use dprint_core::formatting::ir_helpers;
 use dprint_core::formatting::{PrintItems, Signal};
 
-use crate::configuration::{CaseStyle, Configuration};
+use crate::configuration::{CaseStyle, Configuration, SortArguments};
 use crate::parser::ast::{Argument, CommandInvocation};
 
-use super::signatures::{CommandKind, CommandSpec, KwType, lookup_command};
-
+use super::signatures::{CommandKind, CommandSpec, EMPTY_SPEC, KwType, lookup_command};
 // ---------------------------------------------------------------------------
-// Keywords recognized for casing normalization (superset of all command keywords)
+// Literal tokens: boolean values and comparison operators subject to literalCase.
+// Keyword-vs-literal precedence: if a token is a keyword for the current
+// command (per CommandSpec) or in customKeywords, keywordCase wins; otherwise
+// literalCase applies when the token matches this list (§4.4).
 // ---------------------------------------------------------------------------
-const KNOWN_KEYWORDS: &[&str] = &[
-    "PUBLIC",
-    "PRIVATE",
-    "INTERFACE",
-    "IMPORTED",
-    "ALIAS",
-    "TARGETS",
-    "FILES",
-    "DESTINATION",
-    "PERMISSIONS",
-    "CONFIGURATIONS",
-    "COMPONENT",
-    "NAMESPACE",
-    "EXPORT",
-    "COMMAND",
-    "DEPENDS",
-    "OUTPUT",
-    "WORKING_DIRECTORY",
-    "COMMENT",
-    "VERBATIM",
-    "APPEND",
-    "SOURCES",
-    "COMPILE_FLAGS",
-    "COMPILE_DEFINITIONS",
-    "COMPILE_OPTIONS",
-    "INCLUDE_DIRECTORIES",
-    "LINK_LIBRARIES",
-    "LINK_DIRECTORIES",
-    "LINK_OPTIONS",
-    "PROPERTIES",
-    "REQUIRED",
-    "COMPONENTS",
-    "OPTIONAL_COMPONENTS",
-    "CONFIG",
-    "MODULE",
-    "NO_MODULE",
-    "QUIET",
-    "NAMES",
-    "PATHS",
-    "HINTS",
-    "PATH_SUFFIXES",
-    "DOC",
-    "TYPE",
-    "RUNTIME",
-    "LIBRARY",
-    "ARCHIVE",
-    "FRAMEWORK",
-    "BUNDLE",
-    "OBJECTS",
-    "RESULT_VARIABLE",
-    "VERSION",
-    "DESCRIPTION",
-    "HOMEPAGE_URL",
-    "LANGUAGES",
-    "FATAL_ERROR",
-    "SEND_ERROR",
-    "WARNING",
-    "AUTHOR_WARNING",
-    "DEPRECATION",
-    "STATUS",
-    "VERBOSE",
-    "DEBUG",
-    "TRACE",
-    "CHECK_START",
-    "CHECK_PASS",
-    "CHECK_FAIL",
-    "BOOL",
-    "FILEPATH",
-    "PATH",
-    "STRING",
-    "INTERNAL",
-    "FORCE",
-    "PARENT_SCOPE",
-    "CACHE",
-    "STREQUAL",
-    "MATCHES",
-    "LESS",
-    "GREATER",
-    "EQUAL",
-    "LESS_EQUAL",
-    "GREATER_EQUAL",
-    "VERSION_LESS",
-    "VERSION_GREATER",
-    "VERSION_EQUAL",
-    "VERSION_LESS_EQUAL",
-    "VERSION_GREATER_EQUAL",
-    "AND",
-    "OR",
-    "NOT",
-    "DEFINED",
-    "IN",
-    "LISTS",
-    "ITEMS",
-    "RANGE",
-    "ZIP_LISTS",
-    "DIRECTORY",
-    "TARGET",
-    "TEST",
-    "PROPERTY",
-    "GLOBAL",
-    "VARIABLE",
-    "BRIEF_DOCS",
-    "FULL_DOCS",
-    "PROPAGATE",
-    "CONDITION",
+const LITERAL_TOKENS: &[&str] = &[
+    // Boolean values
     "ON",
     "OFF",
     "TRUE",
     "FALSE",
     "YES",
     "NO",
-    "LINK_PUBLIC",
-    "LINK_PRIVATE",
-    "LINK_INTERFACE_LIBRARIES",
-    "WIN32",
-    "MACOSX_BUNDLE",
-    "EXCLUDE_FROM_ALL",
-    "STATIC",
-    "SHARED",
-    "OBJECT",
-    "UNKNOWN",
-    "BEFORE",
-    "AFTER",
-    "SYSTEM",
-    "REUSE_FROM",
-    "NAME",
-    "COMMAND_EXPAND_LISTS",
-    "EXACT",
-    "NO_POLICY_SCOPE",
-    "NO_DEFAULT_PATH",
-    "NO_PACKAGE_ROOT_PATH",
-    "NO_CMAKE_PATH",
-    "NO_CMAKE_ENVIRONMENT_PATH",
-    "NO_SYSTEM_ENVIRONMENT_PATH",
-    "NO_CMAKE_PACKAGE_REGISTRY",
-    "NO_CMAKE_BUILDS_PATH",
-    "NO_CMAKE_SYSTEM_PATH",
-    "NO_CMAKE_SYSTEM_PACKAGE_REGISTRY",
-    "CMAKE_FIND_ROOT_PATH_BOTH",
-    "ONLY_CMAKE_FIND_ROOT_PATH",
-    "NO_CMAKE_FIND_ROOT_PATH",
-    "NO_CMAKE_INSTALL_PREFIX",
-    "NAMES_PER_DIR",
-    "ENV",
-    "VALIDATOR",
-    "OUTPUT_QUIET",
-    "ERROR_QUIET",
-    "OUTPUT_STRIP_TRAILING_WHITESPACE",
-    "ERROR_STRIP_TRAILING_WHITESPACE",
-    "ECHO_OUTPUT_VARIABLE",
-    "ECHO_ERROR_VARIABLE",
-    "TIMEOUT",
-    "RESULTS_VARIABLE",
-    "OUTPUT_VARIABLE",
-    "ERROR_VARIABLE",
-    "INPUT_FILE",
-    "OUTPUT_FILE",
-    "ERROR_FILE",
-    "COMMAND_ECHO",
-    "ENCODING",
-    "COMMAND_ERROR_IS_FATAL",
-    "INHERITED",
-    "INITIALIZE_FROM_VARIABLE",
-    "SET",
+    // Logical/condition operators
+    "AND",
+    "OR",
+    "NOT",
+    // Comparison operators
+    "STREQUAL",
+    "STRLESS",
+    "STRGREATER",
+    "STRLESS_EQUAL",
+    "STRGREATER_EQUAL",
+    "VERSION_EQUAL",
+    "VERSION_LESS",
+    "VERSION_GREATER",
+    "VERSION_LESS_EQUAL",
+    "VERSION_GREATER_EQUAL",
+    "EQUAL",
+    "LESS",
+    "GREATER",
+    "LESS_EQUAL",
+    "GREATER_EQUAL",
+    "MATCHES",
+    "IN_LIST",
+    // Unary test keywords used as literals when not in keyword position
     "DEFINED",
-    "BRIEF_DOCS",
-    "FULL_DOCS",
-    "INSTALL",
-    "PARSE_ARGV",
-    "OPTIONAL",
-    "RESULT_VARIABLE",
-    "COPYONLY",
-    "ESCAPE_QUOTES",
-    "@ONLY",
-    "NO_SOURCE_PERMISSIONS",
-    "USE_SOURCE_PERMISSIONS",
-    "NEWLINE_STYLE",
-    "FILE_PERMISSIONS",
-    "EXCLUDE_FROM_ALL",
-    "SCOPE_FOR",
-    "CLEAR",
-    "RENAME",
-    "SCRIPT",
-    "CODE",
-    "NAMELINK_COMPONENT",
-    "NAMELINK_ONLY",
-    "NAMELINK_SKIP",
-    "RUNTIME_DEPENDENCY_SET",
-    "EXPORT_LINK_INTERFACE_LIBRARIES",
-    "EXPORT_PACKAGE_DEPENDENCIES",
-    "PUBLIC_HEADER",
-    "PRIVATE_HEADER",
-    "RESOURCE",
-    "CXX_MODULES_BMI",
-    "INCLUDES",
-    "IMPORTED_RUNTIME_ARTIFACTS",
-    "RUNTIME_DEPENDENCIES",
-    "EXPORT_ANDROID_MK",
-    "PROGRAMS",
-    "MESSAGE_NEVER",
-    "FILES_MATCHING",
-    "EXCLUDE_EMPTY_DIRECTORIES",
-    "DIRECTORY_PERMISSIONS",
-    "ALL_COMPONENTS",
-    "LOWER_CASE_FILE",
-    "PACKAGE_INFO",
-    "APPENDIX",
-    "OUTPUT_FORMAT",
-    "ALL",
-    "JOB_POOL",
-    "JOB_SERVER_AWARE",
-    "MAIN_DEPENDENCY",
-    "DEPFILE",
-    "BYPRODUCTS",
-    "IMPLICIT_DEPENDS",
-    "PRE_BUILD",
-    "PRE_LINK",
-    "POST_BUILD",
-    "USES_TERMINAL",
-    "CODEGEN",
-    "DEPENDS_EXPLICIT_ONLY",
-    "REGULAR_EXPRESSION",
-    "TREE",
-    "PREFIX",
-    "URL",
-    "PURPOSE",
-    "DIRECTORY_PERMISSIONS",
-    "FILE_PERMISSIONS",
-    "PATTERN",
-    "REGEX",
-    "EXCLUDE",
-    "FILE_SET",
-    "BASE_DIRS",
-    "HEADERS",
-    "CXX_MODULES",
-    "CXX_MODULE_HEADER_UNITS",
+    "COMMAND",
+    "POLICY",
+    "TARGET",
+    "TEST",
+    "EXISTS",
+    "IS_DIRECTORY",
+    "IS_SYMLINK",
+    "IS_ABSOLUTE",
+    "IS_NEWER_THAN",
+    "PATH_EQUAL",
 ];
+
+/// Check if a token is in the literal list (case-insensitive).
+fn is_literal_token(text: &str) -> bool {
+    LITERAL_TOKENS
+        .iter()
+        .any(|&lit| lit.eq_ignore_ascii_case(text))
+}
+
+/// Apply literal casing per §4.4. Only applies to unquoted arguments that match
+/// the literal token list and are NOT classified as keywords for the current command.
+fn apply_literal_case(text: &str, style: CaseStyle) -> String {
+    match style {
+        CaseStyle::Lower => text.to_ascii_lowercase(),
+        CaseStyle::Upper => text.to_ascii_uppercase(),
+        CaseStyle::Preserve => text.to_string(),
+    }
+}
+
+/// Check if a token is a keyword in the context of a specific command.
+/// Uses the command's spec keywords + sections + customKeywords.
+/// For condition-syntax commands, condition operators count as keywords.
+fn is_keyword_for_command(
+    text: &str,
+    cmd_kind: Option<&CommandKind>,
+    config: &Configuration,
+) -> bool {
+    // customKeywords always take keyword precedence
+    if config
+        .custom_keywords
+        .iter()
+        .any(|k| k.eq_ignore_ascii_case(text))
+    {
+        return true;
+    }
+
+    match cmd_kind {
+        Some(CommandKind::Known(spec)) => is_in_command_spec(text, spec),
+        Some(CommandKind::ConditionSyntax) => {
+            // In condition-syntax commands, unary test ops, logical ops, and NOT
+            // are keywords. Comparison operators and booleans are NOT keywords
+            // (they get literalCase instead).
+            is_condition_keyword(text)
+        }
+        None => is_sort_group_keyword(text),
+    }
+}
+
+/// Check if a token appears as a keyword or section keyword in a CommandSpec.
+fn is_in_command_spec(text: &str, spec: &CommandSpec) -> bool {
+    // Check top-level keywords
+    for &(kw, _) in spec.keywords {
+        if kw.eq_ignore_ascii_case(text) {
+            return true;
+        }
+    }
+    // Check section keywords
+    for &(sec_kw, _, sub_kw) in spec.sections {
+        if sec_kw.eq_ignore_ascii_case(text) {
+            return true;
+        }
+        for &(sub, kw_type) in sub_kw {
+            if sub.eq_ignore_ascii_case(text) {
+                return true;
+            }
+            // Check group sub-keywords
+            if let KwType::Group(_, group_kw) = kw_type {
+                for &(gk, _) in group_kw {
+                    if gk.eq_ignore_ascii_case(text) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    // Check command_line_keywords, pair_keywords, property_keywords,
+    // flow_keywords, compound_keywords, once_keywords
+    for &kw in spec.command_line_keywords {
+        if kw.eq_ignore_ascii_case(text) {
+            return true;
+        }
+    }
+    for &kw in spec.pair_keywords {
+        if kw.eq_ignore_ascii_case(text) {
+            return true;
+        }
+    }
+    for &kw in spec.property_keywords {
+        if kw.eq_ignore_ascii_case(text) {
+            return true;
+        }
+    }
+    for &kw in spec.flow_keywords {
+        if kw.eq_ignore_ascii_case(text) {
+            return true;
+        }
+    }
+    for &(kw1, kw2) in spec.compound_keywords {
+        if kw1.eq_ignore_ascii_case(text) || kw2.eq_ignore_ascii_case(text) {
+            return true;
+        }
+    }
+    for &kw in spec.once_keywords {
+        if kw.eq_ignore_ascii_case(text) {
+            return true;
+        }
+    }
+    false
+}
+
+/// In condition-syntax commands (if, elseif, while), these tokens are treated
+/// as keywords and get keywordCase. Others (comparison operators, booleans)
+/// get literalCase instead.
+fn is_condition_keyword(text: &str) -> bool {
+    // Unary test operators: DEFINED, TARGET, COMMAND, POLICY, TEST, EXISTS, etc.
+    is_condition_unary_test(text)
+        // Logical operators: AND, OR
+        || is_logical_op(text)
+        // NOT operator
+        || is_not_op(text)
+}
 
 /// Commands where arguments after keywords can be sorted.
 const SORTABLE_COMMANDS: &[&str] = &[
@@ -253,11 +181,14 @@ const SORTABLE_COMMANDS: &[&str] = &[
     "target_include_directories",
     "target_compile_options",
     "target_compile_definitions",
+    "target_compile_features",
+    "target_link_options",
     "target_sources",
     "find_package",
+    "add_custom_command",
 ];
 
-/// Keywords that start a sortable group.
+/// Default keywords that start a sortable group (used when sortArguments=true).
 const SORT_GROUP_KEYWORDS: &[&str] = &[
     "PUBLIC",
     "PRIVATE",
@@ -265,10 +196,48 @@ const SORT_GROUP_KEYWORDS: &[&str] = &[
     "COMPONENTS",
     "OPTIONAL_COMPONENTS",
     "SOURCES",
+    "DEPENDS",
+    "BYPRODUCTS",
 ];
 
-fn is_known_keyword(text: &str) -> bool {
-    KNOWN_KEYWORDS.iter().any(|&k| k.eq_ignore_ascii_case(text))
+/// Canonical section ordering for sortKeywordSections per Appendix F.
+/// Commands not listed here get no reordering even when sortKeywordSections=true.
+fn canonical_section_order(cmd_name: &str) -> Option<&'static [&'static str]> {
+    let lower = cmd_name.to_ascii_lowercase();
+    match lower.as_str() {
+        "target_link_libraries" => Some(&[
+            "PUBLIC",
+            "INTERFACE",
+            "PRIVATE",
+            "LINK_PUBLIC",
+            "LINK_PRIVATE",
+            "LINK_INTERFACE_LIBRARIES",
+        ]),
+        "target_sources"
+        | "target_compile_definitions"
+        | "target_compile_options"
+        | "target_compile_features"
+        | "target_link_options"
+        | "target_include_directories" => Some(&["PUBLIC", "INTERFACE", "PRIVATE"]),
+        "install" => Some(&[
+            "ARCHIVE",
+            "LIBRARY",
+            "RUNTIME",
+            "OBJECTS",
+            "FRAMEWORK",
+            "BUNDLE",
+            "PUBLIC_HEADER",
+            "PRIVATE_HEADER",
+            "RESOURCE",
+            "FILE_SET",
+        ]),
+        "export" => Some(&["PACKAGE_DEPENDENCY", "TARGET", "VERSION"]),
+        _ => None,
+    }
+}
+
+fn is_known_keyword(text: &str, cmd_kind: Option<&CommandKind>, config: &Configuration) -> bool {
+    is_keyword_for_command(text, cmd_kind, config)
 }
 
 fn is_sortable_command(name: &str) -> bool {
@@ -291,28 +260,9 @@ fn apply_command_case(name: &str, style: CaseStyle) -> String {
     }
 }
 
-fn normalize_boolean_literal(text: &str) -> Option<&'static str> {
-    if text.eq_ignore_ascii_case("ON") {
-        Some("ON")
-    } else if text.eq_ignore_ascii_case("OFF") {
-        Some("OFF")
-    } else if text.eq_ignore_ascii_case("TRUE") {
-        Some("TRUE")
-    } else if text.eq_ignore_ascii_case("FALSE") {
-        Some("FALSE")
-    } else if text.eq_ignore_ascii_case("YES") {
-        Some("YES")
-    } else if text.eq_ignore_ascii_case("NO") {
-        Some("NO")
-    } else {
-        None
-    }
-}
-
+/// Apply keyword casing. Unlike the old version, this does NOT normalize booleans —
+/// boolean/literal casing is now handled separately via literalCase.
 fn apply_keyword_case(text: &str, style: CaseStyle) -> String {
-    if let Some(normalized) = normalize_boolean_literal(text) {
-        return normalized.to_string();
-    }
     match style {
         CaseStyle::Lower => text.to_ascii_lowercase(),
         CaseStyle::Upper => text.to_ascii_uppercase(),
@@ -341,8 +291,9 @@ pub fn gen_command(
     let formatted_name = apply_command_case(raw_name, config.command_case);
 
     // Check if this is an unknown command — preserve original formatting
+    // But if customKeywords is set, unknown commands may still have keyword recognition
     let cmd_kind = lookup_command(raw_name);
-    if cmd_kind.is_none() {
+    if cmd_kind.is_none() && config.custom_keywords.is_empty() {
         return gen_unknown_command(cmd, source, config, &formatted_name);
     }
 
@@ -355,25 +306,50 @@ pub fn gen_command(
     items.push_str_runtime_width_computed("(");
 
     // Build and optionally sort argument list
-    let mut arguments = build_argument_list(cmd, source, config);
-    if config.should_sort_arguments_for(raw_name) && is_sortable_command(raw_name) {
-        sort_argument_groups(&mut arguments);
+    let mut arguments = build_argument_list(cmd, source, config, cmd_kind.as_ref());
+    if should_sort_for_command(raw_name, config, cmd_kind.as_ref()) {
+        sort_argument_groups(&mut arguments, config, cmd_kind.as_ref());
+    }
+    // Sort keyword sections if enabled
+    if config.sort_keyword_sections
+        && let Some(order) = canonical_section_order(raw_name)
+    {
+        sort_keyword_sections_by_order(&mut arguments, order);
     }
 
     // Format arguments
+    let prefer_multiline = source[cmd.open_paren.end..cmd.close_paren.start].contains('\n');
     if !arguments.is_empty() {
-        let single_line = try_single_line(&formatted_name, &arguments, config, indent_depth);
+        let single_line = try_single_line(
+            &formatted_name,
+            &arguments,
+            config,
+            indent_depth,
+            prefer_multiline,
+        );
         if let Some(single) = single_line {
             items.extend(single);
         } else {
             match cmd_kind {
                 Some(CommandKind::ConditionSyntax) => {
-                    items.extend(gen_condition_multi_line(
-                        &formatted_name,
-                        &arguments,
-                        config,
-                        indent_depth,
-                    ));
+                    let is_condition_closer = matches!(
+                        formatted_name.to_ascii_lowercase().as_str(),
+                        "endif" | "endwhile" | "else"
+                    );
+                    if is_condition_closer {
+                        items.extend(gen_condition_closer_multi_line(
+                            &arguments,
+                            config,
+                            indent_depth,
+                        ));
+                    } else {
+                        items.extend(gen_condition_multi_line(
+                            &formatted_name,
+                            &arguments,
+                            config,
+                            indent_depth,
+                        ));
+                    }
                 }
                 Some(CommandKind::Known(spec)) => {
                     items.extend(gen_known_multi_line(
@@ -384,7 +360,16 @@ pub fn gen_command(
                         indent_depth,
                     ));
                 }
-                None => unreachable!("unknown commands handled above"),
+                None => {
+                    // Unknown command with customKeywords — use empty spec
+                    items.extend(gen_known_multi_line(
+                        &formatted_name,
+                        &arguments,
+                        &EMPTY_SPEC,
+                        config,
+                        indent_depth,
+                    ));
+                }
             }
         }
     }
@@ -535,25 +520,36 @@ struct FormattedArg {
     trailing_is_bracket: bool,
     is_paren_group: bool,
     paren_inner: Vec<FormattedArg>,
+    blank_line_before: bool,
 }
 
 fn build_argument_list(
     cmd: &CommandInvocation,
     source: &str,
     config: &Configuration,
+    cmd_kind: Option<&CommandKind>,
 ) -> Vec<FormattedArg> {
-    build_argument_list_from_args(&cmd.arguments, source, config)
+    build_argument_list_from_args(&cmd.arguments, source, config, cmd_kind)
 }
 
 fn build_argument_list_from_args(
     args: &[Argument],
     source: &str,
-    _config: &Configuration,
+    config: &Configuration,
+    cmd_kind: Option<&CommandKind>,
 ) -> Vec<FormattedArg> {
     let mut result = Vec::new();
     let mut i = 0;
 
     while i < args.len() {
+        let blank_line_before = if i > 0 {
+            let prev_end = arg_source_range(&args[i - 1]).1;
+            let (current_start, _) = arg_source_range(&args[i]);
+            has_blank_line_between(source, prev_end, current_start)
+        } else {
+            false
+        };
+
         match &args[i] {
             Argument::Bracket(span) => {
                 result.push(FormattedArg {
@@ -564,6 +560,7 @@ fn build_argument_list_from_args(
                     trailing_is_bracket: false,
                     is_paren_group: false,
                     paren_inner: Vec::new(),
+                    blank_line_before,
                 });
             }
             Argument::Quoted(span) => {
@@ -575,11 +572,12 @@ fn build_argument_list_from_args(
                     trailing_is_bracket: false,
                     is_paren_group: false,
                     paren_inner: Vec::new(),
+                    blank_line_before,
                 });
             }
             Argument::Unquoted(span) => {
                 let text = span.text(source);
-                let is_kw = is_known_keyword(text);
+                let is_kw = is_known_keyword(text, cmd_kind, config);
                 // Store original text — keyword casing is applied during formatting
                 // based on command context, not globally
                 result.push(FormattedArg {
@@ -590,10 +588,11 @@ fn build_argument_list_from_args(
                     trailing_is_bracket: false,
                     is_paren_group: false,
                     paren_inner: Vec::new(),
+                    blank_line_before,
                 });
             }
             Argument::ParenGroup { arguments } => {
-                let inner = build_argument_list_from_args(arguments, source, _config);
+                let inner = build_argument_list_from_args(arguments, source, config, cmd_kind);
                 result.push(FormattedArg {
                     text: String::new(),
                     is_keyword: false,
@@ -602,6 +601,7 @@ fn build_argument_list_from_args(
                     trailing_is_bracket: false,
                     is_paren_group: true,
                     paren_inner: inner,
+                    blank_line_before,
                 });
             }
             Argument::LineComment(span) => {
@@ -629,6 +629,7 @@ fn build_argument_list_from_args(
                     trailing_is_bracket: false,
                     is_paren_group: false,
                     paren_inner: Vec::new(),
+                    blank_line_before,
                 });
             }
             Argument::BracketComment(span) => {
@@ -657,6 +658,7 @@ fn build_argument_list_from_args(
                     trailing_is_bracket: false,
                     is_paren_group: false,
                     paren_inner: Vec::new(),
+                    blank_line_before,
                 });
             }
         }
@@ -712,6 +714,7 @@ fn try_single_line(
     args: &[FormattedArg],
     config: &Configuration,
     indent_depth: u32,
+    prefer_multiline: bool,
 ) -> Option<PrintItems> {
     // If any argument has a trailing line comment, force multi-line
     if args
@@ -734,14 +737,26 @@ fn try_single_line(
         return None;
     }
 
+    if prefer_multiline {
+        return None;
+    }
+
+    if config.blank_line_between_sections
+        && args.iter().filter(|arg| arg.is_keyword).take(2).count() >= 2
+    {
+        return None;
+    }
+
     // Calculate total width including file-level indentation
     let base_indent = indent_depth as usize * config.indent_width as usize;
     let close_overhead = 1; // ")"
-    // Apply keyword casing only to args at keyword positions (per command spec).
-    // For unknown commands, preserve original casing. For known commands,
-    // use the splitter to identify which args are keywords.
-    let args_text: Vec<String> = if let Some(cmd_kind) = lookup_command(cmd_name) {
-        match cmd_kind {
+    // Apply keyword/literal casing per §4.4:
+    // 1. Keyword tokens get keywordCase
+    // 2. Literal tokens (not keywords) get literalCase
+    // 3. Other tokens preserved as-is
+    let cmd_kind = lookup_command(cmd_name);
+    let args_text: Vec<String> = if let Some(ref ck) = cmd_kind {
+        match ck {
             CommandKind::Known(spec) => {
                 let keyword_positions = compute_keyword_positions(args, spec);
                 args.iter()
@@ -750,28 +765,54 @@ fn try_single_line(
                         let t = arg_inline_text(a);
                         if keyword_positions.contains(&i) {
                             apply_keyword_case(&t, config.keyword_case)
-                        } else if let Some(normalized) = normalize_boolean_literal(&t) {
-                            normalized.to_string()
+                        } else if !a.is_bracket
+                            && !t.starts_with('"')
+                            && !t.starts_with('#')
+                            && is_literal_token(&t)
+                        {
+                            apply_literal_case(&t, config.literal_case)
                         } else {
                             t
                         }
                     })
                     .collect()
             }
-            CommandKind::ConditionSyntax => {
-                // For condition syntax, apply casing to known keywords
-                args.iter()
-                    .map(|a| {
-                        let t = arg_inline_text(a);
-                        if a.is_keyword {
-                            apply_keyword_case(&t, config.keyword_case)
-                        } else {
-                            t
-                        }
-                    })
-                    .collect()
-            }
+            CommandKind::ConditionSyntax => args
+                .iter()
+                .map(|a| {
+                    let t = arg_inline_text(a);
+                    if a.is_keyword {
+                        apply_keyword_case(&t, config.keyword_case)
+                    } else if !a.is_bracket
+                        && !t.starts_with('"')
+                        && !t.starts_with('#')
+                        && is_literal_token(&t)
+                    {
+                        apply_literal_case(&t, config.literal_case)
+                    } else {
+                        t
+                    }
+                })
+                .collect(),
         }
+    } else if !config.custom_keywords.is_empty() {
+        // Unknown command with customKeywords: apply keyword/literal casing
+        args.iter()
+            .map(|a| {
+                let t = arg_inline_text(a);
+                if a.is_keyword {
+                    apply_keyword_case(&t, config.keyword_case)
+                } else if !a.is_bracket
+                    && !t.starts_with('"')
+                    && !t.starts_with('#')
+                    && is_literal_token(&t)
+                {
+                    apply_literal_case(&t, config.literal_case)
+                } else {
+                    t
+                }
+            })
+            .collect()
     } else {
         // Unknown command: preserve original casing
         args.iter().map(arg_inline_text).collect()
@@ -784,7 +825,11 @@ fn try_single_line(
         };
     let total = base_indent + cmd_name.len() + 1 + args_width + close_overhead;
 
-    if total >= config.line_width as usize {
+    let keep_condition_header_inline = matches!(
+        cmd_name.to_ascii_lowercase().as_str(),
+        "if" | "while" | "elseif"
+    );
+    if !keep_condition_header_inline && total >= config.line_width as usize {
         return None;
     }
 
@@ -911,10 +956,16 @@ fn compute_keyword_positions(args: &[FormattedArg], spec: &CommandSpec) -> Vec<u
                         {
                             // Inside a section: sub-keywords are not top-level keywords
                             if let Some(sub_kws) = section_sub_kws
-                                && is_text_in_keyword_list(&args[i].text, sub_kws)
+                                && let Some((_, sub_kw_type)) = sub_kws
+                                    .iter()
+                                    .find(|(name, _)| name.eq_ignore_ascii_case(&args[i].text))
                             {
                                 i += 1;
                                 val_count += 1;
+                                if matches!(sub_kw_type, KwType::OneValue) && i < args.len() {
+                                    i += 1;
+                                    val_count += 1;
+                                }
                                 continue;
                             }
                             // Compound keyword: skip continuation word
@@ -956,7 +1007,30 @@ fn get_keyword_type(arg: &FormattedArg, spec: &CommandSpec) -> Option<KwType> {
         .map(|(_, kt)| *kt)
 }
 
-/// Check if an argument is a section keyword.
+fn has_blank_line_between(source: &str, start: usize, end: usize) -> bool {
+    if end <= start {
+        return false;
+    }
+
+    source[start..end]
+        .chars()
+        .filter(|&ch| ch == '\n')
+        .take(2)
+        .count()
+        >= 2
+}
+
+fn is_custom_keyword(arg: &FormattedArg, config: &Configuration) -> bool {
+    if arg.is_paren_group || arg.text.starts_with('#') {
+        return false;
+    }
+
+    config
+        .custom_keywords
+        .iter()
+        .any(|kw| kw.eq_ignore_ascii_case(&arg.text))
+}
+
 fn is_section_keyword(arg: &FormattedArg, spec: &CommandSpec) -> bool {
     if arg.is_paren_group || arg.text.starts_with('#') {
         return false;
@@ -1001,6 +1075,7 @@ fn get_section_front_positional(keyword_text: &str, spec: &CommandSpec) -> usize
 fn split_arguments<'a>(
     args: &'a [FormattedArg],
     spec: &CommandSpec,
+    config: &Configuration,
 ) -> (
     Vec<&'a FormattedArg>,
     Vec<ArgGroup<'a>>,
@@ -1021,6 +1096,16 @@ fn split_arguments<'a>(
         front_pos.push(&main_args[i]);
         pos_count += 1;
         i += 1;
+    }
+
+    if i < main_args.len() && spec.keywords.is_empty() && spec.sections.is_empty() {
+        let has_keyword_sections = main_args[i..]
+            .iter()
+            .any(|arg| is_custom_keyword(arg, config) || arg.is_keyword);
+        if has_keyword_sections && !main_args[i].is_keyword {
+            front_pos.push(&main_args[i]);
+            i += 1;
+        }
     }
 
     // 2. Split remaining args by keywords
@@ -1050,6 +1135,14 @@ fn split_arguments<'a>(
 
         let kw_type = get_keyword_type(&main_args[i], spec);
         let is_section = is_section_keyword(&main_args[i], spec);
+        let is_custom = is_custom_keyword(&main_args[i], config);
+
+        let is_generic_keyword = main_args[i].is_keyword
+            && kw_type.is_none()
+            && !is_section
+            && !is_custom
+            && spec.keywords.is_empty()
+            && spec.sections.is_empty();
         // Skip once_keywords that have already been consumed
         let arg_upper = main_args[i].text.to_ascii_uppercase();
         let is_once = spec
@@ -1061,10 +1154,12 @@ fn split_arguments<'a>(
             i += 1;
             continue;
         }
-        if kw_type.is_some() || is_section {
+
+        if kw_type.is_some() || is_section || is_custom || is_generic_keyword {
             if is_once {
                 once_keyword_seen = true;
             }
+
             // Flush current positional group
             if !current_positional.is_empty() {
                 groups.push(ArgGroup::Positional(std::mem::take(
@@ -1125,7 +1220,34 @@ fn split_arguments<'a>(
                     // consumed as values (not treated as top-level keywords).
                     let section_sub_kws = get_section_keywords(&kw.text, spec);
                     while i < main_args.len() {
+                        if main_args[i].text.starts_with('#') {
+                            let next_index = i + 1;
+                            if next_index < main_args.len() {
+                                let next_kw = get_keyword_type(&main_args[next_index], spec)
+                                    .is_some()
+                                    || is_section_keyword(&main_args[next_index], spec)
+                                    || is_cmd_line_keyword(&main_args[next_index], spec)
+                                    || is_custom_keyword(&main_args[next_index], config)
+                                    || (main_args[next_index].is_keyword
+                                        && spec.keywords.is_empty()
+                                        && spec.sections.is_empty());
+                                if next_kw {
+                                    break;
+                                }
+                            }
+                        }
+
                         let inner_kw = get_keyword_type(&main_args[i], spec);
+                        let inner_is_section = is_section_keyword(&main_args[i], spec);
+                        let inner_is_cmd_line = is_cmd_line_keyword(&main_args[i], spec);
+                        let inner_is_custom = is_custom_keyword(&main_args[i], config);
+                        let inner_is_generic_keyword = main_args[i].is_keyword
+                            && inner_kw.is_none()
+                            && !inner_is_section
+                            && !inner_is_custom
+                            && spec.keywords.is_empty()
+                            && spec.sections.is_empty();
+
                         // Already-seen once_keywords are not treated as keywords
                         let inner_upper = main_args[i].text.to_ascii_uppercase();
                         let inner_is_blocked_once = inner_kw.is_some()
@@ -1134,10 +1256,13 @@ fn split_arguments<'a>(
                                 .iter()
                                 .any(|&ok| ok.eq_ignore_ascii_case(&inner_upper))
                             && once_keyword_seen;
+
                         if !inner_is_blocked_once
                             && (inner_kw.is_some()
-                                || is_section_keyword(&main_args[i], spec)
-                                || is_cmd_line_keyword(&main_args[i], spec))
+                                || inner_is_section
+                                || inner_is_cmd_line
+                                || inner_is_custom
+                                || inner_is_generic_keyword)
                         {
                             // Inside a section: sub-keywords are consumed as values
                             if let Some(sub_kws) = section_sub_kws
@@ -1194,7 +1319,7 @@ fn gen_known_multi_line(
     config: &Configuration,
     indent_depth: u32,
 ) -> PrintItems {
-    let (mut front_pos, mut groups, back_pos) = split_arguments(arguments, spec);
+    let (mut front_pos, mut groups, back_pos) = split_arguments(arguments, spec, config);
 
     // Keep option(<NAME> ... ) style in multiline layout for consistency with fixtures.
     if cmd_name.eq_ignore_ascii_case("option")
@@ -1209,15 +1334,40 @@ fn gen_known_multi_line(
         }
     }
 
+    // Keep install(TARGETS <name> ...) on the opening line for canonical install layout.
+    if cmd_name.eq_ignore_ascii_case("install")
+        && front_pos.is_empty()
+        && let Some(ArgGroup::Keyword { keyword, values }) = groups.first()
+        && keyword.text.eq_ignore_ascii_case("TARGETS")
+        && values.len() == 1
+        && let Some(first) = values.first().copied()
+    {
+        front_pos.push(keyword);
+        front_pos.push(first);
+        groups.remove(0);
+    }
+
     let base_indent = (indent_depth as usize + 1) * config.indent_width as usize;
 
     let mut inner = PrintItems::new();
     let mut last_on_opening_line = false;
 
+    let mut emitted_keyword_groups = 0usize;
+    let opening_line_count = if cmd_name.eq_ignore_ascii_case("install")
+        && front_pos.len() >= 2
+        && front_pos[0].text.eq_ignore_ascii_case("TARGETS")
+    {
+        2
+    } else {
+        1
+    };
     // Emit front positional args
     for (idx, arg) in front_pos.iter().enumerate() {
         if idx == 0 {
             // First positional arg always on same line as cmd(
+            last_on_opening_line = true;
+        } else if idx < opening_line_count {
+            inner.push_space();
             last_on_opening_line = true;
         } else {
             inner.push_signal(Signal::NewLine);
@@ -1226,7 +1376,7 @@ fn gen_known_multi_line(
         if arg.is_keyword {
             emit_kw_arg(&mut inner, arg, config);
         } else {
-            emit_arg(&mut inner, arg);
+            emit_arg(&mut inner, arg, config);
         }
     }
 
@@ -1240,12 +1390,24 @@ fn gen_known_multi_line(
                 } else {
                     for arg in args {
                         inner.push_signal(Signal::NewLine);
-                        emit_arg(&mut inner, arg);
+                        emit_arg(&mut inner, arg, config);
                     }
                 }
             }
             ArgGroup::Keyword { keyword, values } => {
-                emit_keyword_group(&mut inner, keyword, values, spec, config, base_indent);
+                if config.blank_line_between_sections && emitted_keyword_groups > 0 {
+                    inner.push_signal(Signal::NewLine);
+                }
+                emit_keyword_group(
+                    &mut inner,
+                    keyword,
+                    values,
+                    spec,
+                    config,
+                    base_indent,
+                    cmd_name.eq_ignore_ascii_case("export"),
+                );
+                emitted_keyword_groups += 1;
             }
             ArgGroup::CmdLineKeyword { keyword, value } => {
                 emit_cmd_line_keyword(&mut inner, keyword, *value, config, base_indent);
@@ -1260,7 +1422,7 @@ fn gen_known_multi_line(
         if arg.is_keyword || get_keyword_type(arg, spec).is_some() {
             emit_kw_arg(&mut inner, arg, config);
         } else {
-            emit_arg(&mut inner, arg);
+            emit_arg(&mut inner, arg, config);
         }
     }
     // Only add closing paren newline if the last item wasn't on the opening line
@@ -1279,6 +1441,7 @@ fn emit_keyword_group(
     spec: &CommandSpec,
     config: &Configuration,
     base_indent: usize,
+    allow_plain_section_inline: bool,
 ) {
     // Check for compound keyword (e.g., QUERY WINDOWS_REGISTRY)
     if let Some(first_val) = values.first()
@@ -1305,6 +1468,7 @@ fn emit_keyword_group(
             trailing_is_bracket: false,
             is_paren_group: false,
             paren_inner: Vec::new(),
+            blank_line_before: false,
         };
         emit_keyword_group(
             items,
@@ -1313,6 +1477,7 @@ fn emit_keyword_group(
             spec,
             config,
             base_indent,
+            allow_plain_section_inline,
         );
         return;
     }
@@ -1324,11 +1489,12 @@ fn emit_keyword_group(
         return;
     }
 
-    // Check if this is a section keyword with sub-keywords
+    // Check if this is a section keyword with sub-keywords.
     let section_kws = get_section_keywords(&keyword.text, spec);
     let section_front = get_section_front_positional(&keyword.text, spec);
+    let is_section_kw = section_kws.is_some();
     let has_section_tail_values =
-        section_kws.is_some() && section_front > 0 && values.len() > section_front;
+        is_section_kw && section_front > 0 && values.len() > section_front;
     // Try inline: keyword + all values on one line.
     let inline_width = compute_keyword_inline_width(keyword, values);
     let can_inline_content = !values.iter().any(|v| v.text.contains('\n'))
@@ -1344,7 +1510,12 @@ fn emit_keyword_group(
         0
     };
 
-    if base_indent + inline_width + inline_margin <= config.line_width as usize
+    let force_expanded_section_layout = keyword.is_keyword
+        && (config.blank_line_between_sections
+            || !matches!(config.sort_arguments, SortArguments::Disabled));
+    if !is_section_kw
+        && !force_expanded_section_layout
+        && base_indent + inline_width + inline_margin <= config.line_width as usize
         && can_inline_content
         && !has_section_tail_values
     {
@@ -1357,11 +1528,7 @@ fn emit_keyword_group(
         items.push_string(kw_text);
         for val in values {
             items.push_space();
-            let val_text = if val.is_keyword {
-                apply_keyword_case(&arg_inline_text(val), config.keyword_case)
-            } else {
-                arg_inline_text(val)
-            };
+            let val_text = arg_inline_text(val);
             items.extend(ir_helpers::gen_from_raw_string(&val_text));
         }
         if let Some(comment) = &keyword.trailing_comment {
@@ -1375,9 +1542,12 @@ fn emit_keyword_group(
     let sub_indent = base_indent + config.indent_width as usize;
     let values_only_width: usize =
         values.iter().map(|v| arg_width(v)).sum::<usize>() + values.len().saturating_sub(1);
-    if sub_indent + values_only_width <= config.line_width as usize
+    if !is_section_kw
+        && !force_expanded_section_layout
+        && sub_indent + values_only_width <= config.line_width as usize
         && can_inline_content
-        && values.len() > 1
+        && values.len() >= 2
+        && values.len() <= 2
         && !has_section_tail_values
     {
         items.push_signal(Signal::NewLine);
@@ -1388,11 +1558,7 @@ fn emit_keyword_group(
             if vi > 0 {
                 val_items.push_space();
             }
-            let val_text = if val.is_keyword {
-                apply_keyword_case(&arg_inline_text(val), config.keyword_case)
-            } else {
-                arg_inline_text(val)
-            };
+            let val_text = arg_inline_text(val);
             val_items.extend(ir_helpers::gen_from_raw_string(&val_text));
         }
         items.extend(ir_helpers::with_indent(val_items));
@@ -1403,6 +1569,33 @@ fn emit_keyword_group(
     items.push_signal(Signal::NewLine);
 
     if let Some(sub_kws) = section_kws {
+        let has_subkeyword_values = values
+            .iter()
+            .any(|v| is_text_in_keyword_list(&v.text, sub_kws));
+
+        // Export-style sections with plain values (no sub-keyword usage) can stay inline.
+        if allow_plain_section_inline
+            && !has_subkeyword_values
+            && base_indent + inline_width + inline_margin <= config.line_width as usize
+            && can_inline_content
+        {
+            let kw_text = if keyword.is_keyword {
+                apply_keyword_case(&keyword.text, config.keyword_case)
+            } else {
+                keyword.text.clone()
+            };
+            items.push_string(kw_text);
+            for val in values {
+                items.push_space();
+                items.extend(ir_helpers::gen_from_raw_string(&arg_inline_text(val)));
+            }
+            if let Some(comment) = &keyword.trailing_comment {
+                items.push_space();
+                items.extend(ir_helpers::gen_from_raw_string(comment));
+            }
+            return;
+        }
+
         // Section keyword with possible front positionals to keep inline.
         let sec_front = section_front;
         let leading_count = sec_front.min(values.len());
@@ -1467,11 +1660,11 @@ fn emit_keyword_group(
             let trailing_comments = &values[trailing_comment_start..];
 
             // Detect and format genex groups among the values.
-            emit_values_with_genex(items, regular_values);
+            emit_values_with_genex(items, regular_values, config);
 
             for comment in trailing_comments {
                 items.push_signal(Signal::NewLine);
-                emit_arg(items, comment);
+                emit_arg(items, comment, config);
             }
         }
     }
@@ -1558,7 +1751,7 @@ fn emit_property_values(
             // Only property name, no values
             let mut val_items = PrintItems::new();
             val_items.push_signal(Signal::NewLine);
-            emit_arg(&mut val_items, prop_name);
+            emit_arg(&mut val_items, prop_name, config);
             // Emit trailing comments at L2
             for pv in prop_values {
                 if pv.text.starts_with('#') {
@@ -1574,12 +1767,12 @@ fn emit_property_values(
     // Expanded: property name at L2, all values at L3
     let mut val_items = PrintItems::new();
     val_items.push_signal(Signal::NewLine);
-    emit_arg(&mut val_items, prop_name);
+    emit_arg(&mut val_items, prop_name, config);
 
     let mut sub = PrintItems::new();
     for pv in prop_values {
         sub.push_signal(Signal::NewLine);
-        emit_arg(&mut sub, pv);
+        emit_arg(&mut sub, pv, config);
     }
     val_items.extend(ir_helpers::with_indent(sub));
 
@@ -1727,7 +1920,7 @@ fn emit_pair_values(
         // Standalone comment (previous arg already had a trailing comment): emit at L2
         if key.text.starts_with('#') {
             val_items.push_signal(Signal::NewLine);
-            emit_arg(&mut val_items, key);
+            emit_arg(&mut val_items, key, config);
             i += 1;
             continue;
         }
@@ -1803,15 +1996,15 @@ fn emit_pair_values(
             } else {
                 // Key at L2 (with trailing comment inline if present)
                 val_items.push_signal(Signal::NewLine);
-                emit_arg(&mut val_items, key);
+                emit_arg(&mut val_items, key, config);
                 // Intervening comments + value at L3
                 let mut sub = PrintItems::new();
                 for comment in intervening_comments {
                     sub.push_signal(Signal::NewLine);
-                    emit_arg(&mut sub, comment);
+                    emit_arg(&mut sub, comment, config);
                 }
                 sub.push_signal(Signal::NewLine);
-                emit_arg(&mut sub, val);
+                emit_arg(&mut sub, val, config);
                 val_items.extend(ir_helpers::with_indent(sub));
             }
             i = val_idx + 1;
@@ -1819,10 +2012,10 @@ fn emit_pair_values(
             // Odd value (no pair partner): emit key alone at L2,
             // then intervening comments at L2
             val_items.push_signal(Signal::NewLine);
-            emit_arg(&mut val_items, key);
+            emit_arg(&mut val_items, key, config);
             for comment in intervening_comments {
                 val_items.push_signal(Signal::NewLine);
-                emit_arg(&mut val_items, comment);
+                emit_arg(&mut val_items, comment, config);
             }
             i = val_idx;
         }
@@ -1859,7 +2052,7 @@ fn emit_cmd_line_keyword(
         items.extend(ir_helpers::gen_from_raw_string(&keyword.text));
         let mut val_items = PrintItems::new();
         val_items.push_signal(Signal::NewLine);
-        emit_arg(&mut val_items, val);
+        emit_arg(&mut val_items, val, config);
         items.extend(ir_helpers::with_indent(val_items));
     } else {
         items.push_signal(Signal::NewLine);
@@ -1891,6 +2084,10 @@ fn emit_section_values_inner(
     let mut i = 0;
 
     while i < values.len() {
+        if values[i].blank_line_before {
+            val_items.push_signal(Signal::NewLine);
+        }
+
         // Check if this value is a sub-keyword
         let sub_kw_type = sub_keywords
             .iter()
@@ -1921,11 +2118,7 @@ fn emit_section_values_inner(
                                 config.keyword_case,
                             ));
                             val_items.push_space();
-                            let sv_text = if sv.is_keyword {
-                                apply_keyword_case(&arg_inline_text(sv), config.keyword_case)
-                            } else {
-                                arg_inline_text(sv)
-                            };
+                            let sv_text = arg_inline_text(sv);
                             val_items.extend(ir_helpers::gen_from_raw_string(&sv_text));
                             if let Some(comment) = &values[i].trailing_comment {
                                 val_items.push_space();
@@ -1941,7 +2134,7 @@ fn emit_section_values_inner(
                     if let Some(sv) = sub_val {
                         let mut sub_items = PrintItems::new();
                         sub_items.push_signal(Signal::NewLine);
-                        emit_arg(&mut sub_items, sv);
+                        emit_arg(&mut sub_items, sv, config);
                         val_items.extend(ir_helpers::with_indent(sub_items));
                         i += 2;
                     } else {
@@ -1967,7 +2160,7 @@ fn emit_section_values_inner(
                         kw.text.len() + sub_values.iter().map(|v| 1 + arg_width(v)).sum::<usize>();
                     if sub_indent + iw <= config.line_width as usize
                         && !sub_values.iter().any(|v| v.text.contains('\n'))
-                        && !sub_values.is_empty()
+                        && sub_values.len() == 1
                         && sub_values
                             .iter()
                             .all(|v| v.trailing_comment.is_none() || v.trailing_is_bracket)
@@ -1994,7 +2187,7 @@ fn emit_section_values_inner(
                         let mut sub_items = PrintItems::new();
                         for sv in &sub_values {
                             sub_items.push_signal(Signal::NewLine);
-                            emit_arg(&mut sub_items, sv);
+                            emit_arg(&mut sub_items, sv, config);
                         }
                         val_items.extend(ir_helpers::with_indent(sub_items));
                     }
@@ -2086,7 +2279,7 @@ fn emit_section_values_inner(
                                 group_sub_kws,
                                 config,
                                 sub_indent,
-                                false,
+                                true,
                             );
                         } else {
                             // Keyword alone on its line, everything else indented
@@ -2098,7 +2291,7 @@ fn emit_section_values_inner(
                                 group_sub_kws,
                                 config,
                                 sub_indent,
-                                false,
+                                true,
                             );
                         }
                     }
@@ -2107,7 +2300,7 @@ fn emit_section_values_inner(
         } else {
             // Regular value (not a sub-keyword)
             val_items.push_signal(Signal::NewLine);
-            emit_arg(&mut val_items, values[i]);
+            emit_arg(&mut val_items, values[i], config);
             i += 1;
         }
     }
@@ -2142,6 +2335,77 @@ fn compute_keyword_inline_width(keyword: &FormattedArg, values: &[&FormattedArg]
     }
     w
 }
+// ===========================================================================
+fn gen_condition_closer_multi_line(
+    args: &[FormattedArg],
+    config: &Configuration,
+    indent_depth: u32,
+) -> PrintItems {
+    let base_indent = (indent_depth as usize + 1) * config.indent_width as usize;
+    let mut inner = PrintItems::new();
+
+    let mut tokens: Vec<String> = Vec::with_capacity(args.len());
+    for arg in args {
+        let raw = arg_inline_text(arg);
+        let token = if arg.is_keyword {
+            apply_keyword_case(&raw, config.keyword_case)
+        } else if !arg.is_bracket
+            && !raw.starts_with('"')
+            && !raw.starts_with('#')
+            && is_literal_token(&raw)
+        {
+            apply_literal_case(&raw, config.literal_case)
+        } else {
+            raw
+        };
+        tokens.push(token);
+    }
+
+    if let Some(first) = tokens.first() {
+        inner.extend(ir_helpers::gen_from_raw_string(first));
+        let mut current_width = base_indent + first.len();
+        let mut i = 1;
+
+        while i < tokens.len() {
+            let token = &tokens[i];
+
+            if is_logical_op(token) && i + 1 < tokens.len() {
+                let next = &tokens[i + 1];
+                let needed = 1 + token.len() + 1 + next.len();
+                if current_width + needed > config.line_width as usize {
+                    inner.push_signal(Signal::NewLine);
+                    inner.extend(ir_helpers::gen_from_raw_string(token));
+                    inner.push_space();
+                    inner.extend(ir_helpers::gen_from_raw_string(next));
+                    current_width = base_indent + token.len() + 1 + next.len();
+                    i += 2;
+                    continue;
+                }
+            }
+
+            let needed = 1 + token.len();
+            if current_width + needed > config.line_width as usize {
+                inner.push_signal(Signal::NewLine);
+                inner.extend(ir_helpers::gen_from_raw_string(token));
+                current_width = base_indent + token.len();
+            } else {
+                inner.push_space();
+                inner.extend(ir_helpers::gen_from_raw_string(token));
+                current_width += needed;
+            }
+            i += 1;
+        }
+    }
+
+    if config.closing_paren_newline {
+        inner.push_signal(Signal::NewLine);
+    }
+
+    ir_helpers::with_indent(inner)
+}
+
+// ===========================================================================
+// Condition syntax multi-line formatting (for if/while/elseif)
 // ===========================================================================
 // Condition syntax multi-line formatting (for if/while/elseif)
 // ===========================================================================
@@ -2738,14 +3002,14 @@ fn has_line_comment_in_paren(arg: &FormattedArg) -> bool {
 // ===========================================================================
 
 /// Emit a single argument with its trailing comment.
-/// Text is emitted AS-IS, except unquoted boolean literals are normalized to uppercase.
-fn emit_arg(items: &mut PrintItems, arg: &FormattedArg) {
-    emit_arg_with_case(items, arg, None);
+/// Applies literalCase if the token is in the literal list and not a keyword.
+fn emit_arg(items: &mut PrintItems, arg: &FormattedArg, config: &Configuration) {
+    emit_arg_with_case(items, arg, None, config.literal_case);
 }
 
 /// Emit a keyword argument with keyword casing applied.
 fn emit_kw_arg(items: &mut PrintItems, arg: &FormattedArg, config: &Configuration) {
-    emit_arg_with_case(items, arg, Some(config.keyword_case));
+    emit_arg_with_case(items, arg, Some(config.keyword_case), config.literal_case);
 }
 
 /// Emit a sub-keyword with keyword casing applied unconditionally.
@@ -2764,25 +3028,35 @@ fn emit_sub_kw_arg(items: &mut PrintItems, arg: &FormattedArg, config: &Configur
     }
 }
 
-fn emit_arg_with_case(items: &mut PrintItems, arg: &FormattedArg, kw_case: Option<CaseStyle>) {
+fn emit_arg_with_case(
+    items: &mut PrintItems,
+    arg: &FormattedArg,
+    kw_case: Option<CaseStyle>,
+    literal_case: CaseStyle,
+) {
     if arg.is_paren_group {
         items.push_str_runtime_width_computed("(");
         if !arg.paren_inner.is_empty() {
-            let paren_items = gen_flat_paren_inner(&arg.paren_inner);
+            let paren_items = gen_flat_paren_inner(&arg.paren_inner, literal_case);
             items.extend(paren_items);
         }
         items.push_str_runtime_width_computed(")");
     } else if arg.is_bracket || arg.text.starts_with("#[") {
         emit_bracket_verbatim(items, &arg.text);
     } else {
-        let text = if let Some(normalized) = normalize_boolean_literal(&arg.text) {
-            normalized.to_string()
-        } else if let Some(case) = kw_case {
+        let text = if let Some(case) = kw_case {
             if arg.is_keyword {
                 apply_keyword_case(&arg.text, case)
+            } else if !arg.text.starts_with('"') && is_literal_token(&arg.text) {
+                apply_literal_case(&arg.text, literal_case)
             } else {
                 arg.text.clone()
             }
+        } else if !arg.text.starts_with('"')
+            && !arg.text.starts_with('#')
+            && is_literal_token(&arg.text)
+        {
+            apply_literal_case(&arg.text, literal_case)
         } else {
             arg.text.clone()
         };
@@ -2840,11 +3114,11 @@ fn emit_bracket_verbatim(items: &mut PrintItems, text: &str) {
     }
 }
 
-fn gen_flat_paren_inner(args: &[FormattedArg]) -> PrintItems {
+fn gen_flat_paren_inner(args: &[FormattedArg], literal_case: CaseStyle) -> PrintItems {
     let mut inner = PrintItems::new();
     for arg in args {
         inner.push_signal(Signal::NewLine);
-        emit_arg(&mut inner, arg);
+        emit_arg_with_case(&mut inner, arg, None, literal_case);
     }
     inner.push_signal(Signal::NewLine);
     ir_helpers::with_indent(inner)
@@ -2854,26 +3128,242 @@ fn gen_flat_paren_inner(args: &[FormattedArg]) -> PrintItems {
 // Sorting
 // ===========================================================================
 
-fn sort_argument_groups(args: &mut [FormattedArg]) {
+/// Determine if sorting should be applied for a given command.
+fn should_sort_for_command(
+    raw_name: &str,
+    config: &Configuration,
+    _cmd_kind: Option<&CommandKind>,
+) -> bool {
+    match &config.sort_arguments {
+        SortArguments::Disabled => false,
+        SortArguments::Enabled => {
+            // Sort if the command is sortable OR has customKeywords
+            is_sortable_command(raw_name) || !config.custom_keywords.is_empty()
+        }
+        SortArguments::CommandList(_keywords) => {
+            // Only sort sections whose keyword name is in the list
+            // Check that the command has at least one sortable keyword
+            is_sortable_command(raw_name) || !config.custom_keywords.is_empty()
+        }
+    }
+}
+
+fn sort_argument_groups(
+    args: &mut [FormattedArg],
+    config: &Configuration,
+    _cmd_kind: Option<&CommandKind>,
+) {
+    let selective_keywords: Option<&[String]> = match &config.sort_arguments {
+        SortArguments::CommandList(kws) => Some(kws),
+        _ => None,
+    };
+
     let mut i = 0;
     while i < args.len() {
-        if args[i].is_keyword && is_sort_group_keyword(&args[i].text) {
-            let start = i + 1;
-            let mut end = start;
-            while end < args.len() && !args[end].is_keyword {
-                end += 1;
+        if args[i].is_keyword {
+            let kw_text = &args[i].text;
+            // Determine if this keyword section is sortable
+            let sortable = if let Some(sel_kws) = selective_keywords {
+                // Only sort sections whose keyword name matches the list
+                sel_kws.iter().any(|k| k.eq_ignore_ascii_case(kw_text))
+            } else {
+                // sortArguments=true: sort if keyword is a known sort group keyword
+                // or a customKeyword
+                is_sort_group_keyword(kw_text)
+                    || config
+                        .custom_keywords
+                        .iter()
+                        .any(|k| k.eq_ignore_ascii_case(kw_text))
+            };
+
+            if sortable {
+                let start = i + 1;
+                let mut end = start;
+                // Find end of this section (next keyword or end of args)
+                // Respect sub-keyword structures: if a sub-keyword is encountered,
+                // don't sort past it
+                while end < args.len() && !args[end].is_keyword {
+                    end += 1;
+                }
+                if end > start {
+                    sort_section_with_groups(&mut args[start..end]);
+                }
+                i = end;
+            } else {
+                i += 1;
             }
-            if end > start {
-                args[start..end].sort_by(|a, b| {
-                    a.text
-                        .to_ascii_lowercase()
-                        .cmp(&b.text.to_ascii_lowercase())
-                });
-            }
-            i = end;
         } else {
             i += 1;
         }
+    }
+}
+
+/// Sort a section of arguments respecting group boundaries.
+/// A blank-line-preceded comment acts as a group boundary;
+/// sorting happens independently within each sub-group.
+fn sort_section_with_groups(args: &mut [FormattedArg]) {
+    #[derive(Clone)]
+    struct SortUnit {
+        key: String,
+        items: Vec<FormattedArg>,
+    }
+
+    fn is_standalone_comment(arg: &FormattedArg) -> bool {
+        arg.text.starts_with('#')
+    }
+
+    fn sort_segment(segment: &[FormattedArg]) -> Vec<FormattedArg> {
+        let mut units: Vec<SortUnit> = Vec::new();
+        let mut pending_comments: Vec<FormattedArg> = Vec::new();
+
+        for item in segment {
+            if is_standalone_comment(item) {
+                pending_comments.push(item.clone());
+                continue;
+            }
+
+            let mut grouped_items = Vec::new();
+            grouped_items.append(&mut pending_comments);
+            grouped_items.push(item.clone());
+
+            units.push(SortUnit {
+                key: item.text.to_ascii_lowercase(),
+                items: grouped_items,
+            });
+        }
+
+        if units.is_empty() {
+            return pending_comments;
+        }
+
+        let trailing_comments = pending_comments;
+        units.sort_by(|a, b| a.key.cmp(&b.key));
+
+        let mut sorted = Vec::new();
+        for unit in units {
+            sorted.extend(unit.items);
+        }
+        sorted.extend(trailing_comments);
+        sorted
+    }
+
+    let mut rebuilt: Vec<FormattedArg> = Vec::with_capacity(args.len());
+    let mut segment_start = 0;
+
+    for (index, arg) in args.iter().enumerate() {
+        let is_boundary = arg.text.starts_with('#') && arg.blank_line_before;
+        if !is_boundary {
+            continue;
+        }
+
+        if segment_start < index {
+            rebuilt.extend(sort_segment(&args[segment_start..index]));
+        }
+        rebuilt.push(arg.clone());
+        segment_start = index + 1;
+    }
+
+    if segment_start < args.len() {
+        rebuilt.extend(sort_segment(&args[segment_start..]));
+    }
+
+    debug_assert_eq!(rebuilt.len(), args.len());
+    args.clone_from_slice(&rebuilt);
+}
+
+/// Reorder entire keyword sections to match a canonical order.
+/// Positional arguments before the first keyword stay in place.
+fn sort_keyword_sections_by_order(args: &mut Vec<FormattedArg>, order: &[&str]) {
+    fn is_standalone_comment(arg: &FormattedArg) -> bool {
+        arg.text.starts_with('#')
+    }
+
+    fn is_order_keyword(arg: &FormattedArg, order: &[&str]) -> bool {
+        arg.is_keyword
+            && order
+                .iter()
+                .any(|&section| section.eq_ignore_ascii_case(&arg.text))
+    }
+
+    fn take_trailing_attached_comments(items: &mut Vec<FormattedArg>) -> Vec<FormattedArg> {
+        let mut trailing: Vec<FormattedArg> = Vec::new();
+        while let Some(last) = items.last() {
+            if !is_standalone_comment(last) || last.blank_line_before {
+                break;
+            }
+            trailing.push(items.pop().expect("last item must exist"));
+        }
+        trailing.reverse();
+        trailing
+    }
+
+    let first_kw = match args.iter().position(|a| is_order_keyword(a, order)) {
+        Some(pos) => pos,
+        None => return,
+    };
+
+    let mut positional_prefix: Vec<FormattedArg> = args[..first_kw].to_vec();
+    let mut pre_comments = take_trailing_attached_comments(&mut positional_prefix);
+
+    let mut sections: Vec<(String, Vec<FormattedArg>)> = Vec::new();
+    let mut index = first_kw;
+
+    while index < args.len() {
+        let mut section_pre_comments = std::mem::take(&mut pre_comments);
+        while index < args.len() && !is_order_keyword(&args[index], order) {
+            section_pre_comments.push(args[index].clone());
+            index += 1;
+        }
+
+        if index >= args.len() {
+            if let Some(last) = sections.last_mut() {
+                last.1.extend(section_pre_comments);
+            } else {
+                positional_prefix.extend(section_pre_comments);
+            }
+            break;
+        }
+
+        let keyword_name = args[index].text.to_ascii_uppercase();
+        let mut section_items = section_pre_comments;
+        section_items.push(args[index].clone());
+        index += 1;
+
+        // Keep nested keywords (for example DESTINATION inside install sections)
+        // in their current section; only canonical section keywords split sections.
+        while index < args.len() && !is_order_keyword(&args[index], order) {
+            section_items.push(args[index].clone());
+            index += 1;
+        }
+
+        pre_comments = take_trailing_attached_comments(&mut section_items);
+        sections.push((keyword_name, section_items));
+    }
+
+    if !pre_comments.is_empty() {
+        if let Some(last) = sections.last_mut() {
+            last.1.extend(pre_comments);
+        } else {
+            positional_prefix.extend(pre_comments);
+        }
+    }
+
+    sections.sort_by(|a, b| {
+        let pos_a = order
+            .iter()
+            .position(|&o| o.eq_ignore_ascii_case(&a.0))
+            .unwrap_or(usize::MAX);
+        let pos_b = order
+            .iter()
+            .position(|&o| o.eq_ignore_ascii_case(&b.0))
+            .unwrap_or(usize::MAX);
+        pos_a.cmp(&pos_b)
+    });
+
+    args.clear();
+    args.extend(positional_prefix);
+    for (_, section_args) in sections {
+        args.extend(section_args);
     }
 }
 
@@ -3246,16 +3736,31 @@ fn group_args_by_genex<'a>(args: &[&'a FormattedArg]) -> Vec<GenexArgGroup<'a>> 
 }
 
 /// Emit values under a regular keyword, detecting and formatting genex groups.
-fn emit_values_with_genex(items: &mut PrintItems, values: &[&FormattedArg]) {
+fn emit_values_with_genex(
+    items: &mut PrintItems,
+    values: &[&FormattedArg],
+    config: &Configuration,
+) {
     let groups = group_args_by_genex(values);
     let mut val_items = PrintItems::new();
     let mut first_group_is_inline_condition = false;
 
     for (group_idx, group) in groups.iter().enumerate() {
+        let group_has_leading_blank = match group {
+            GenexArgGroup::Single(arg) => arg.blank_line_before,
+            GenexArgGroup::Genex(args) => args
+                .first()
+                .map(|first| first.blank_line_before)
+                .unwrap_or(false),
+        };
+        if group_has_leading_blank {
+            val_items.push_signal(Signal::NewLine);
+        }
+
         match group {
             GenexArgGroup::Single(arg) => {
                 val_items.push_signal(Signal::NewLine);
-                emit_arg(&mut val_items, arg);
+                emit_arg(&mut val_items, arg, config);
             }
             GenexArgGroup::Genex(args) => {
                 // Join token texts with spaces to reconstruct the full genex.

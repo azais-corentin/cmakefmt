@@ -2095,6 +2095,22 @@ static REMOVE_DEFINITIONS_SPEC: CommandSpec = spec! {
     front: 0, back: 0, kw: NO_KW, sections: &[], cmd_line: &[], pair: &[],
 };
 
+/// Empty spec used for unknown commands that have customKeywords applied.
+/// Allows the formatting engine to treat them as keyword-structured commands.
+pub static EMPTY_SPEC: CommandSpec = CommandSpec {
+    front_positional: 0,
+    back_positional: 0,
+    keywords: &[],
+    sections: &[],
+    command_line_keywords: &[],
+    pair_keywords: &[],
+    property_keywords: &[],
+    flow_keywords: &[],
+    flow_positional: false,
+    compound_keywords: &[],
+    once_keywords: &[],
+};
+
 // ---------------------------------------------------------------------------
 // lookup_command
 // ---------------------------------------------------------------------------

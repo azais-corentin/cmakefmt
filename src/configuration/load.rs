@@ -138,7 +138,7 @@ fn load_from_toml_path_with_context(
         }
     };
 
-    let parsed = match toml::from_str::<toml::Table>(&contents) {
+    let mut parsed = match toml::from_str::<toml::Table>(&contents) {
         Ok(table) => table,
         Err(error) => {
             return ConfigLoadResult {
@@ -152,7 +152,7 @@ fn load_from_toml_path_with_context(
             };
         }
     };
-
+    resolve_ignore_patterns_for_toml_path(&mut parsed, path);
     resolution_stack.push(canonical_path);
     let base_result = match resolve_extends_path(path, &parsed) {
         Some(base_path) => {
@@ -218,6 +218,39 @@ fn apply_toml_table(loader: &mut Loader, parsed: toml::Table) {
     }
 }
 
+fn resolve_ignore_patterns_for_toml_path(parsed: &mut toml::Table, config_path: &Path) {
+    let raw_patterns = if let Some(patterns) = parsed.get_mut("ignorePatterns") {
+        patterns
+    } else if let Some(patterns) = parsed.get_mut("ignore_patterns") {
+        patterns
+    } else {
+        return;
+    };
+
+    let Some(patterns) = raw_patterns.as_array_mut() else {
+        return;
+    };
+
+    let config_dir = canonicalize_for_resolution(config_path)
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."));
+
+    for pattern in patterns {
+        let Some(raw_pattern) = pattern.as_str() else {
+            continue;
+        };
+
+        if Path::new(raw_pattern).is_absolute() {
+            continue;
+        }
+
+        let resolved_pattern = config_dir.join(raw_pattern);
+        let normalized = resolved_pattern.to_string_lossy().replace('\\', "/");
+        *pattern = toml::Value::String(normalized);
+    }
+}
+
 fn resolve_extends_path(config_path: &Path, parsed: &toml::Table) -> Option<PathBuf> {
     let raw_extends = parsed.get("extends")?.as_str()?;
     let extends_path = PathBuf::from(raw_extends);
@@ -277,6 +310,51 @@ fn discover_toml_path(start_path: &Path) -> Option<PathBuf> {
             return None;
         }
     }
+}
+
+/// Applies inline push-directive overrides on top of an existing configuration.
+/// The `header` string is the content between braces in a `# cmakefmt: push { ... }` comment.
+/// Supports both JSON (`"key": value`) and TOML-like (`key = value`) syntax.
+pub fn apply_inline_overrides(base: &Configuration, header: &str) -> Configuration {
+    let mut loader = Loader::new(base.clone());
+
+    // Try JSON first (quoted keys, colon separator)
+    if let Ok(map) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(header) {
+        for (key, value) in map {
+            loader.apply_raw_value(&key, RawConfigValue::Json(value));
+        }
+        return loader.finish().config;
+    }
+
+    // Fall back to TOML-like syntax (unquoted keys, `=` separator)
+    let content = header.trim();
+    let content = content.strip_prefix('{').unwrap_or(content);
+    let content = content.strip_suffix('}').unwrap_or(content);
+    let content = content.trim();
+
+    for pair_str in split_respecting_brackets(content) {
+        let pair_str = pair_str.trim();
+        if pair_str.is_empty() {
+            continue;
+        }
+        // Support both `key = value` and `key: value`
+        let (key, value) = if let Some((k, v)) = pair_str.split_once('=') {
+            (k.trim(), v.trim())
+        } else if let Some((k, v)) = pair_str.split_once(':') {
+            (k.trim(), v.trim())
+        } else {
+            continue;
+        };
+        let key = key.trim_matches('"');
+        // Try to parse value as JSON for structured values (arrays, booleans, numbers)
+        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(value) {
+            loader.apply_raw_value(key, RawConfigValue::Json(json_val));
+        } else {
+            loader.apply_raw_value(key, RawConfigValue::Text(value.to_string()));
+        }
+    }
+
+    loader.finish().config
 }
 
 /// Parses a single-line fixture/header override payload (JSON or gersemi style).
@@ -1994,6 +2072,42 @@ spaceBeforeParen = true
             .get("message")
             .expect("expected message override");
         assert_eq!(message_override.command_case, Some(CaseStyle::Upper));
+    }
+
+    #[test]
+    fn rebases_ignore_patterns_relative_to_declaring_config_file() {
+        let config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/formatter/16_suppression/03_ignore_patterns/.cmakefmt.toml");
+
+        let result = load_from_toml_path(&config_path);
+        assert!(result.diagnostics.is_empty());
+        assert_eq!(result.config.ignore_patterns.len(), 1);
+
+        let normalized = result.config.ignore_patterns[0].replace('\\', "/");
+        assert!(
+            normalized
+                .ends_with("/tests/formatter/16_suppression/03_ignore_patterns/ignored/*.cmake"),
+            "unexpected rebased ignore pattern: {normalized}"
+        );
+    }
+
+    #[test]
+    fn keeps_inherited_ignore_patterns_relative_to_base_config() {
+        let config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+            "tests/formatter/16_suppression/03_ignore_patterns/inherited_relative/child/.cmakefmt.toml",
+        );
+
+        let result = load_from_toml_path(&config_path);
+        assert!(result.diagnostics.is_empty());
+        assert_eq!(result.config.ignore_patterns.len(), 1);
+
+        let normalized = result.config.ignore_patterns[0].replace('\\', "/");
+        assert!(
+            normalized.ends_with(
+                "/tests/formatter/16_suppression/03_ignore_patterns/inherited_relative/base/vendor/*.cmake"
+            ),
+            "unexpected inherited ignore pattern: {normalized}"
+        );
     }
 
     #[test]

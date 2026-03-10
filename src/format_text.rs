@@ -2,19 +2,42 @@ use std::path::Path;
 
 use anyhow::Result;
 use dprint_core::formatting::{self, PrintOptions};
+use glob::Pattern;
 
 use crate::configuration::{Configuration, NewLineKind};
 use crate::generation::gen_file;
 use crate::parser;
 
-pub fn format_text(_path: &Path, input: &str, config: &Configuration) -> Result<Option<String>> {
+pub fn format_text(path: &Path, input: &str, config: &Configuration) -> Result<Option<String>> {
+    if should_bypass_formatting(path, config) {
+        return Ok(None);
+    }
+
     let text = strip_bom(input);
     let result = format_inner(text, config)?;
-    if result == text {
+    if result == input {
         Ok(None)
     } else {
         Ok(Some(result))
     }
+}
+
+fn should_bypass_formatting(path: &Path, config: &Configuration) -> bool {
+    config.disable_formatting || should_ignore_path(path, &config.ignore_patterns)
+}
+
+fn should_ignore_path(path: &Path, ignore_patterns: &[String]) -> bool {
+    if ignore_patterns.is_empty() {
+        return false;
+    }
+
+    let canonical_path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+
+    ignore_patterns.iter().any(|pattern| {
+        Pattern::new(pattern).is_ok_and(|compiled| {
+            compiled.matches_path(path) || compiled.matches_path(&canonical_path)
+        })
+    })
 }
 
 fn format_inner(text: &str, config: &Configuration) -> Result<String> {
