@@ -1,4 +1,4 @@
-.codex/
+.omp/
 .devenv*
 .direnv
 .pre-commit-config.yaml
