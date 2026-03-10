@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use cmakefmt::{Configuration, format_text};
+use cmakefmt::{Configuration, format_text, load_from_toml_path};
 
 #[test]
 fn test_formatter_files() {
@@ -64,8 +64,8 @@ fn test_formatter_files() {
 
         let input = std::fs::read_to_string(in_path).unwrap();
         let expected = std::fs::read_to_string(&out_path).unwrap();
-        let config = Configuration::default();
-        let cmake_path = Path::new("CMakeLists.txt");
+        let config = load_fixture_config(in_path);
+        let cmake_path = in_path.as_path();
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             format_text(cmake_path, &input, &config)
@@ -159,6 +159,13 @@ fn test_formatter_files() {
     assert!(count > 0, "No formatter test files found");
 
     eprintln!("{count} formatter tests passed");
+}
+
+/// Loads configuration from a `.cmakefmt.toml` file in the same directory as the fixture,
+/// falling back to default configuration when no config file is present.
+fn load_fixture_config(in_path: &Path) -> Configuration {
+    let result = load_from_toml_path(in_path);
+    result.config
 }
 
 fn walk_cmake_files(dir: &Path, suffix: &str) -> Vec<PathBuf> {

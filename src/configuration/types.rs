@@ -274,6 +274,105 @@ impl Configuration {
     pub fn effective_comment_width(&self) -> u32 {
         self.comment_width.unwrap_or(self.line_width)
     }
+
+    /// Returns an effective configuration for a specific command, with per-command
+    /// overrides applied on top of the global configuration.
+    ///
+    /// Per-command entries override the global config field-by-field: any `Some` value
+    /// in the `CommandConfiguration` replaces the corresponding global value.
+    pub fn effective_config_for_command(&self, command_name: &str) -> Configuration {
+        let key = command_name.to_ascii_lowercase();
+        let overrides = match self.per_command_config.get(&key) {
+            Some(cmd_cfg) => cmd_cfg,
+            None => return self.clone(),
+        };
+
+        let mut cfg = self.clone();
+        if let Some(v) = overrides.line_width {
+            cfg.line_width = v;
+        }
+        if let Some(v) = overrides.wrap_style {
+            cfg.wrap_style = v;
+        }
+        if let Some(v) = overrides.first_arg_same_line {
+            cfg.first_arg_same_line = v;
+        }
+        if let Some(v) = overrides.wrap_arg_threshold {
+            cfg.wrap_arg_threshold = v;
+        }
+        if let Some(v) = overrides.magic_trailing_newline {
+            cfg.magic_trailing_newline = v;
+        }
+        if let Some(v) = overrides.indent_width {
+            cfg.indent_width = v;
+            cfg.use_tabs = matches!(overrides.indent_style, Some(IndentStyle::Tab));
+        }
+        if let Some(v) = overrides.indent_style {
+            cfg.indent_style = v;
+            cfg.use_tabs = matches!(v, IndentStyle::Tab);
+        }
+        if let Some(v) = overrides.continuation_indent_width {
+            cfg.continuation_indent_width = Some(v);
+        }
+        if let Some(v) = overrides.genex_indent_width {
+            cfg.genex_indent_width = Some(v);
+        }
+        if let Some(v) = overrides.command_case {
+            cfg.command_case = v;
+        }
+        if let Some(v) = overrides.keyword_case {
+            cfg.keyword_case = v;
+        }
+        if let Some(ref v) = overrides.custom_keywords {
+            cfg.custom_keywords = v.clone();
+        }
+        if let Some(v) = overrides.literal_case {
+            cfg.literal_case = v;
+        }
+        if let Some(v) = overrides.closing_paren_newline {
+            cfg.closing_paren_newline = v;
+        }
+        if let Some(ref v) = overrides.space_before_paren {
+            cfg.space_before_paren = v.clone();
+        }
+        if let Some(v) = overrides.space_inside_paren {
+            cfg.space_inside_paren = v;
+        }
+        if let Some(v) = overrides.comment_preservation {
+            cfg.comment_preservation = v;
+        }
+        if let Some(v) = overrides.comment_width {
+            cfg.comment_width = Some(v);
+        }
+        if let Some(v) = overrides.align_trailing_comments {
+            cfg.align_trailing_comments = v;
+        }
+        if let Some(v) = overrides.comment_gap {
+            cfg.comment_gap = v;
+        }
+        if let Some(v) = overrides.align_property_values {
+            cfg.align_property_values = v;
+        }
+        if let Some(v) = overrides.align_consecutive_set {
+            cfg.align_consecutive_set = v;
+        }
+        if let Some(v) = overrides.align_arg_groups {
+            cfg.align_arg_groups = v;
+        }
+        if let Some(v) = overrides.genex_wrap {
+            cfg.genex_wrap = v;
+        }
+        if let Some(v) = overrides.genex_closing_angle_newline {
+            cfg.genex_closing_angle_newline = v;
+        }
+        if let Some(ref v) = overrides.sort_arguments {
+            cfg.sort_arguments = v.clone();
+        }
+        if let Some(v) = overrides.sort_keyword_sections {
+            cfg.sort_keyword_sections = v;
+        }
+        cfg
+    }
 }
 
 impl fmt::Display for NewLineKind {

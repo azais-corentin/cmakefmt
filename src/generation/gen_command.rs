@@ -330,10 +330,14 @@ pub fn gen_command(
     config: &Configuration,
     indent_depth: u32,
 ) -> PrintItems {
+    // Resolve per-command overrides before any formatting decisions
+    let raw_name = cmd.name.text(source);
+    let effective = config.effective_config_for_command(raw_name);
+    let config = &effective;
+
     let mut items = PrintItems::new();
 
     // Command name with casing
-    let raw_name = cmd.name.text(source);
     let formatted_name = apply_command_case(raw_name, config.command_case);
 
     // Check if this is an unknown command — preserve original formatting
