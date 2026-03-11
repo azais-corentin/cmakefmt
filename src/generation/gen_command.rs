@@ -523,7 +523,7 @@ pub fn gen_command(
 
     // Trailing comment
     if let Some(comment_span) = &cmd.trailing_comment {
-        items.push_space();
+        push_comment_gap(&mut items, config.comment_gap);
         items.push_string(comment_span.text(source).to_string());
     }
 
@@ -577,7 +577,7 @@ fn gen_unknown_command(
     items.push_str_runtime_width_computed(")");
 
     if let Some(comment_span) = &cmd.trailing_comment {
-        items.push_space();
+        push_comment_gap(&mut items, config.comment_gap);
         items.push_string(comment_span.text(source).to_string());
     }
 
@@ -666,6 +666,9 @@ struct FormattedArg {
     is_paren_group: bool,
     paren_inner: Vec<FormattedArg>,
     blank_line_before: bool,
+    /// Whether a source newline separates this arg from the previous one.
+    /// Used by `alignArgGroups` to preserve source-level token grouping.
+    new_line_before: bool,
 }
 
 fn build_argument_list(
@@ -694,6 +697,13 @@ fn build_argument_list_from_args(
         } else {
             false
         };
+        let new_line_before = if i > 0 {
+            let prev_end = arg_source_range(&args[i - 1]).1;
+            let (current_start, _) = arg_source_range(&args[i]);
+            source[prev_end..current_start].contains('\n')
+        } else {
+            false
+        };
 
         match &args[i] {
             Argument::Bracket(span) => {
@@ -706,6 +716,7 @@ fn build_argument_list_from_args(
                     is_paren_group: false,
                     paren_inner: Vec::new(),
                     blank_line_before,
+                    new_line_before,
                 });
             }
             Argument::Quoted(span) => {
@@ -718,6 +729,7 @@ fn build_argument_list_from_args(
                     is_paren_group: false,
                     paren_inner: Vec::new(),
                     blank_line_before,
+                    new_line_before,
                 });
             }
             Argument::Unquoted(span) => {
@@ -734,6 +746,7 @@ fn build_argument_list_from_args(
                     is_paren_group: false,
                     paren_inner: Vec::new(),
                     blank_line_before,
+                    new_line_before,
                 });
             }
             Argument::ParenGroup { arguments } => {
@@ -747,6 +760,7 @@ fn build_argument_list_from_args(
                     is_paren_group: true,
                     paren_inner: inner,
                     blank_line_before,
+                    new_line_before,
                 });
             }
             Argument::LineComment(span) => {
@@ -775,6 +789,7 @@ fn build_argument_list_from_args(
                     is_paren_group: false,
                     paren_inner: Vec::new(),
                     blank_line_before,
+                    new_line_before,
                 });
             }
             Argument::BracketComment(span) => {
@@ -804,6 +819,7 @@ fn build_argument_list_from_args(
                     is_paren_group: false,
                     paren_inner: Vec::new(),
                     blank_line_before,
+                    new_line_before,
                 });
             }
         }
@@ -1044,7 +1060,7 @@ fn try_single_line(
 // ===========================================================================
 
 /// A group of arguments produced by keyword splitting.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum ArgGroup<'a> {
     /// Positional arguments (not associated with a keyword).
     Positional(Vec<&'a FormattedArg>),
@@ -1176,9 +1192,27 @@ fn compute_keyword_positions(args: &[FormattedArg], spec: &CommandSpec) -> Vec<u
                         val_count += 1;
                     }
                 }
-                KwType::Group(..) => {
-                    // Group keywords only appear in section sub-keywords, never in top-level kw.
-                    unreachable!("Group keyword in top-level argument classification");
+                KwType::Group(front_count, _group_sub_kws) => {
+                    // Group keyword (e.g., FILE_SET <name> TYPE ... BASE_DIRS ... FILES ...)
+                    // Consume the keyword's front positional args, then consume all
+                    // remaining args until the next outer keyword or section keyword.
+                    i += 1;
+                    let mut consumed = 0usize;
+                    while consumed < front_count && i < args.len() {
+                        i += 1;
+                        consumed += 1;
+                    }
+                    while i < args.len() {
+                        let inner_kw = get_keyword_type(&args[i], spec);
+                        let inner_is_section = is_section_keyword(&args[i], spec);
+                        // Another top-level keyword (including another Group) breaks the group.
+                        // Sub-keywords (TYPE, BASE_DIRS, etc.) are NOT in the outer spec,
+                        // so they are consumed as values.
+                        if inner_kw.is_some() || inner_is_section {
+                            break;
+                        }
+                        i += 1;
+                    }
                 }
             }
         } else {
@@ -1486,8 +1520,44 @@ fn split_arguments<'a>(
                         values,
                     });
                 }
-                KwType::Group(..) => {
-                    unreachable!("Group keyword in top-level argument classification");
+                KwType::Group(front_count, _group_sub_kws) => {
+                    // Group keyword: consume front positional args + all remaining
+                    // args until the next outer keyword/section.
+                    let kw = &main_args[i];
+                    let mut values: Vec<&'a FormattedArg> = Vec::new();
+                    i += 1;
+                    let mut consumed = 0usize;
+                    while consumed < front_count && i < main_args.len() {
+                        values.push(&main_args[i]);
+                        i += 1;
+                        consumed += 1;
+                    }
+                    while i < main_args.len() {
+                        let inner_kw = get_keyword_type(&main_args[i], spec);
+                        let inner_is_section = is_section_keyword(&main_args[i], spec);
+                        let inner_is_cmd_line = is_cmd_line_keyword(&main_args[i], spec);
+                        let inner_is_custom = is_custom_keyword(&main_args[i], config);
+                        let inner_is_generic_keyword = main_args[i].is_keyword
+                            && inner_kw.is_none()
+                            && !inner_is_section
+                            && !inner_is_custom
+                            && spec.keywords.is_empty()
+                            && spec.sections.is_empty();
+                        if inner_kw.is_some()
+                            || inner_is_section
+                            || inner_is_cmd_line
+                            || inner_is_custom
+                            || inner_is_generic_keyword
+                        {
+                            break;
+                        }
+                        values.push(&main_args[i]);
+                        i += 1;
+                    }
+                    groups.push(ArgGroup::Keyword {
+                        keyword: kw,
+                        values,
+                    });
                 }
             }
         } else {
@@ -1502,6 +1572,356 @@ fn split_arguments<'a>(
     }
 
     (front_pos, groups, back_pos)
+}
+
+/// Flatten non-section keyword groups into positional streams for column alignment.
+///
+/// When `alignArgGroups` is enabled, each non-section, non-group
+/// `Keyword { kw, values }` group is converted to a `Positional` group containing
+/// `[kw, ...values]`. If the immediately preceding group is an original `Positional`
+/// (not one created by keyword flattening), its args are prepended to the keyword's
+/// new positional group. Section keywords, group keywords, and `CmdLineKeyword`
+/// groups are preserved as-is.
+fn flatten_keyword_groups_for_alignment<'a>(
+    groups: &[ArgGroup<'a>],
+    spec: &CommandSpec,
+    config: &Configuration,
+) -> Vec<ArgGroup<'a>> {
+    let mut result: Vec<ArgGroup<'a>> = Vec::new();
+    // Track whether the last entry in result was an original Positional
+    // (from the input) vs one synthesized from keyword flattening.
+    let mut last_is_original_positional = false;
+
+    for group in groups {
+        match group {
+            ArgGroup::Keyword { keyword, values } => {
+                let is_section =
+                    is_section_keyword(keyword, spec) || is_custom_keyword(keyword, config);
+                let is_group_keyword =
+                    matches!(get_keyword_type(keyword, spec), Some(KwType::Group(..)));
+                if is_section || is_group_keyword {
+                    result.push(ArgGroup::Keyword {
+                        keyword,
+                        values: values.clone(),
+                    });
+                    last_is_original_positional = false;
+                } else {
+                    // Convert keyword + values into a positional line.
+                    let mut merged = vec![*keyword];
+                    merged.extend(values.iter().copied());
+                    // If the preceding entry is an original positional group,
+                    // absorb it: prepend its args so the positional + keyword
+                    // tokens form one line (e.g., `MyLib RUNTIME DEST bin`).
+                    if last_is_original_positional {
+                        if let Some(ArgGroup::Positional(prev)) = result.last_mut() {
+                            let mut combined = std::mem::take(prev);
+                            combined.extend(merged);
+                            *prev = combined;
+                        }
+                    } else {
+                        result.push(ArgGroup::Positional(merged));
+                    }
+                    last_is_original_positional = false;
+                }
+            }
+            ArgGroup::Positional(args) => {
+                result.push(ArgGroup::Positional(args.clone()));
+                last_is_original_positional = true;
+            }
+            ArgGroup::CmdLineKeyword { keyword, value } => {
+                result.push(ArgGroup::CmdLineKeyword {
+                    keyword,
+                    value: *value,
+                });
+                last_is_original_positional = false;
+            }
+        }
+    }
+
+    result
+}
+
+fn flatten_target_sources_sections_for_alignment<'a>(
+    cmd_name: &str,
+    groups: &[ArgGroup<'a>],
+    spec: &CommandSpec,
+) -> Option<Vec<ArgGroup<'a>>> {
+    if !cmd_name.eq_ignore_ascii_case("target_sources") {
+        return None;
+    }
+
+    let mut merged: Vec<&FormattedArg> = Vec::new();
+    for group in groups {
+        let ArgGroup::Keyword { keyword, values } = group else {
+            return None;
+        };
+        if !is_section_keyword(keyword, spec) {
+            return None;
+        }
+        if let Some(sub_kws) = get_section_keywords(&keyword.text, spec)
+            && values
+                .iter()
+                .any(|value| is_text_in_keyword_list(&value.text, sub_kws))
+        {
+            return None;
+        }
+
+        merged.push(*keyword);
+        merged.extend(values.iter().copied());
+    }
+
+    if merged.is_empty() {
+        None
+    } else {
+        Some(vec![ArgGroup::Positional(merged)])
+    }
+}
+
+fn reshape_install_target_groups_for_alignment<'a>(
+    cmd_name: &str,
+    groups: &[ArgGroup<'a>],
+) -> Option<Vec<ArgGroup<'a>>> {
+    if !cmd_name.eq_ignore_ascii_case("install") || groups.len() < 2 {
+        return None;
+    }
+
+    let ArgGroup::Positional(targets_intro) = groups.first()? else {
+        return None;
+    };
+    if targets_intro.len() != 2 || !targets_intro[0].text.eq_ignore_ascii_case("TARGETS") {
+        return None;
+    }
+
+    let mut current_target = targets_intro[1];
+    let mut row_stream: Vec<&FormattedArg> = Vec::new();
+
+    for (index, group) in groups.iter().enumerate().skip(1) {
+        let ArgGroup::Keyword { keyword, values } = group else {
+            return None;
+        };
+        if values.is_empty() || !values[0].text.eq_ignore_ascii_case("DESTINATION") {
+            return None;
+        }
+
+        let mut row_values = values.clone();
+        let has_following_section = groups[index + 1..]
+            .iter()
+            .any(|entry| matches!(entry, ArgGroup::Keyword { .. }));
+        let next_target = if has_following_section {
+            row_values.pop()
+        } else {
+            None
+        };
+        if has_following_section && next_target.is_none() {
+            return None;
+        }
+
+        row_stream.push(current_target);
+        row_stream.push(*keyword);
+        row_stream.extend(row_values);
+
+        if let Some(next_target) = next_target {
+            current_target = next_target;
+        }
+    }
+
+    if row_stream.is_empty() {
+        return None;
+    }
+
+    Some(vec![
+        ArgGroup::Positional(vec![targets_intro[0]]),
+        ArgGroup::Positional(row_stream),
+    ])
+}
+
+#[derive(Default)]
+struct PositionalAlignmentProfile {
+    keyword_first_col_width: Option<usize>,
+    column_widths_by_count: std::collections::BTreeMap<usize, Vec<usize>>,
+}
+
+fn is_one_line_alignment_candidate(cmd_name: &str, args: &[&FormattedArg]) -> bool {
+    !args.is_empty()
+        && args
+            .iter()
+            .all(|arg| !arg.text.starts_with('#') && !arg.text.contains('\n'))
+        && (cmd_name.eq_ignore_ascii_case("install") || is_keyword_like_value(args[0]))
+}
+
+fn build_positional_alignment_profile(
+    cmd_name: &str,
+    groups: &[ArgGroup<'_>],
+) -> Option<PositionalAlignmentProfile> {
+    let mut profile = PositionalAlignmentProfile::default();
+    let mut candidate_count = 0usize;
+    let mut keyword_line_count = 0usize;
+    let mut max_keyword_width = 0usize;
+
+    for group in groups {
+        let ArgGroup::Positional(args) = group else {
+            continue;
+        };
+        if !is_one_line_alignment_candidate(cmd_name, args) {
+            continue;
+        }
+
+        candidate_count += 1;
+        if is_keyword_like_value(args[0]) {
+            keyword_line_count += 1;
+            max_keyword_width = max_keyword_width.max(token_visual_width(args[0]));
+        }
+        if args.len() >= 2 {
+            let widths = profile
+                .column_widths_by_count
+                .entry(args.len())
+                .or_insert_with(|| vec![0; args.len()]);
+            for (index, arg) in args.iter().enumerate() {
+                widths[index] = widths[index].max(token_visual_width(arg));
+            }
+        }
+    }
+
+    if candidate_count < 2 {
+        return None;
+    }
+    if keyword_line_count >= 2 {
+        // Keep an explicit visual gap between keyword columns and values.
+        profile.keyword_first_col_width = Some(max_keyword_width + 1);
+    }
+
+    Some(profile)
+}
+
+fn emit_aligned_single_positional_line(
+    items: &mut PrintItems,
+    args: &[&FormattedArg],
+    config: &Configuration,
+    profile: &PositionalAlignmentProfile,
+    cmd_name: &str,
+) {
+    items.push_signal(Signal::NewLine);
+    for (index, arg) in args.iter().enumerate() {
+        emit_arg(items, arg, config);
+        if index + 1 >= args.len() {
+            continue;
+        }
+
+        let token_width = token_visual_width(arg);
+        let mut spaces = 1usize;
+        if index == 0
+            && is_keyword_like_value(args[0])
+            && let Some(width) = profile.keyword_first_col_width
+        {
+            spaces = spaces.max(width.saturating_sub(token_width) + 1);
+        }
+        if let Some(column_widths) = profile.column_widths_by_count.get(&args.len()) {
+            spaces = spaces.max(column_widths[index].saturating_sub(token_width) + 1);
+        }
+        if index == 0 && cmd_name.eq_ignore_ascii_case("install") {
+            spaces += 1;
+        }
+        for _ in 0..spaces {
+            items.push_space();
+        }
+    }
+}
+
+fn emit_install_target_rows(
+    items: &mut PrintItems,
+    args: &[&FormattedArg],
+    config: &Configuration,
+) -> bool {
+    if args.len() < 4 || !args.len().is_multiple_of(4) {
+        return false;
+    }
+    let mut rows: Vec<&[&FormattedArg]> = Vec::new();
+    for chunk in args.chunks(4) {
+        if !chunk[2].text.eq_ignore_ascii_case("DESTINATION") {
+            return false;
+        }
+        rows.push(chunk);
+    }
+
+    let mut column_widths = [0usize; 4];
+    for row in &rows {
+        for (index, token) in row.iter().enumerate() {
+            column_widths[index] = column_widths[index].max(token_visual_width(token));
+        }
+    }
+
+    for row in rows {
+        items.push_signal(Signal::NewLine);
+        for (index, token) in row.iter().enumerate() {
+            emit_arg(items, token, config);
+            if index + 1 >= row.len() {
+                continue;
+            }
+
+            let mut spaces = column_widths[index].saturating_sub(token_visual_width(token)) + 1;
+            if index == 0 {
+                // Keep an extra gap between TARGET name and artifact section keyword.
+                spaces += 1;
+            }
+            for _ in 0..spaces {
+                items.push_space();
+            }
+        }
+    }
+
+    true
+}
+
+fn emit_flattened_target_sources_sections(
+    items: &mut PrintItems,
+    args: &[&FormattedArg],
+    config: &Configuration,
+    spec: &CommandSpec,
+) {
+    let mut lines: Vec<Vec<&FormattedArg>> = Vec::new();
+    let mut current: Vec<&FormattedArg> = Vec::new();
+    for arg in args {
+        if arg.new_line_before && !current.is_empty() {
+            lines.push(std::mem::take(&mut current));
+        }
+        current.push(*arg);
+    }
+    if !current.is_empty() {
+        lines.push(current);
+    }
+
+    let value_column_width = lines
+        .iter()
+        .filter(|line| line.len() >= 2 && !is_section_keyword(line[0], spec))
+        .map(|line| token_visual_width(line[0]))
+        .max()
+        .unwrap_or(0);
+    let continuation_indent = config.effective_continuation_indent_width() as usize;
+
+    for line in lines {
+        items.push_signal(Signal::NewLine);
+        let is_section_header = line.len() == 1 && is_section_keyword(line[0], spec);
+        if !is_section_header {
+            for _ in 0..continuation_indent {
+                items.push_space();
+            }
+        }
+
+        for (index, arg) in line.iter().enumerate() {
+            emit_arg(items, arg, config);
+            if index + 1 >= line.len() {
+                continue;
+            }
+
+            let mut spaces = 1usize;
+            if !is_section_header && index == 0 && value_column_width > 0 {
+                spaces = spaces.max(value_column_width.saturating_sub(token_visual_width(arg)) + 1);
+            }
+            for _ in 0..spaces {
+                items.push_space();
+            }
+        }
+    }
 }
 
 // ===========================================================================
@@ -1536,6 +1956,7 @@ fn gen_known_multi_line(
 
     // Keep install(TARGETS <name> ...) on the opening line for canonical install layout.
     if cmd_name.eq_ignore_ascii_case("install")
+        && !config.align_arg_groups
         && front_pos.is_empty()
         && let Some(ArgGroup::Keyword { keyword, values }) = groups.first()
         && keyword.text.eq_ignore_ascii_case("TARGETS")
@@ -1549,6 +1970,7 @@ fn gen_known_multi_line(
 
     let mut opening_pair_values: Option<Vec<&FormattedArg>> = None;
     if cmd_name.eq_ignore_ascii_case("set_target_properties")
+        && config.align_property_values
         && let Some(ArgGroup::Keyword { keyword, values }) = groups.first()
         && keyword.text.eq_ignore_ascii_case("PROPERTIES")
     {
@@ -1557,13 +1979,31 @@ fn gen_known_multi_line(
         groups.remove(0);
     }
 
-    let mut opening_args = front_pos;
-    if let Some(ArgGroup::Positional(args)) = groups.first() {
-        opening_args.extend(args.iter().copied());
+    if config.align_arg_groups {
+        groups = flatten_keyword_groups_for_alignment(&groups, spec, config);
+        if let Some(section_flattened) =
+            flatten_target_sources_sections_for_alignment(cmd_name, &groups, spec)
+        {
+            groups = section_flattened;
+        }
+        if let Some(install_rows) = reshape_install_target_groups_for_alignment(cmd_name, &groups) {
+            groups = install_rows;
+        }
+        if cmd_name.eq_ignore_ascii_case("install")
+            && front_pos.is_empty()
+            && let Some(ArgGroup::Positional(targets_keyword)) = groups.first()
+            && targets_keyword.len() == 1
+            && targets_keyword[0].text.eq_ignore_ascii_case("TARGETS")
+        {
+            front_pos.push(targets_keyword[0]);
+            groups.remove(0);
+        }
     }
-    if matches!(groups.first(), Some(ArgGroup::Positional(_))) {
-        groups.remove(0);
-    }
+
+    let opening_args = front_pos;
+    // Do NOT absorb leading positional group into opening_args.
+    // Positional args stay in `groups` for source-line-aware packing
+    // via `emit_values_with_genex_with_indent` with `pack_tokens=true`.
 
     let command_indent = indent_depth as usize * config.indent_width as usize;
     let base_indent = (indent_depth as usize + 1) * config.indent_width as usize;
@@ -1667,18 +2107,68 @@ fn gen_known_multi_line(
             || !spec.keywords.is_empty()
             || !config.custom_keywords.is_empty());
 
+    let positional_alignment_profile = if config.align_arg_groups {
+        build_positional_alignment_profile(cmd_name, &groups)
+    } else {
+        None
+    };
+
     // Emit keyword groups
-    for group in &groups {
+    for group in groups.iter() {
         last_on_opening_line = false;
         match group {
             ArgGroup::Positional(args) => {
-                if spec.flow_positional {
-                    emit_flow_values(&mut inner, args, config, base_indent, false);
-                } else {
-                    for arg in args {
-                        inner.push_signal(Signal::NewLine);
-                        emit_arg(&mut inner, arg, config);
+                if config.align_arg_groups
+                    && cmd_name.eq_ignore_ascii_case("install")
+                    && emit_install_target_rows(&mut inner, args.as_slice(), config)
+                {
+                    // install(TARGETS ...) artifact rows emitted above.
+                } else if config.align_arg_groups
+                    && cmd_name.eq_ignore_ascii_case("target_sources")
+                    && args
+                        .first()
+                        .is_some_and(|arg| is_section_keyword(arg, spec))
+                {
+                    emit_flattened_target_sources_sections(
+                        &mut inner,
+                        args.as_slice(),
+                        config,
+                        spec,
+                    );
+                } else if is_one_line_alignment_candidate(cmd_name, args.as_slice()) {
+                    if let Some(profile) = positional_alignment_profile.as_ref() {
+                        emit_aligned_single_positional_line(
+                            &mut inner,
+                            args.as_slice(),
+                            config,
+                            profile,
+                            cmd_name,
+                        );
+                    } else if spec.flow_positional {
+                        emit_flow_values(&mut inner, args.as_slice(), config, base_indent, false);
+                    } else {
+                        emit_values_with_genex_with_indent(
+                            &mut inner,
+                            args.as_slice(),
+                            config,
+                            false,
+                            config.effective_continuation_indent_width() as usize,
+                            false,
+                            true,
+                        );
                     }
+                } else if spec.flow_positional {
+                    emit_flow_values(&mut inner, args.as_slice(), config, base_indent, false);
+                } else {
+                    emit_values_with_genex_with_indent(
+                        &mut inner,
+                        args.as_slice(),
+                        config,
+                        false,
+                        config.effective_continuation_indent_width() as usize,
+                        false,
+                        true,
+                    );
                 }
             }
             ArgGroup::Keyword { keyword, values } => {
@@ -1697,7 +2187,7 @@ fn gen_known_multi_line(
                 let expanded = emit_keyword_group(
                     &mut inner,
                     keyword,
-                    values,
+                    values.as_slice(),
                     spec,
                     config,
                     base_indent,
@@ -1771,6 +2261,7 @@ fn emit_keyword_group(
             is_paren_group: false,
             paren_inner: Vec::new(),
             blank_line_before: false,
+            new_line_before: false,
         };
         return emit_keyword_group(
             items,
@@ -1928,7 +2419,25 @@ fn emit_keyword_group(
         emit_section_values(items, values, sub_kws, config, base_indent);
     } else {
         emit_kw_arg(items, keyword, config);
-        if is_property_keyword(&keyword.text, spec) {
+        if let Some(KwType::Group(front_count, group_sub_keywords)) =
+            get_keyword_type(keyword, spec)
+        {
+            let leading_count = front_count.min(values.len());
+            for value in &values[..leading_count] {
+                items.push_space();
+                emit_arg(items, value, config);
+            }
+            if leading_count < values.len() {
+                emit_section_values_inner(
+                    items,
+                    &values[leading_count..],
+                    group_sub_keywords,
+                    config,
+                    base_indent,
+                    true,
+                );
+            }
+        } else if is_property_keyword(&keyword.text, spec) {
             // Property keyword: first value is the property name, rest are its values
             emit_property_values(items, values, config, base_indent);
         } else if is_pair_keyword(&keyword.text, spec) {
@@ -1950,7 +2459,18 @@ fn emit_keyword_group(
             let trailing_comments = &values[trailing_comment_start..];
 
             // Detect and format genex groups among the values.
-            emit_values_with_genex(items, regular_values, config);
+            // When alignArgGroups is enabled, pack tokens onto lines so that
+            // same-token-count runs can be column-aligned.
+            let continuation = config.effective_continuation_indent_width() as usize;
+            emit_values_with_genex_with_indent(
+                items,
+                regular_values,
+                config,
+                true,
+                continuation,
+                false,
+                config.align_arg_groups,
+            );
 
             for comment in trailing_comments {
                 items.push_signal(Signal::NewLine);
@@ -2206,12 +2726,13 @@ fn emit_pair_values(
     } else {
         base_indent
     };
-    let aligned_key_width = if config.align_property_values {
-        compute_pair_alignment_width(values)
-    } else {
-        None
-    };
 
+    if config.align_property_values {
+        emit_aligned_property_pairs(items, values, config, nest_under_keyword);
+        return;
+    }
+
+    let aligned_key_width = None::<usize>;
     let mut val_items = PrintItems::new();
     let mut i = 0;
 
@@ -2338,6 +2859,97 @@ fn emit_pair_values(
     } else {
         items.extend(val_items);
     }
+}
+
+fn emit_aligned_property_pairs(
+    items: &mut PrintItems,
+    values: &[&FormattedArg],
+    config: &Configuration,
+    nest_under_keyword: bool,
+) {
+    let key_width = compute_pair_alignment_width(values).unwrap_or_else(|| {
+        values
+            .iter()
+            .filter(|arg| looks_like_property_key(arg))
+            .map(|arg| arg_inline_text(arg).len())
+            .max()
+            .unwrap_or(0)
+    });
+
+    if key_width == 0 {
+        return;
+    }
+
+    let mut val_items = PrintItems::new();
+    let mut index = 0usize;
+
+    while index < values.len() {
+        let key = values[index];
+        if key.text.starts_with('#') {
+            val_items.push_signal(Signal::NewLine);
+            emit_arg(&mut val_items, key, config);
+            index += 1;
+            continue;
+        }
+
+        let key_text = arg_inline_text(key);
+        val_items.push_signal(Signal::NewLine);
+        val_items.extend(ir_helpers::gen_from_raw_string(&key_text));
+        index += 1;
+
+        let mut emitted_first_value = false;
+        while index < values.len() {
+            let value = values[index];
+            if value.text.starts_with('#') {
+                break;
+            }
+            if emitted_first_value && looks_like_property_key(value) {
+                break;
+            }
+
+            if !emitted_first_value {
+                let padding = key_width.saturating_sub(key_text.len()) + 1;
+                for _ in 0..padding {
+                    val_items.push_space();
+                }
+                val_items.extend(ir_helpers::gen_from_raw_string(&arg_inline_text(value)));
+                emitted_first_value = true;
+            } else {
+                val_items.push_signal(Signal::NewLine);
+                for _ in 0..(key_width + 1) {
+                    val_items.push_space();
+                }
+                val_items.extend(ir_helpers::gen_from_raw_string(&arg_inline_text(value)));
+            }
+            index += 1;
+        }
+    }
+
+    if nest_under_keyword {
+        items.extend(ir_helpers::with_indent(val_items));
+    } else {
+        items.extend(val_items);
+    }
+}
+
+fn looks_like_property_key(arg: &FormattedArg) -> bool {
+    let text = arg_inline_text(arg);
+    if text.starts_with('"') || text.starts_with("$<") || text.starts_with('#') {
+        return false;
+    }
+
+    let upper = text.to_ascii_uppercase();
+    if matches!(
+        upper.as_str(),
+        "ON" | "OFF" | "TRUE" | "FALSE" | "YES" | "NO" | "Y" | "N"
+    ) {
+        return false;
+    }
+
+    text.contains('_')
+        && text
+            .chars()
+            .all(|ch| ch.is_ascii_uppercase() || ch.is_ascii_digit() || ch == '_')
 }
 
 fn compute_pair_alignment_width(values: &[&FormattedArg]) -> Option<usize> {
@@ -2703,6 +3315,7 @@ fn emit_section_values_inner(
                 wrap_indent,
                 continuation_indent,
                 true,
+                config.align_arg_groups,
             );
         }
     }
@@ -4187,14 +4800,200 @@ fn emit_genex_value(
     format_genex_node(items, &node, config, continuation_indent);
 }
 
-/// Emit values under a regular keyword, detecting and formatting genex groups.
-fn emit_values_with_genex(
-    items: &mut PrintItems,
-    values: &[&FormattedArg],
+#[derive(Clone)]
+enum ValueLayoutLine<'a> {
+    Blank,
+    Comment(&'a FormattedArg),
+    Genex(String),
+    Tokens(Vec<&'a FormattedArg>),
+}
+
+#[derive(Clone, Default)]
+struct TokenLineAlignment {
+    first_col_width: Option<usize>,
+    column_widths: Option<Vec<usize>>,
+}
+
+fn is_keyword_like_value(arg: &FormattedArg) -> bool {
+    let text = arg_inline_text(arg);
+    if text.starts_with('"') || text.starts_with("$<") || text.starts_with('#') {
+        return false;
+    }
+    text.chars()
+        .all(|ch| ch.is_ascii_uppercase() || ch.is_ascii_digit() || ch == '_')
+}
+
+fn token_visual_width(arg: &FormattedArg) -> usize {
+    arg_inline_text(arg).len()
+}
+
+fn aligned_token_line_width(
+    tokens: &[&FormattedArg],
+    alignment: &TokenLineAlignment,
+    base_indent: usize,
+) -> usize {
+    let mut width = base_indent;
+    for (idx, token) in tokens.iter().enumerate() {
+        let token_width = token_visual_width(token);
+        width += token_width;
+        if idx + 1 < tokens.len() {
+            let mut spaces = 1usize;
+            if idx == 0
+                && let Some(first_col_width) = alignment.first_col_width
+            {
+                spaces = spaces.max(first_col_width.saturating_sub(token_width) + 1);
+            }
+            if let Some(column_widths) = &alignment.column_widths {
+                spaces = spaces.max(column_widths[idx].saturating_sub(token_width) + 1);
+            }
+            width += spaces;
+        }
+    }
+    width
+}
+
+fn apply_arg_group_alignment(
+    lines: &[ValueLayoutLine<'_>],
     config: &Configuration,
-) {
-    let continuation_indent = config.effective_continuation_indent_width() as usize;
-    emit_values_with_genex_with_indent(items, values, config, true, continuation_indent, false);
+    wrap_indent: bool,
+    continuation_indent: usize,
+) -> Vec<TokenLineAlignment> {
+    let mut alignment = vec![TokenLineAlignment::default(); lines.len()];
+    let indent_width = if wrap_indent { continuation_indent } else { 0 };
+    let line_width_limit = config.line_width as usize;
+
+    let mut segment_start = 0usize;
+    while segment_start < lines.len() {
+        while segment_start < lines.len() {
+            if matches!(lines[segment_start], ValueLayoutLine::Tokens(_)) {
+                break;
+            }
+            segment_start += 1;
+        }
+        if segment_start >= lines.len() {
+            break;
+        }
+
+        let mut segment_end = segment_start;
+        while segment_end < lines.len() {
+            if !matches!(lines[segment_end], ValueLayoutLine::Tokens(_)) {
+                break;
+            }
+            segment_end += 1;
+        }
+
+        let mut carried_column_widths: std::collections::BTreeMap<usize, Vec<usize>> =
+            std::collections::BTreeMap::new();
+
+        let mut keyword_line_indices: Vec<usize> = Vec::new();
+        for (line_idx, line) in lines
+            .iter()
+            .enumerate()
+            .take(segment_end)
+            .skip(segment_start)
+        {
+            if let ValueLayoutLine::Tokens(tokens) = line
+                && !tokens.is_empty()
+                && is_keyword_like_value(tokens[0])
+            {
+                keyword_line_indices.push(line_idx);
+            }
+        }
+
+        if keyword_line_indices.len() >= 2 {
+            let keyword_width = keyword_line_indices
+                .iter()
+                .map(|line_idx| {
+                    if let ValueLayoutLine::Tokens(tokens) = &lines[*line_idx] {
+                        token_visual_width(tokens[0])
+                    } else {
+                        0
+                    }
+                })
+                .max()
+                .unwrap_or(0);
+            // Keep an explicit gap after keyword-style first columns so aligned
+            // keyword groups remain visually distinct from their values.
+            let first_column_width = keyword_width + 1;
+
+            for line_idx in keyword_line_indices {
+                alignment[line_idx].first_col_width = Some(first_column_width);
+            }
+        }
+
+        let mut run_start = segment_start;
+        while run_start < segment_end {
+            let token_count = if let ValueLayoutLine::Tokens(tokens) = &lines[run_start] {
+                tokens.len()
+            } else {
+                0
+            };
+            let mut run_end = run_start + 1;
+            while run_end < segment_end {
+                let next_count = if let ValueLayoutLine::Tokens(tokens) = &lines[run_end] {
+                    tokens.len()
+                } else {
+                    0
+                };
+                if next_count != token_count {
+                    break;
+                }
+                run_end += 1;
+            }
+
+            if token_count >= 2 && run_end - run_start >= 2 {
+                // Compute per-column max widths across all lines in the run.
+                let mut column_widths = vec![0usize; token_count];
+                for line in lines.iter().take(run_end).skip(run_start) {
+                    if let ValueLayoutLine::Tokens(tokens) = line {
+                        for (col, token) in tokens.iter().enumerate() {
+                            column_widths[col] = column_widths[col].max(token_visual_width(token));
+                        }
+                    }
+                }
+
+                if let Some(previous_widths) = carried_column_widths.get(&token_count) {
+                    for (col, width) in column_widths.iter_mut().enumerate() {
+                        *width = (*width).max(previous_widths[col]);
+                    }
+                }
+
+                // Overflow check: use the global max width (uniform) to determine
+                // if alignment would cause any line to exceed lineWidth. This is
+                // conservative — if worst-case uniform alignment overflows, the
+                // entire run is excluded even though per-column widths might fit.
+                let global_max = *column_widths.iter().max().unwrap_or(&0);
+                let uniform_widths = vec![global_max; token_count];
+                let mut fits = true;
+                for line_idx in run_start..run_end {
+                    let test_alignment = TokenLineAlignment {
+                        column_widths: Some(uniform_widths.clone()),
+                        ..alignment[line_idx].clone()
+                    };
+                    if let ValueLayoutLine::Tokens(tokens) = &lines[line_idx]
+                        && aligned_token_line_width(tokens, &test_alignment, indent_width)
+                            > line_width_limit
+                    {
+                        fits = false;
+                        break;
+                    }
+                }
+
+                if fits {
+                    carried_column_widths.insert(token_count, column_widths.clone());
+                    for alignment_entry in alignment.iter_mut().take(run_end).skip(run_start) {
+                        alignment_entry.column_widths = Some(column_widths.clone());
+                    }
+                }
+            }
+
+            run_start = run_end;
+        }
+
+        segment_start = segment_end;
+    }
+
+    alignment
 }
 
 /// Emit values with genex detection using an explicit indentation strategy.
@@ -4205,10 +5004,28 @@ fn emit_values_with_genex_with_indent(
     wrap_indent: bool,
     continuation_indent: usize,
     skip_first_blank: bool,
+    pack_tokens: bool,
 ) {
-    let groups = group_args_by_genex(values);
+    let grouped_values = group_args_by_genex(values);
+    let indent_width = if wrap_indent { continuation_indent } else { 0 };
+    let max_content_width = config.line_width as usize;
 
-    for (group_index, group) in groups.into_iter().enumerate() {
+    let mut lines: Vec<ValueLayoutLine<'_>> = Vec::new();
+    let mut current_tokens: Vec<&FormattedArg> = Vec::new();
+    let mut current_width = 0usize;
+
+    fn flush_current_line<'a>(
+        lines: &mut Vec<ValueLayoutLine<'a>>,
+        current_tokens: &mut Vec<&'a FormattedArg>,
+        current_width: &mut usize,
+    ) {
+        if !current_tokens.is_empty() {
+            lines.push(ValueLayoutLine::Tokens(std::mem::take(current_tokens)));
+            *current_width = 0;
+        }
+    }
+
+    for (group_index, group) in grouped_values.into_iter().enumerate() {
         let group_has_leading_blank = match &group {
             GenexArgGroup::Single(arg) => arg.blank_line_before,
             GenexArgGroup::Genex(args) => args
@@ -4216,23 +5033,115 @@ fn emit_values_with_genex_with_indent(
                 .map(|first| first.blank_line_before)
                 .unwrap_or(false),
         };
+
         if group_has_leading_blank && !(skip_first_blank && group_index == 0) {
-            items.push_signal(Signal::NewLine);
+            flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
+            lines.push(ValueLayoutLine::Blank);
         }
 
         match group {
             GenexArgGroup::Single(arg) => {
-                push_wrapped_newline(items, wrap_indent, continuation_indent, config);
-                emit_arg(items, arg, config);
+                if arg.text.starts_with('#') {
+                    flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
+                    lines.push(ValueLayoutLine::Comment(arg));
+                    continue;
+                }
+
+                let token_width = arg_width(arg);
+                if !pack_tokens {
+                    // One token per line (original behavior)
+                    flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
+                    current_tokens.push(arg);
+                    current_width = token_width;
+                    if arg.trailing_comment.is_some() && !arg.trailing_is_bracket {
+                        flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
+                    }
+                } else {
+                    // Pack tokens into lines, respecting source newlines
+                    // and falling back to width-based packing.
+                    let source_break = arg.new_line_before && !current_tokens.is_empty();
+                    if current_tokens.is_empty() {
+                        current_tokens.push(arg);
+                        current_width = token_width;
+                    } else if source_break {
+                        // Source had a newline here — start a new line.
+                        flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
+                        current_tokens.push(arg);
+                        current_width = token_width;
+                    } else {
+                        let required = 1 + token_width;
+                        let available_width = max_content_width.saturating_sub(indent_width);
+                        let last_has_line_comment = current_tokens.last().is_some_and(|token| {
+                            token.trailing_comment.is_some() && !token.trailing_is_bracket
+                        });
+
+                        if last_has_line_comment || current_width + required > available_width {
+                            flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
+                            current_tokens.push(arg);
+                            current_width = token_width;
+                        } else {
+                            current_tokens.push(arg);
+                            current_width += required;
+                        }
+                    }
+
+                    if arg.trailing_comment.is_some() && !arg.trailing_is_bracket {
+                        flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
+                    }
+                }
             }
             GenexArgGroup::Genex(args) => {
-                // Join token texts with spaces to reconstruct the full genex.
-                let joined: String = args
+                flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
+                let joined = args
                     .iter()
-                    .map(|a| a.text.as_str())
+                    .map(|arg| arg.text.as_str())
                     .collect::<Vec<_>>()
                     .join(" ");
-                emit_genex_value(items, &joined, config, wrap_indent, continuation_indent);
+                lines.push(ValueLayoutLine::Genex(joined));
+            }
+        }
+    }
+
+    flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
+
+    let alignments = if config.align_arg_groups {
+        apply_arg_group_alignment(&lines, config, wrap_indent, continuation_indent)
+    } else {
+        vec![TokenLineAlignment::default(); lines.len()]
+    };
+
+    for (line_idx, line) in lines.into_iter().enumerate() {
+        match line {
+            ValueLayoutLine::Blank => items.push_signal(Signal::NewLine),
+            ValueLayoutLine::Comment(comment) => {
+                push_wrapped_newline(items, wrap_indent, continuation_indent, config);
+                emit_arg(items, comment, config);
+            }
+            ValueLayoutLine::Genex(text) => {
+                emit_genex_value(items, &text, config, wrap_indent, continuation_indent);
+            }
+            ValueLayoutLine::Tokens(tokens) => {
+                let line_alignment = &alignments[line_idx];
+                push_wrapped_newline(items, wrap_indent, continuation_indent, config);
+                for (token_index, token) in tokens.iter().enumerate() {
+                    emit_arg(items, token, config);
+                    if token_index + 1 < tokens.len() {
+                        let token_width = token_visual_width(token);
+                        let mut spaces = 1usize;
+                        if token_index == 0
+                            && let Some(first_col_width) = line_alignment.first_col_width
+                        {
+                            spaces = spaces.max(first_col_width.saturating_sub(token_width) + 1);
+                        }
+                        if let Some(column_widths) = &line_alignment.column_widths {
+                            spaces = spaces
+                                .max(column_widths[token_index].saturating_sub(token_width) + 1);
+                        }
+                        for _ in 0..spaces {
+                            items.push_space();
+                        }
+                    }
+                }
             }
         }
     }

@@ -109,6 +109,7 @@ fn format_inner(text: &str, config: &Configuration) -> Result<String> {
     let print_config = resolve_print_options_config(text, config);
     let print_options = build_print_options(text, &print_config);
     let result = formatting::format(|| gen_file(&file, text, config), print_options);
+    let result = crate::post_process::post_process_alignments(&result, config);
     Ok(result)
 }
 

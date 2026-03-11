@@ -219,8 +219,8 @@
             "F003"
           ],
           "complexity": "medium",
-          "status": "pending",
-          "passes": false,
+          "status": "done",
+          "passes": true,
           "notes": ""
         },
         {
@@ -244,8 +244,8 @@
             "F006"
           ],
           "complexity": "medium",
-          "status": "pending",
-          "passes": false,
+          "status": "done",
+          "passes": true,
           "notes": ""
         },
         {
@@ -270,8 +270,8 @@
             "F003"
           ],
           "complexity": "medium",
-          "status": "pending",
-          "passes": false,
+          "status": "done",
+          "passes": true,
           "notes": ""
         }
       ]
@@ -301,8 +301,8 @@
             "F010"
           ],
           "complexity": "medium",
-          "status": "pending",
-          "passes": false,
+          "status": "done",
+          "passes": true,
           "notes": ""
         },
         {
@@ -354,8 +354,8 @@
             "F012"
           ],
           "complexity": "medium",
-          "status": "pending",
-          "passes": false,
+          "status": "done",
+          "passes": true,
           "notes": ""
         }
       ]
@@ -387,8 +387,8 @@
             "F013"
           ],
           "complexity": "large",
-          "status": "pending",
-          "passes": false,
+          "status": "done",
+          "passes": true,
           "notes": ""
         }
       ]

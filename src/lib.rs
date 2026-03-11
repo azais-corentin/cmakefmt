@@ -1,6 +1,7 @@
 mod configuration;
 mod format_text;
 mod generation;
+mod post_process;
 mod parser;
 
 #[cfg(target_arch = "wasm32")]

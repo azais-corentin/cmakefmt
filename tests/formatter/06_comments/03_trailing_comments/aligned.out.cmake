@@ -1,5 +1,5 @@
 # cmakefmt: push { alignTrailingComments = true }
-set(FOO "bar")       # The foo variable
-set(BAZ_LONG "qux")  # The baz variable
-set(X "y")           # Short one
+set(FOO "bar")      # The foo variable
+set(BAZ_LONG "qux") # The baz variable
+set(X "y")          # Short one
 # cmakefmt: pop

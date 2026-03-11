@@ -38,6 +38,7 @@ The files under `tests/formatter/` are pre-written acceptance fixtures and must 
 - Never modify test files or test fixture data.
 - The implementation is correct when all relevant tests pass.
 - If a test appears incorrect, flag the issue in a comment or review note, but do not change the test.
+- If you believe a test fixture is wrong (the expected output contradicts the spec, is internally inconsistent, or cannot be produced by any correct implementation), you **MUST** stop and ask the user using the `ask` tool before continuing. Describe: which fixture file, what the expected output says, what the spec says, and why you believe they conflict.
 
 ## Specification
 

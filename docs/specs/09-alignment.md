@@ -110,9 +110,9 @@ or generator expression (including its entire nested content as one token).
 ```cmake
 # alignArgGroups = true
 install(TARGETS
-  MyLib       RUNTIME DESTINATION bin
-  MyOtherLib  RUNTIME DESTINATION lib
-  MyPlugin    LIBRARY DESTINATION plugins
+  MyLib      RUNTIME DESTINATION bin
+  MyOtherLib RUNTIME DESTINATION lib
+  MyPlugin   LIBRARY DESTINATION plugins
 )
 ```
 
@@ -121,10 +121,10 @@ install(TARGETS
 ```cmake
 # alignArgGroups = true
 add_custom_command(
-  OUTPUT    ${CMAKE_CURRENT_BINARY_DIR}/generated.cpp
-  COMMAND   generator --input schema.json --output generated.cpp
-  DEPENDS   schema.json
-  COMMENT   "Generating code"
+  OUTPUT  ${CMAKE_CURRENT_BINARY_DIR}/generated.cpp
+  COMMAND generator --input schema.json --output generated.cpp
+  DEPENDS schema.json
+  COMMENT "Generating code"
   VERBATIM
 )
 ```
@@ -136,9 +136,9 @@ In this example, the keyword-as-first-token lines (`OUTPUT`, `COMMAND`, `DEPENDS
 ```cmake
 # alignArgGroups = true
 set(MY_TABLE
-  "name"    "type"    "default"
-  "width"   "int"     "80"
-  "style"   "string"  "cascade"
+  "name"  "type"   "default"
+  "width" "int"    "80"
+  "style" "string" "cascade"
 )
 ```
 
