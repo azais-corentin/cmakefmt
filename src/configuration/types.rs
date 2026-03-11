@@ -54,6 +54,10 @@ pub struct Configuration {
 
     pub sort_arguments: SortArguments,
     pub sort_keyword_sections: bool,
+    #[serde(skip_serializing)]
+    pub sort_arguments_explicit: bool,
+    #[serde(skip_serializing)]
+    pub sort_keyword_sections_explicit: bool,
 
     pub disable_formatting: bool,
     pub ignore_patterns: Vec<String>,
@@ -221,6 +225,8 @@ impl Default for Configuration {
             per_command_config: BTreeMap::new(),
             sort_arguments: SortArguments::Disabled,
             sort_keyword_sections: false,
+            sort_arguments_explicit: false,
+            sort_keyword_sections_explicit: false,
             disable_formatting: false,
             ignore_patterns: Vec::new(),
             ignore_commands: Vec::new(),
@@ -367,9 +373,11 @@ impl Configuration {
         }
         if let Some(ref v) = overrides.sort_arguments {
             cfg.sort_arguments = v.clone();
+            cfg.sort_arguments_explicit = true;
         }
         if let Some(v) = overrides.sort_keyword_sections {
             cfg.sort_keyword_sections = v;
+            cfg.sort_keyword_sections_explicit = true;
         }
         cfg
     }

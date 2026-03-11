@@ -233,6 +233,64 @@ fn non_comment_args(args: &[Argument]) -> Vec<Argument> {
         .collect()
 }
 
+fn is_comment_element(element: &FileElement) -> bool {
+    matches!(
+        element,
+        FileElement::LineComment(_) | FileElement::BracketComment(_)
+    )
+}
+
+fn is_command_block_opener(element: &FileElement, source: &str) -> bool {
+    match element {
+        FileElement::Command(cmd) => is_block_opener(cmd.name.text(source)),
+        FileElement::BracketComment(_) | FileElement::LineComment(_) | FileElement::BlankLine => {
+            false
+        }
+    }
+}
+
+fn should_insert_min_blank_lines_before(
+    elements: &[FileElement],
+    index: usize,
+    source: &str,
+    first: bool,
+    just_opened_block: bool,
+) -> bool {
+    if first || just_opened_block {
+        return false;
+    }
+
+    match &elements[index] {
+        FileElement::Command(cmd) => {
+            if !is_block_opener(cmd.name.text(source)) {
+                return false;
+            }
+
+            // Comment groups attached to a block opener are handled at the top of the
+            // comment group so the inserted blank lines appear above all attached comments.
+            if index > 0 && is_comment_element(&elements[index - 1]) {
+                return false;
+            }
+
+            true
+        }
+        FileElement::LineComment(_) | FileElement::BracketComment(_) => {
+            // Only the topmost comment in an attached group may insert separation.
+            if index > 0 && is_comment_element(&elements[index - 1]) {
+                return false;
+            }
+
+            let mut cursor = index;
+            while cursor < elements.len() && is_comment_element(&elements[cursor]) {
+                cursor += 1;
+            }
+
+            cursor < elements.len() && is_command_block_opener(&elements[cursor], source)
+        }
+        FileElement::BlankLine => false,
+    }
+}
+
 pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems {
     let mut items = PrintItems::new();
     let mut pending_blanks: u8 = 0;
@@ -259,7 +317,7 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
         .unwrap_or(0);
     let elements = &elements[..last_content];
 
-    for element in elements {
+    for (index, element) in elements.iter().enumerate() {
         if let FileElement::BlankLine = element {
             if formatting_disabled {
                 if !first {
@@ -310,6 +368,18 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
             continue;
         }
 
+        if current_config.min_blank_lines_between_blocks > 0
+            && should_insert_min_blank_lines_before(
+                elements,
+                index,
+                source,
+                first,
+                just_opened_block,
+            )
+        {
+            pending_blanks = pending_blanks.max(current_config.min_blank_lines_between_blocks);
+        }
+
         // Suppress blank lines before block closers/middles
         let is_closer_or_middle = matches!(element, FileElement::Command(cmd) if {
             let name = cmd.name.text(source);
@@ -318,7 +388,6 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
         if is_closer_or_middle {
             pending_blanks = 0;
         }
-
         // Emit pending blank lines
         for _ in 0..pending_blanks {
             items.push_signal(Signal::NewLine);

@@ -1,7 +1,9 @@
 use dprint_core::formatting::ir_helpers;
 use dprint_core::formatting::{PrintItems, Signal};
 
-use crate::configuration::{CaseStyle, Configuration, IndentStyle, SortArguments, WrapStyle};
+use crate::configuration::{
+    CaseStyle, Configuration, IndentStyle, SortArguments, SpaceInsideParen, WrapStyle,
+};
 use crate::parser::ast::{Argument, CommandInvocation};
 
 use super::signatures::{CommandKind, CommandSpec, EMPTY_SPEC, KwType, lookup_command};
@@ -270,6 +272,67 @@ fn apply_keyword_case(text: &str, style: CaseStyle) -> String {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+struct SingleLineParenSpacing {
+    after_open: bool,
+    before_close: bool,
+}
+
+fn resolve_single_line_paren_spacing(
+    cmd: &CommandInvocation,
+    source: &str,
+    config: &Configuration,
+    has_arguments: bool,
+) -> SingleLineParenSpacing {
+    if !has_arguments {
+        return SingleLineParenSpacing::default();
+    }
+
+    match config.space_inside_paren {
+        SpaceInsideParen::Insert => SingleLineParenSpacing {
+            after_open: true,
+            before_close: true,
+        },
+        SpaceInsideParen::Remove => SingleLineParenSpacing::default(),
+        SpaceInsideParen::Preserve => {
+            let between_parens = &source[cmd.open_paren.end..cmd.close_paren.start];
+            if between_parens.contains('\n') {
+                return SingleLineParenSpacing::default();
+            }
+
+            let after_open = between_parens
+                .as_bytes()
+                .first()
+                .is_some_and(|byte| matches!(*byte, b' ' | b'\t'));
+            let before_close = between_parens
+                .as_bytes()
+                .last()
+                .is_some_and(|byte| matches!(*byte, b' ' | b'\t'));
+
+            SingleLineParenSpacing {
+                after_open,
+                before_close,
+            }
+        }
+    }
+}
+
+fn extract_deferred_closing_comment(arguments: &mut [FormattedArg]) -> Option<String> {
+    arguments.iter_mut().rev().find_map(|arg| {
+        if arg.text.starts_with('#') || arg.trailing_is_bracket {
+            return None;
+        }
+
+        arg.trailing_comment.take()
+    })
+}
+
+fn push_comment_gap(items: &mut PrintItems, gap: u8) {
+    for _ in 0..usize::from(gap) {
+        items.push_space();
+    }
+}
+
 fn visual_indent_prefix(width: usize, config: &Configuration) -> String {
     if width == 0 {
         return String::new();
@@ -358,13 +421,25 @@ pub fn gen_command(
         sort_keyword_sections_by_order(&mut arguments, order);
     }
 
+    let single_line_paren_spacing =
+        resolve_single_line_paren_spacing(cmd, source, config, !arguments.is_empty());
+    let source_is_multiline = source[cmd.open_paren.end..cmd.close_paren.start].contains('\n');
+
+    let mut deferred_closing_comment = None;
+    if !config.closing_paren_newline {
+        deferred_closing_comment = extract_deferred_closing_comment(&mut arguments);
+    }
+    let has_deferred_closing_comment = deferred_closing_comment.is_some();
+    let avoid_inline_compaction = has_deferred_closing_comment
+        || (!config.closing_paren_newline && source_is_multiline && cmd.trailing_comment.is_some());
+
     // Format arguments using wrapping cascade controls (threshold, magic newline, style).
     let force_one_per_line = config.wrap_arg_threshold > 0
         && count_wrap_arguments(&arguments) > config.wrap_arg_threshold as usize;
     let magic_trailing_newline =
         config.magic_trailing_newline && has_magic_trailing_newline_signal(cmd, source, &arguments);
     let allow_single_line = matches!(config.wrap_style, WrapStyle::Cascade)
-        && !(force_one_per_line || magic_trailing_newline);
+        && !(force_one_per_line || magic_trailing_newline || avoid_inline_compaction);
     if !arguments.is_empty() {
         let single_line = try_single_line(
             &formatted_name,
@@ -374,7 +449,13 @@ pub fn gen_command(
             allow_single_line,
         );
         if let Some(single) = single_line {
+            if single_line_paren_spacing.after_open {
+                items.push_space();
+            }
             items.extend(single);
+            if single_line_paren_spacing.before_close {
+                items.push_space();
+            }
         } else {
             match cmd_kind {
                 Some(CommandKind::ConditionSyntax) => {
@@ -398,8 +479,9 @@ pub fn gen_command(
                     }
                 }
                 Some(CommandKind::Known(spec)) => {
-                    let allow_keyword_inline =
-                        !force_one_per_line && matches!(config.wrap_style, WrapStyle::Cascade);
+                    let allow_keyword_inline = !force_one_per_line
+                        && matches!(config.wrap_style, WrapStyle::Cascade)
+                        && !avoid_inline_compaction;
                     let allow_opening_arg_packing = allow_keyword_inline && !magic_trailing_newline;
                     items.extend(gen_known_multi_line(
                         &formatted_name,
@@ -414,8 +496,9 @@ pub fn gen_command(
                 }
                 None => {
                     // Unknown command with customKeywords — use empty spec.
-                    let allow_keyword_inline =
-                        !force_one_per_line && matches!(config.wrap_style, WrapStyle::Cascade);
+                    let allow_keyword_inline = !force_one_per_line
+                        && matches!(config.wrap_style, WrapStyle::Cascade)
+                        && !avoid_inline_compaction;
                     let allow_opening_arg_packing = allow_keyword_inline && !magic_trailing_newline;
                     items.extend(gen_known_multi_line(
                         &formatted_name,
@@ -433,6 +516,10 @@ pub fn gen_command(
     }
 
     items.push_str_runtime_width_computed(")");
+    if let Some(comment) = deferred_closing_comment {
+        push_comment_gap(&mut items, config.comment_gap);
+        items.extend(ir_helpers::gen_from_raw_string(&comment));
+    }
 
     // Trailing comment
     if let Some(comment_span) = &cmd.trailing_comment {
@@ -1460,6 +1547,16 @@ fn gen_known_multi_line(
         groups.remove(0);
     }
 
+    let mut opening_pair_values: Option<Vec<&FormattedArg>> = None;
+    if cmd_name.eq_ignore_ascii_case("set_target_properties")
+        && let Some(ArgGroup::Keyword { keyword, values }) = groups.first()
+        && keyword.text.eq_ignore_ascii_case("PROPERTIES")
+    {
+        front_pos.push(keyword);
+        opening_pair_values = Some(values.clone());
+        groups.remove(0);
+    }
+
     let mut opening_args = front_pos;
     if let Some(ArgGroup::Positional(args)) = groups.first() {
         opening_args.extend(args.iter().copied());
@@ -1477,6 +1574,8 @@ fn gen_known_multi_line(
     let force_two_install_opening = cmd_name.eq_ignore_ascii_case("install")
         && opening_args.len() >= 2
         && opening_args[0].text.eq_ignore_ascii_case("TARGETS");
+    let force_properties_opening =
+        cmd_name.eq_ignore_ascii_case("set_target_properties") && opening_pair_values.is_some();
     let has_keyword_groups = groups
         .iter()
         .any(|group| matches!(group, ArgGroup::Keyword { .. }));
@@ -1497,6 +1596,7 @@ fn gen_known_multi_line(
             last_on_opening_line = true;
 
             let can_pack_rest = (force_two_install_opening
+                || force_properties_opening
                 || allow_opening_arg_packing
                 || (allow_keyword_inline && has_keyword_groups))
                 && can_pack_args_on_line(
@@ -1523,7 +1623,9 @@ fn gen_known_multi_line(
             }
         }
     } else if !opening_args.is_empty() {
-        let can_pack_all = (allow_opening_arg_packing
+        let can_pack_all = (force_two_install_opening
+            || force_properties_opening
+            || allow_opening_arg_packing
             || (allow_keyword_inline && has_keyword_groups))
             && can_pack_args_on_line(base_indent, &opening_args, config);
         if can_pack_all {
@@ -1552,9 +1654,18 @@ fn gen_known_multi_line(
         last_on_opening_line = false;
     }
 
-    let mut emitted_keyword_groups = 0usize;
-    let mut expanded_keyword_group_seen = opening_line_overflow;
+    if let Some(values) = opening_pair_values.as_ref() {
+        emit_pair_values(&mut inner, values.as_slice(), config, base_indent, false);
+        last_on_opening_line = false;
+    }
+
+    let mut emitted_section_groups = 0usize;
+    let mut expanded_keyword_group_seen = opening_line_overflow || opening_pair_values.is_some();
     let disable_inline_after_expansion = config.line_width <= 40;
+    let force_expanded_keyword_layout = config.blank_line_between_sections
+        && (!spec.sections.is_empty()
+            || !spec.keywords.is_empty()
+            || !config.custom_keywords.is_empty());
 
     // Emit keyword groups
     for group in &groups {
@@ -1571,10 +1682,17 @@ fn gen_known_multi_line(
                 }
             }
             ArgGroup::Keyword { keyword, values } => {
-                if config.blank_line_between_sections && emitted_keyword_groups > 0 {
+                let section_keyword = is_section_keyword(keyword, spec)
+                    || is_custom_keyword(keyword, config)
+                    || (keyword.is_keyword && spec.sections.is_empty());
+                if config.blank_line_between_sections
+                    && section_keyword
+                    && emitted_section_groups > 0
+                {
                     inner.push_signal(Signal::NewLine);
                 }
                 let keyword_inline_allowed = allow_keyword_inline
+                    && !force_expanded_keyword_layout
                     && !(disable_inline_after_expansion && expanded_keyword_group_seen);
                 let expanded = emit_keyword_group(
                     &mut inner,
@@ -1587,7 +1705,9 @@ fn gen_known_multi_line(
                     keyword_inline_allowed,
                 );
                 expanded_keyword_group_seen |= expanded;
-                emitted_keyword_groups += 1;
+                if section_keyword {
+                    emitted_section_groups += 1;
+                }
             }
             ArgGroup::CmdLineKeyword { keyword, value } => {
                 emit_cmd_line_keyword(&mut inner, keyword, *value, config, base_indent);
@@ -1686,7 +1806,10 @@ fn emit_keyword_group(
         && values.len() > section_front;
 
     let continuation_is_explicit = config.continuation_indent_width.is_some();
-
+    let preserve_inline_keyword_layout = (config.sort_arguments_explicit
+        || config.sort_keyword_sections_explicit)
+        && !allow_plain_section_inline
+        && ((is_section_kw && !plain_section_keyword) || is_custom_keyword(keyword, config));
     // Try inline: keyword + all values on one line.
     let inline_width = compute_keyword_inline_width(keyword, values);
     let can_inline_content = !values.iter().any(|v| v.text.contains('\n'))
@@ -1697,6 +1820,7 @@ fn emit_keyword_group(
         && !values.iter().any(|v| v.text.starts_with('#'))
         && !values.iter().any(|v| v.text.contains("$<"));
     if allow_keyword_inline
+        && !preserve_inline_keyword_layout
         && treat_as_regular_keyword
         && base_indent + inline_width <= config.line_width as usize
         && can_inline_content
@@ -1735,6 +1859,7 @@ fn emit_keyword_group(
             .iter()
             .any(|(_, kw_type)| matches!(kw_type, KwType::Group(..)));
         let can_inline_section_values = allow_keyword_inline
+            && !preserve_inline_keyword_layout
             && !has_subkeyword_values
             && !has_group_subkeywords
             && !continuation_is_explicit
@@ -1808,7 +1933,7 @@ fn emit_keyword_group(
             emit_property_values(items, values, config, base_indent);
         } else if is_pair_keyword(&keyword.text, spec) {
             // Pair keyword: values are alternating key-value pairs
-            emit_pair_values(items, values, config, base_indent);
+            emit_pair_values(items, values, config, base_indent, true);
         } else if is_flow_keyword(&keyword.text, spec) {
             // Flow keyword: values flow-wrap at line width
             emit_flow_values(items, values, config, base_indent, true);
@@ -2074,8 +2199,18 @@ fn emit_pair_values(
     values: &[&FormattedArg],
     config: &Configuration,
     base_indent: usize,
+    nest_under_keyword: bool,
 ) {
-    let pair_indent = base_indent + config.indent_width as usize;
+    let pair_indent = if nest_under_keyword {
+        base_indent + config.indent_width as usize
+    } else {
+        base_indent
+    };
+    let aligned_key_width = if config.align_property_values {
+        compute_pair_alignment_width(values)
+    } else {
+        None
+    };
 
     let mut val_items = PrintItems::new();
     let mut i = 0;
@@ -2122,10 +2257,21 @@ fn emit_pair_values(
                 && !has_intervening_comments;
 
             if can_inline {
+                let key_text = arg_inline_text(key);
                 val_items.push_signal(Signal::NewLine);
-                val_items.extend(ir_helpers::gen_from_raw_string(&arg_inline_text(key)));
-                val_items.push_space();
+                val_items.extend(ir_helpers::gen_from_raw_string(&key_text));
+
+                if let Some(width) = aligned_key_width {
+                    let padding = width.saturating_sub(key_text.len()) + 1;
+                    for _ in 0..padding {
+                        val_items.push_space();
+                    }
+                } else {
+                    val_items.push_space();
+                }
+
                 val_items.extend(ir_helpers::gen_from_raw_string(&arg_inline_text(val)));
+
                 // Key's bracket comment (if any) goes inline
                 if let Some(comment) = &key.trailing_comment {
                     val_items.push_space();
@@ -2187,7 +2333,42 @@ fn emit_pair_values(
         }
     }
 
-    items.extend(ir_helpers::with_indent(val_items));
+    if nest_under_keyword {
+        items.extend(ir_helpers::with_indent(val_items));
+    } else {
+        items.extend(val_items);
+    }
+}
+
+fn compute_pair_alignment_width(values: &[&FormattedArg]) -> Option<usize> {
+    let mut max_width = 0usize;
+    let mut i = 0usize;
+
+    while i < values.len() {
+        let key = values[i];
+        if key.text.starts_with('#') {
+            i += 1;
+            continue;
+        }
+
+        let mut val_idx = i + 1;
+        while val_idx < values.len() && values[val_idx].text.starts_with('#') {
+            val_idx += 1;
+        }
+
+        if val_idx < values.len() {
+            max_width = max_width.max(arg_inline_text(key).len());
+            i = val_idx + 1;
+        } else {
+            i = val_idx;
+        }
+    }
+
+    if max_width == 0 {
+        None
+    } else {
+        Some(max_width)
+    }
 }
 
 /// Emit a command-line keyword (e.g., `debug`, `optimized`, `general`) with its value.
@@ -2376,7 +2557,8 @@ fn emit_section_values_inner(
                             sub_items.push_signal(Signal::NewLine);
                             emit_arg(&mut sub_items, sv, config);
                         }
-                        val_items.extend(ir_helpers::with_indent(sub_items));
+                        val_items
+                            .extend(ir_helpers::with_indent(ir_helpers::with_indent(sub_items)));
                     }
                 }
                 KwType::Group(front_count, group_sub_kws) => {
@@ -2470,14 +2652,16 @@ fn emit_section_values_inner(
                                 val_items.push_space();
                                 val_items.extend(ir_helpers::gen_from_raw_string(comment));
                             }
+                            let mut nested_items = PrintItems::new();
                             emit_section_values_inner(
-                                &mut val_items,
+                                &mut nested_items,
                                 rest_values,
                                 group_sub_kws,
                                 config,
                                 sub_indent,
                                 true,
                             );
+                            val_items.extend(ir_helpers::with_indent(nested_items));
                         } else {
                             // Keyword alone on its line, everything else indented
                             push_wrapped_newline(
@@ -2487,23 +2671,39 @@ fn emit_section_values_inner(
                                 config,
                             );
                             emit_sub_kw_arg(&mut val_items, kw, config);
+                            let mut nested_items = PrintItems::new();
                             emit_section_values_inner(
-                                &mut val_items,
+                                &mut nested_items,
                                 all_group_values,
                                 group_sub_kws,
                                 config,
                                 sub_indent,
                                 true,
                             );
+                            val_items.extend(ir_helpers::with_indent(nested_items));
                         }
                     }
                 }
             }
         } else {
-            // Regular value (not a sub-keyword)
-            push_wrapped_newline(&mut val_items, wrap_indent, continuation_indent, config);
-            emit_arg(&mut val_items, values[i], config);
-            i += 1;
+            // Consecutive regular values can contain one or more genex groups.
+            let run_start = i;
+            while i < values.len()
+                && !sub_keywords
+                    .iter()
+                    .any(|(name, _)| name.eq_ignore_ascii_case(&values[i].text))
+            {
+                i += 1;
+            }
+
+            emit_values_with_genex_with_indent(
+                &mut val_items,
+                &values[run_start..i],
+                config,
+                wrap_indent,
+                continuation_indent,
+                true,
+            );
         }
     }
 
@@ -3874,7 +4074,9 @@ fn format_genex_impl(
                     let closer = format!(">{close_suffix}");
                     items.extend(ir_helpers::gen_from_raw_string(&closer));
                 } else {
-                    push_newline_with_visual_indent(items, extra_indent, config);
+                    if config.genex_closing_angle_newline {
+                        push_newline_with_visual_indent(items, extra_indent, config);
+                    }
                     let closer = format!(">{close_suffix}");
                     items.extend(ir_helpers::gen_from_raw_string(&closer));
                 }
@@ -3898,11 +4100,28 @@ fn format_genex_impl(
             // Values indented relative to the `$<` opener column.
             let genex_indent = config.effective_genex_indent_width() as usize;
             let value_indent = extra_indent + genex_indent;
-            for val in values {
+            let packed_values = values
+                .iter()
+                .map(genex_inline_text)
+                .collect::<Vec<_>>()
+                .join(";");
+            let can_pack_values = values.len() <= 2
+                && !packed_values.is_empty()
+                && packed_values.len() <= 12
+                && values.iter().all(genex_is_inline)
+                && value_indent + packed_values.len() <= config.line_width as usize;
+            if can_pack_values {
                 push_newline_with_visual_indent(items, value_indent, config);
-                format_genex_impl(items, val, "", depth + 1, config, value_indent);
+                items.extend(ir_helpers::gen_from_raw_string(&packed_values));
+            } else {
+                for val in values {
+                    push_newline_with_visual_indent(items, value_indent, config);
+                    format_genex_impl(items, val, "", depth + 1, config, value_indent);
+                }
             }
-            push_newline_with_visual_indent(items, extra_indent, config);
+            if config.genex_closing_angle_newline {
+                push_newline_with_visual_indent(items, extra_indent, config);
+            }
             let closer = format!(">{close_suffix}");
             items.extend(ir_helpers::gen_from_raw_string(&closer));
         }
@@ -3951,16 +4170,45 @@ fn group_args_by_genex<'a>(args: &[&'a FormattedArg]) -> Vec<GenexArgGroup<'a>> 
     groups
 }
 
+/// Emits a generator-expression argument with wrapping behavior configured by `genexWrap`.
+fn emit_genex_value(
+    items: &mut PrintItems,
+    text: &str,
+    config: &Configuration,
+    wrap_indent: bool,
+    continuation_indent: usize,
+) {
+    push_wrapped_newline(items, wrap_indent, continuation_indent, config);
+    if matches!(config.genex_wrap, crate::configuration::GenexWrap::Never) {
+        items.extend(ir_helpers::gen_from_raw_string(text));
+        return;
+    }
+    let node = parse_genex(text);
+    format_genex_node(items, &node, config, continuation_indent);
+}
+
 /// Emit values under a regular keyword, detecting and formatting genex groups.
 fn emit_values_with_genex(
     items: &mut PrintItems,
     values: &[&FormattedArg],
     config: &Configuration,
 ) {
-    let groups = group_args_by_genex(values);
     let continuation_indent = config.effective_continuation_indent_width() as usize;
+    emit_values_with_genex_with_indent(items, values, config, true, continuation_indent, false);
+}
 
-    for group in groups {
+/// Emit values with genex detection using an explicit indentation strategy.
+fn emit_values_with_genex_with_indent(
+    items: &mut PrintItems,
+    values: &[&FormattedArg],
+    config: &Configuration,
+    wrap_indent: bool,
+    continuation_indent: usize,
+    skip_first_blank: bool,
+) {
+    let groups = group_args_by_genex(values);
+
+    for (group_index, group) in groups.into_iter().enumerate() {
         let group_has_leading_blank = match &group {
             GenexArgGroup::Single(arg) => arg.blank_line_before,
             GenexArgGroup::Genex(args) => args
@@ -3968,13 +4216,13 @@ fn emit_values_with_genex(
                 .map(|first| first.blank_line_before)
                 .unwrap_or(false),
         };
-        if group_has_leading_blank {
+        if group_has_leading_blank && !(skip_first_blank && group_index == 0) {
             items.push_signal(Signal::NewLine);
         }
 
         match group {
             GenexArgGroup::Single(arg) => {
-                push_newline_with_visual_indent(items, continuation_indent, config);
+                push_wrapped_newline(items, wrap_indent, continuation_indent, config);
                 emit_arg(items, arg, config);
             }
             GenexArgGroup::Genex(args) => {
@@ -3984,9 +4232,7 @@ fn emit_values_with_genex(
                     .map(|a| a.text.as_str())
                     .collect::<Vec<_>>()
                     .join(" ");
-                let node = parse_genex(&joined);
-                push_newline_with_visual_indent(items, continuation_indent, config);
-                format_genex_node(items, &node, config, continuation_indent);
+                emit_genex_value(items, &joined, config, wrap_indent, continuation_indent);
             }
         }
     }

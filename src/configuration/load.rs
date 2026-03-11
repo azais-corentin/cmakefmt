@@ -935,6 +935,7 @@ impl Loader {
                 if let Some(parsed) = self.parse_sort_arguments(key, value) {
                     self.config.sort_lists = matches!(parsed, SortArguments::Enabled);
                     self.config.sort_arguments = parsed;
+                    self.config.sort_arguments_explicit = true;
                     self.record_override(
                         key,
                         match &self.config.sort_arguments {
@@ -950,6 +951,7 @@ impl Loader {
             CanonicalKey::SortKeywordSections => {
                 if let Some(parsed) = self.parse_bool(key, value) {
                     self.config.sort_keyword_sections = parsed;
+                    self.config.sort_keyword_sections_explicit = true;
                     self.record_override(key, parsed.to_string());
                 }
             }
