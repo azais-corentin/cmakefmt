@@ -167,8 +167,8 @@
             "F005"
           ],
           "complexity": "medium",
-          "status": "pending",
-          "passes": false,
+          "status": "done",
+          "passes": true,
           "notes": ""
         },
         {
@@ -190,8 +190,8 @@
             "F004"
           ],
           "complexity": "large",
-          "status": "pending",
-          "passes": false,
+          "status": "done",
+          "passes": true,
           "notes": ""
         }
       ]

@@ -34,35 +34,44 @@ fn is_block_closer(name: &str) -> bool {
     BLOCK_CLOSERS.iter().any(|&s| s.eq_ignore_ascii_case(name))
 }
 
-/// Prefix that marks an inline push directive: `# cmakefmt: push { ... }`
-const PUSH_PREFIX: &str = "# cmakefmt: push";
-/// Marker for an inline pop directive: `# cmakefmt: pop`
-const POP_MARKER: &str = "# cmakefmt: pop";
-/// Marker for a single-command suppression pragma: `# cmakefmt: skip`
-const SKIP_MARKER: &str = "# cmakefmt: skip";
+const PRAGMA_PREFIX: &str = "cmakefmt:";
 
-/// Try to parse a push directive from a comment. Returns the override body if found.
-fn parse_push_directive(comment: &str) -> Option<&str> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PragmaDirective<'a> {
+    Off,
+    On,
+    Skip,
+    Pop,
+    Push(&'a str),
+}
+
+fn parse_pragma_directive(comment: &str) -> Option<PragmaDirective<'_>> {
     let trimmed = comment.trim();
-    if !trimmed.starts_with(PUSH_PREFIX) {
+    let rest = trimmed.strip_prefix('#')?.trim_start();
+    let rest = rest.strip_prefix(PRAGMA_PREFIX)?.trim_start();
+    if rest.is_empty() {
         return None;
     }
-    let rest = trimmed[PUSH_PREFIX.len()..].trim();
-    if rest.starts_with('{') {
-        Some(rest)
-    } else {
-        None
+
+    let action_end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+    let action = &rest[..action_end];
+    let remainder = &rest[action_end..];
+
+    match action {
+        "off" => Some(PragmaDirective::Off),
+        "on" => Some(PragmaDirective::On),
+        "skip" => Some(PragmaDirective::Skip),
+        "pop" => Some(PragmaDirective::Pop),
+        "push" => {
+            let body = remainder.trim_start();
+            if body.starts_with('{') {
+                Some(PragmaDirective::Push(body))
+            } else {
+                None
+            }
+        }
+        _ => None,
     }
-}
-
-/// Check if a comment is a pop directive.
-fn is_pop_directive(comment: &str) -> bool {
-    let trimmed = comment.trim();
-    trimmed == POP_MARKER
-}
-
-fn is_skip_directive(comment: &str) -> bool {
-    comment.trim() == SKIP_MARKER
 }
 
 fn is_ignored_command(command_name: &str, config: &Configuration) -> bool {
@@ -239,6 +248,7 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
     let mut block_stack = BlockStack::new();
 
     let mut skip_next_command = false;
+    let mut formatting_disabled = false;
 
     // Strip trailing blank lines — the formatter adds its own trailing newline
     let elements: &[FileElement] = &file.elements;
@@ -251,8 +261,51 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
 
     for element in elements {
         if let FileElement::BlankLine = element {
-            if !first && !just_opened_block {
+            if formatting_disabled {
+                if !first {
+                    items.push_signal(Signal::NewLine);
+                }
+                first = false;
+            } else if !first && !just_opened_block {
                 pending_blanks = (pending_blanks + 1).min(current_config.max_blank_lines);
+            }
+            continue;
+        }
+
+        if formatting_disabled {
+            match element {
+                FileElement::Command(cmd) => {
+                    if !first {
+                        items.push_signal(Signal::NewLine);
+                    }
+                    first = false;
+                    items.extend(ir_helpers::gen_from_raw_string(command_source_slice(
+                        cmd, source,
+                    )));
+                }
+                FileElement::LineComment(span) => {
+                    let comment_text = span.text(source);
+                    if !first {
+                        items.push_signal(Signal::NewLine);
+                    }
+                    first = false;
+                    items.extend(ir_helpers::gen_from_raw_string(comment_text));
+
+                    if matches!(
+                        parse_pragma_directive(comment_text),
+                        Some(PragmaDirective::On)
+                    ) {
+                        formatting_disabled = false;
+                    }
+                }
+                FileElement::BracketComment(span) => {
+                    if !first {
+                        items.push_signal(Signal::NewLine);
+                    }
+                    first = false;
+                    items.extend(ir_helpers::gen_from_raw_string(span.text(source)));
+                }
+                FileElement::BlankLine => unreachable!(),
             }
             continue;
         }
@@ -272,7 +325,6 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
         }
         pending_blanks = 0;
         just_opened_block = false;
-
         match element {
             FileElement::Command(cmd) => {
                 let cmd_name = cmd.name.text(source);
@@ -351,14 +403,15 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
             }
             FileElement::LineComment(span) => {
                 let comment_text = span.text(source).trim_end();
+                let directive = parse_pragma_directive(comment_text);
 
-                // Check for push/pop directives
-                if let Some(body) = parse_push_directive(comment_text) {
+                if let Some(PragmaDirective::Push(body)) = directive {
                     config_stack.push(current_config.clone());
                     current_config = apply_inline_overrides(&current_config, body);
                 }
-                let is_pop = is_pop_directive(comment_text);
-                let is_skip = is_skip_directive(comment_text);
+                let is_pop = matches!(directive, Some(PragmaDirective::Pop));
+                let is_skip = matches!(directive, Some(PragmaDirective::Skip));
+                let is_off = matches!(directive, Some(PragmaDirective::Off));
                 if !first {
                     items.push_signal(Signal::NewLine);
                 }
@@ -372,6 +425,11 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
 
                 if is_skip {
                     skip_next_command = true;
+                }
+                if is_off {
+                    // `off` starts a byte-preserving region and consumes any pending `skip`.
+                    formatting_disabled = true;
+                    skip_next_command = false;
                 }
 
                 // Pop config after emitting the pop comment

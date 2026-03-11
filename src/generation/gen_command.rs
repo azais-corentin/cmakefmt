@@ -363,7 +363,8 @@ pub fn gen_command(
         && count_wrap_arguments(&arguments) > config.wrap_arg_threshold as usize;
     let magic_trailing_newline =
         config.magic_trailing_newline && has_magic_trailing_newline_signal(cmd, source, &arguments);
-    let allow_single_line = !(force_one_per_line || magic_trailing_newline);
+    let allow_single_line = matches!(config.wrap_style, WrapStyle::Cascade)
+        && !(force_one_per_line || magic_trailing_newline);
     if !arguments.is_empty() {
         let single_line = try_single_line(
             &formatted_name,

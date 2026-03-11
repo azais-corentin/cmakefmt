@@ -40,19 +40,36 @@ fn should_ignore_path(path: &Path, ignore_patterns: &[String]) -> bool {
     })
 }
 
-const PUSH_PREFIX: &str = "# cmakefmt: push";
-const POP_MARKER: &str = "# cmakefmt: pop";
+const PRAGMA_PREFIX: &str = "cmakefmt:";
 
-fn parse_push_directive(comment: &str) -> Option<&str> {
+enum LeadingPragmaDirective<'a> {
+    Push(&'a str),
+    Pop,
+}
+
+fn parse_leading_pragma(comment: &str) -> Option<LeadingPragmaDirective<'_>> {
     let trimmed = comment.trim();
-    if !trimmed.starts_with(PUSH_PREFIX) {
+    let rest = trimmed.strip_prefix('#')?.trim_start();
+    let rest = rest.strip_prefix(PRAGMA_PREFIX)?.trim_start();
+    if rest.is_empty() {
         return None;
     }
-    let rest = trimmed[PUSH_PREFIX.len()..].trim();
-    if rest.starts_with('{') {
-        Some(rest)
-    } else {
-        None
+
+    let action_end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+    let action = &rest[..action_end];
+    let remainder = &rest[action_end..];
+
+    match action {
+        "push" => {
+            let body = remainder.trim_start();
+            if body.starts_with('{') {
+                Some(LeadingPragmaDirective::Push(body))
+            } else {
+                None
+            }
+        }
+        "pop" => Some(LeadingPragmaDirective::Pop),
+        _ => None,
     }
 }
 
@@ -70,16 +87,17 @@ fn resolve_print_options_config(text: &str, base: &Configuration) -> Configurati
             break;
         }
 
-        if let Some(body) = parse_push_directive(trimmed) {
-            stack.push(current.clone());
-            current = apply_inline_overrides(&current, body);
-            continue;
-        }
-
-        if trimmed == POP_MARKER
-            && let Some(previous) = stack.pop()
-        {
-            current = previous;
+        match parse_leading_pragma(trimmed) {
+            Some(LeadingPragmaDirective::Push(body)) => {
+                stack.push(current.clone());
+                current = apply_inline_overrides(&current, body);
+            }
+            Some(LeadingPragmaDirective::Pop) => {
+                if let Some(previous) = stack.pop() {
+                    current = previous;
+                }
+            }
+            None => {}
         }
     }
 

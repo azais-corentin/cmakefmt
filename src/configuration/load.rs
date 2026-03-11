@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use dprint_core::configuration::{
@@ -314,47 +314,240 @@ fn discover_toml_path(start_path: &Path) -> Option<PathBuf> {
 
 /// Applies inline push-directive overrides on top of an existing configuration.
 /// The `header` string is the content between braces in a `# cmakefmt: push { ... }` comment.
-/// Supports both JSON (`"key": value`) and TOML-like (`key = value`) syntax.
+/// Supports JSON (`{"key": value}`) and TOML inline-table syntax (`{ key = value }`).
 pub fn apply_inline_overrides(base: &Configuration, header: &str) -> Configuration {
     let mut loader = Loader::new(base.clone());
+    let mut explicit_keys = HashSet::new();
 
-    // Try JSON first (quoted keys, colon separator)
     if let Ok(map) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(header) {
-        for (key, value) in map {
-            loader.apply_raw_value(&key, RawConfigValue::Json(value));
-        }
-        return loader.finish().config;
+        apply_inline_override_entries(&mut loader, &mut explicit_keys, map);
+        return finish_inline_overrides(loader, &explicit_keys);
     }
 
-    // Fall back to TOML-like syntax (unquoted keys, `=` separator)
-    let content = header.trim();
-    let content = content.strip_prefix('{').unwrap_or(content);
-    let content = content.strip_suffix('}').unwrap_or(content);
-    let content = content.trim();
+    if let Some(map) = parse_relaxed_inline_toml_map(header) {
+        apply_inline_override_entries(&mut loader, &mut explicit_keys, map);
+        return finish_inline_overrides(loader, &explicit_keys);
+    }
 
-    for pair_str in split_respecting_brackets(content) {
-        let pair_str = pair_str.trim();
-        if pair_str.is_empty() {
-            continue;
+    for (key, value) in parse_gersemi_pairs(header) {
+        if let Some(canonical) = canonical_key(&key) {
+            explicit_keys.insert(canonical);
         }
-        // Support both `key = value` and `key: value`
-        let (key, value) = if let Some((k, v)) = pair_str.split_once('=') {
-            (k.trim(), v.trim())
-        } else if let Some((k, v)) = pair_str.split_once(':') {
-            (k.trim(), v.trim())
+
+        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(&value) {
+            loader.apply_raw_value(&key, RawConfigValue::Json(json_val));
         } else {
-            continue;
-        };
-        let key = key.trim_matches('"');
-        // Try to parse value as JSON for structured values (arrays, booleans, numbers)
-        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(value) {
-            loader.apply_raw_value(key, RawConfigValue::Json(json_val));
-        } else {
-            loader.apply_raw_value(key, RawConfigValue::Text(value.to_string()));
+            loader.apply_raw_value(&key, RawConfigValue::Text(value));
         }
     }
 
-    loader.finish().config
+    finish_inline_overrides(loader, &explicit_keys)
+}
+
+fn apply_inline_override_entries(
+    loader: &mut Loader,
+    explicit_keys: &mut HashSet<CanonicalKey>,
+    entries: serde_json::Map<String, serde_json::Value>,
+) {
+    for (key, value) in entries {
+        if let Some(canonical) = canonical_key(&key) {
+            explicit_keys.insert(canonical);
+        }
+        loader.apply_raw_value(&key, RawConfigValue::Json(value));
+    }
+}
+
+fn finish_inline_overrides(loader: Loader, explicit_keys: &HashSet<CanonicalKey>) -> Configuration {
+    let mut config = loader.finish().config;
+    suppress_per_command_overrides_for_push_keys(&mut config, explicit_keys);
+    config
+}
+
+fn parse_relaxed_inline_toml_map(
+    header: &str,
+) -> Option<serde_json::Map<String, serde_json::Value>> {
+    let normalized = normalize_inline_table_literal(header)?;
+    let relaxed = strip_relaxed_trailing_commas(&normalized);
+    let toml_doc = format!("__cmakefmt_inline = {relaxed}");
+    let parsed = toml::from_str::<toml::Table>(&toml_doc).ok()?;
+    let inline_value = parsed.get("__cmakefmt_inline")?.clone();
+    let json_value = serde_json::to_value(inline_value).ok()?;
+
+    match json_value {
+        serde_json::Value::Object(map) => Some(map),
+        _ => None,
+    }
+}
+
+fn normalize_inline_table_literal(header: &str) -> Option<String> {
+    let trimmed = header.trim();
+    if trimmed.is_empty() {
+        return Some("{}".to_string());
+    }
+
+    if trimmed.starts_with('{') {
+        if trimmed.ends_with('}') {
+            return Some(trimmed.to_string());
+        }
+        return None;
+    }
+
+    Some(format!("{{ {trimmed} }}"))
+}
+
+fn strip_relaxed_trailing_commas(input: &str) -> String {
+    let mut output = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+    let mut in_string = false;
+    let mut escaping = false;
+
+    while let Some(ch) = chars.next() {
+        if in_string {
+            output.push(ch);
+            if escaping {
+                escaping = false;
+                continue;
+            }
+            if ch == '\\' {
+                escaping = true;
+                continue;
+            }
+            if ch == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+
+        if ch == '"' {
+            in_string = true;
+            output.push(ch);
+            continue;
+        }
+
+        if ch == ',' {
+            let lookahead = chars.clone();
+            let mut trailing = true;
+            for next in lookahead {
+                if next.is_whitespace() {
+                    continue;
+                }
+                trailing = next == '}' || next == ']';
+                break;
+            }
+            if trailing {
+                continue;
+            }
+        }
+
+        output.push(ch);
+    }
+
+    output
+}
+
+fn suppress_per_command_overrides_for_push_keys(
+    config: &mut Configuration,
+    explicit_keys: &HashSet<CanonicalKey>,
+) {
+    if explicit_keys.is_empty() || config.per_command_config.is_empty() {
+        return;
+    }
+
+    for command_config in config.per_command_config.values_mut() {
+        if explicit_keys.contains(&CanonicalKey::LineWidth) {
+            command_config.line_width = None;
+        }
+        if explicit_keys.contains(&CanonicalKey::WrapStyle) {
+            command_config.wrap_style = None;
+        }
+        if explicit_keys.contains(&CanonicalKey::FirstArgSameLine) {
+            command_config.first_arg_same_line = None;
+        }
+        if explicit_keys.contains(&CanonicalKey::WrapArgThreshold) {
+            command_config.wrap_arg_threshold = None;
+        }
+        if explicit_keys.contains(&CanonicalKey::MagicTrailingNewline) {
+            command_config.magic_trailing_newline = None;
+        }
+
+        if explicit_keys.contains(&CanonicalKey::IndentWidth)
+            || explicit_keys.contains(&CanonicalKey::IndentMode)
+        {
+            command_config.indent_width = None;
+        }
+        if explicit_keys.contains(&CanonicalKey::IndentStyle)
+            || explicit_keys.contains(&CanonicalKey::IndentMode)
+        {
+            command_config.indent_style = None;
+        }
+        if explicit_keys.contains(&CanonicalKey::ContinuationIndentWidth) {
+            command_config.continuation_indent_width = None;
+        }
+        if explicit_keys.contains(&CanonicalKey::GenexIndentWidth) {
+            command_config.genex_indent_width = None;
+        }
+
+        if explicit_keys.contains(&CanonicalKey::CommandCase) {
+            command_config.command_case = None;
+        }
+        if explicit_keys.contains(&CanonicalKey::KeywordCase) {
+            command_config.keyword_case = None;
+        }
+        if explicit_keys.contains(&CanonicalKey::CustomKeywords) {
+            command_config.custom_keywords = None;
+        }
+        if explicit_keys.contains(&CanonicalKey::LiteralCase) {
+            command_config.literal_case = None;
+        }
+
+        if explicit_keys.contains(&CanonicalKey::ClosingParenNewline) {
+            command_config.closing_paren_newline = None;
+        }
+        if explicit_keys.contains(&CanonicalKey::SpaceBeforeParen) {
+            command_config.space_before_paren = None;
+        }
+        if explicit_keys.contains(&CanonicalKey::SpaceInsideParen) {
+            command_config.space_inside_paren = None;
+        }
+
+        if explicit_keys.contains(&CanonicalKey::CommentPreservation) {
+            command_config.comment_preservation = None;
+        }
+        if explicit_keys.contains(&CanonicalKey::CommentWidth) {
+            command_config.comment_width = None;
+        }
+        if explicit_keys.contains(&CanonicalKey::AlignTrailingComments) {
+            command_config.align_trailing_comments = None;
+        }
+        if explicit_keys.contains(&CanonicalKey::CommentGap) {
+            command_config.comment_gap = None;
+        }
+
+        if explicit_keys.contains(&CanonicalKey::AlignPropertyValues) {
+            command_config.align_property_values = None;
+        }
+        if explicit_keys.contains(&CanonicalKey::AlignConsecutiveSet) {
+            command_config.align_consecutive_set = None;
+        }
+        if explicit_keys.contains(&CanonicalKey::AlignArgGroups) {
+            command_config.align_arg_groups = None;
+        }
+
+        if explicit_keys.contains(&CanonicalKey::GenexWrap) {
+            command_config.genex_wrap = None;
+        }
+        if explicit_keys.contains(&CanonicalKey::GenexClosingAngleNewline) {
+            command_config.genex_closing_angle_newline = None;
+        }
+        if explicit_keys.contains(&CanonicalKey::SortArguments)
+            || explicit_keys.contains(&CanonicalKey::SortKeywordSections)
+        {
+            command_config.sort_arguments = None;
+        }
+        if explicit_keys.contains(&CanonicalKey::SortKeywordSections) {
+            command_config.sort_keyword_sections = None;
+        }
+    }
 }
 
 /// Parses a single-line fixture/header override payload (JSON or gersemi style).
@@ -375,7 +568,7 @@ pub fn load_from_header(header: &str) -> ConfigLoadResult {
     loader.finish()
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum CanonicalKey {
     LineWidth,
     WrapStyle,
