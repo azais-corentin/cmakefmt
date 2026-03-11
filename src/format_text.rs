@@ -4,7 +4,7 @@ use anyhow::Result;
 use dprint_core::formatting::{self, PrintOptions};
 use glob::Pattern;
 
-use crate::configuration::{Configuration, NewLineKind};
+use crate::configuration::{Configuration, NewLineKind, apply_inline_overrides};
 use crate::generation::gen_file;
 use crate::parser;
 
@@ -40,9 +40,56 @@ fn should_ignore_path(path: &Path, ignore_patterns: &[String]) -> bool {
     })
 }
 
+const PUSH_PREFIX: &str = "# cmakefmt: push";
+const POP_MARKER: &str = "# cmakefmt: pop";
+
+fn parse_push_directive(comment: &str) -> Option<&str> {
+    let trimmed = comment.trim();
+    if !trimmed.starts_with(PUSH_PREFIX) {
+        return None;
+    }
+    let rest = trimmed[PUSH_PREFIX.len()..].trim();
+    if rest.starts_with('{') {
+        Some(rest)
+    } else {
+        None
+    }
+}
+
+fn resolve_print_options_config(text: &str, base: &Configuration) -> Configuration {
+    let mut current = base.clone();
+    let mut stack: Vec<Configuration> = Vec::new();
+
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        if !trimmed.starts_with('#') {
+            break;
+        }
+
+        if let Some(body) = parse_push_directive(trimmed) {
+            stack.push(current.clone());
+            current = apply_inline_overrides(&current, body);
+            continue;
+        }
+
+        if trimmed == POP_MARKER
+            && let Some(previous) = stack.pop()
+        {
+            current = previous;
+        }
+    }
+
+    current
+}
+
 fn format_inner(text: &str, config: &Configuration) -> Result<String> {
     let file = parser::parse(text)?;
-    let print_options = build_print_options(text, config);
+    let print_config = resolve_print_options_config(text, config);
+    let print_options = build_print_options(text, &print_config);
     let result = formatting::format(|| gen_file(&file, text, config), print_options);
     Ok(result)
 }
