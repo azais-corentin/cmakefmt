@@ -17,6 +17,13 @@
       enable = true;
       channel = "stable";
     };
+    python = {
+      enable = true;
+      uv = {
+        enable = true;
+        sync.enable = true;
+      };
+    };
   };
 
   # https://devenv.sh/processes/

@@ -1,0 +1,81 @@
+name: benchmark-fixtures
+
+on:
+  push:
+
+permissions:
+  contents: write
+
+jobs:
+  benchmark:
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Capture rust version
+        run: |
+          echo "RUST_VERSION=$(rustc --version)" >> "$GITHUB_ENV"
+
+      - name: Run formatter fixture benchmarks
+        run: cargo bench --bench formatter_fixtures_bench
+
+      - name: Collect normalized benchmark result
+        run: |
+          python scripts/collect_benchmark_results.py \
+            --criterion-dir "target/criterion" \
+            --output "$RUNNER_TEMP/latest-benchmark.json" \
+            --commit-sha "${GITHUB_SHA}" \
+            --runner "${RUNNER_OS}" \
+            --rust-version "${RUST_VERSION}"
+
+      - name: Append and publish benchmark history
+        env:
+          HISTORY_BRANCH: benchmark-history
+          HISTORY_FILE: benchmarks/cmakefmt-fixtures-history.json
+        run: |
+          set -euo pipefail
+
+          history_worktree="$(mktemp -d)"
+          cleanup() {
+            git worktree remove "$history_worktree" --force || true
+          }
+          trap cleanup EXIT
+
+          if git ls-remote --exit-code --heads origin "$HISTORY_BRANCH" >/dev/null; then
+            git fetch origin "$HISTORY_BRANCH"
+            git worktree add "$history_worktree" "origin/$HISTORY_BRANCH"
+          else
+            git worktree add -b "$HISTORY_BRANCH" "$history_worktree" HEAD
+          fi
+
+          cp "$RUNNER_TEMP/latest-benchmark.json" "$history_worktree/latest-benchmark.json"
+
+          python scripts/append_benchmark_history.py \
+            --entry-file "$history_worktree/latest-benchmark.json" \
+            --history-file "$history_worktree/$HISTORY_FILE"
+
+          rm "$history_worktree/latest-benchmark.json"
+
+          git -C "$history_worktree" config user.name "github-actions[bot]"
+          git -C "$history_worktree" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git -C "$history_worktree" add "$HISTORY_FILE"
+
+          if git -C "$history_worktree" diff --cached --quiet; then
+            echo "No benchmark history changes to commit"
+            exit 0
+          fi
+
+          git -C "$history_worktree" commit -m "bench: append fixture benchmark history for ${GITHUB_SHA}"
+          git -C "$history_worktree" push origin "HEAD:$HISTORY_BRANCH"
