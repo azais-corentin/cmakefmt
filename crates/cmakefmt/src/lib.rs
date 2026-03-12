@@ -1,6 +1,7 @@
 mod configuration;
 mod format_text;
 mod generation;
+mod instrumentation;
 mod parser;
 mod post_process;
 pub mod printer;

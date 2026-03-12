@@ -1,13 +1,18 @@
 use std::io::{self, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::time::Instant;
 
 use clap::{ArgAction, Parser};
 use cmakefmt::{
     CaseStyle, ConfigDiagnostic, ConfigLoadResult, Configuration, IndentStyle, NewLineKind,
     SortArguments, SpaceBeforeParen, format_text, load_from_toml_path,
 };
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{EnvFilter, Registry};
 
+mod trace_summary;
 #[derive(Debug, Parser)]
 #[command(name = "cmakefmt", about = "Format CMake files", version)]
 struct Cli {
@@ -99,6 +104,18 @@ struct Cli {
     /// Insert space before '(' for these commands (comma-separated, e.g. if,while,foreach).
     #[arg(long, value_delimiter = ',')]
     space_before_paren: Vec<String>,
+
+    /// Write Chrome trace JSON output to this path.
+    #[arg(long, value_name = "PATH")]
+    trace_output: Option<PathBuf>,
+
+    /// Write normalized trace summary JSON to this path.
+    #[arg(long, value_name = "PATH")]
+    trace_summary_output: Option<PathBuf>,
+
+    /// tracing-subscriber EnvFilter directive string for trace capture.
+    #[arg(long, value_name = "DIRECTIVE")]
+    trace_filter: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -217,6 +234,10 @@ fn validate_flag_interactions(cli: &Cli, output: &OutputControl) -> Result<(), E
     }
     if !cli.stdin && cli.assume_filename.is_some() {
         output.warning("--assume-filename is ignored without --stdin");
+    }
+    if cli.trace_summary_output.is_some() && cli.trace_output.is_none() {
+        output.error("--trace-summary-output requires --trace-output");
+        return Err(ExitCode::from(2));
     }
     Ok(())
 }
@@ -379,6 +400,33 @@ struct FormatMode {
 struct RunState {
     any_unformatted: bool,
     had_error: bool,
+    files_processed: usize,
+    input_bytes_total: u64,
+    changed_files: usize,
+    error_count: usize,
+    file_records: Vec<trace_summary::TraceFileRecord>,
+}
+
+struct TraceSession {
+    trace_output: PathBuf,
+    trace_summary_output: Option<PathBuf>,
+    started_at: Instant,
+    flush_guard: tracing_chrome::FlushGuard,
+}
+
+fn record_trace_file_result(
+    state: &mut RunState,
+    path: &Path,
+    input: &str,
+    changed: bool,
+    status: &str,
+ ) {
+    state.file_records.push(trace_summary::TraceFileRecord {
+        path: path.display().to_string(),
+        input_bytes: input.len() as u64,
+        changed,
+        status: status.to_string(),
+    });
 }
 
 fn format_single_input(
@@ -390,10 +438,16 @@ fn format_single_input(
     state: &mut RunState,
     write_back_path: Option<&Path>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    state.files_processed += 1;
+    state.input_bytes_total += input.len() as u64;
+
     match format_text(path, input, config) {
         Ok(result) => {
             let changed = result.is_some();
             let formatted = result.as_deref().unwrap_or(input);
+            if changed {
+                state.changed_files += 1;
+            }
 
             if mode.check {
                 if changed {
@@ -405,6 +459,7 @@ fn format_single_input(
                         render_unified_diff(path, input, formatted, mode.color).as_bytes(),
                     )?;
                 }
+                record_trace_file_result(state, path, input, changed, "ok");
                 return Ok(());
             }
 
@@ -414,6 +469,7 @@ fn format_single_input(
                         render_unified_diff(path, input, formatted, mode.color).as_bytes(),
                     )?;
                 }
+                record_trace_file_result(state, path, input, changed, "ok");
                 return Ok(());
             }
 
@@ -423,19 +479,25 @@ fn format_single_input(
                         std::fs::write(destination, formatted)?;
                         output.status(format!("formatted: {}", destination.display()));
                     }
+                    record_trace_file_result(state, path, input, changed, "ok");
                     return Ok(());
                 }
                 output.error("--write cannot be used with stdin");
                 state.had_error = true;
+                state.error_count += 1;
+                record_trace_file_result(state, path, input, false, "error");
                 return Ok(());
             }
 
             io::stdout().write_all(formatted.as_bytes())?;
+            record_trace_file_result(state, path, input, changed, "ok");
             Ok(())
         }
         Err(error) => {
             output.error(format!("{}: {error}", path.display()));
             state.had_error = true;
+            state.error_count += 1;
+            record_trace_file_result(state, path, input, false, "error");
 
             if !mode.check && !mode.diff && !mode.write {
                 io::stdout().write_all(input.as_bytes())?;
@@ -452,6 +514,29 @@ fn print_config(config: &Configuration) -> Result<(), Box<dyn std::error::Error>
     Ok(())
 }
 
+fn start_trace_session(cli: &Cli) -> Result<Option<TraceSession>, Box<dyn std::error::Error>> {
+    let Some(trace_output) = cli.trace_output.clone() else {
+        return Ok(None);
+    };
+
+    let (chrome_layer, flush_guard) = tracing_chrome::ChromeLayerBuilder::new()
+        .file(trace_output.clone())
+        .build();
+    let filter = match &cli.trace_filter {
+        Some(filter) => EnvFilter::try_new(filter.clone())?,
+        None => EnvFilter::new("cmakefmt=info,cmakefmt_cli=info"),
+    };
+
+    Registry::default().with(filter).with(chrome_layer).try_init()?;
+
+    Ok(Some(TraceSession {
+        trace_output,
+        trace_summary_output: cli.trace_summary_output.clone(),
+        started_at: Instant::now(),
+        flush_guard,
+    }))
+}
+
 fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
     let cli = Cli::parse();
     let output = OutputControl {
@@ -464,6 +549,7 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
         return Ok(code);
     }
 
+    let mut trace_session = start_trace_session(&cli)?;
     let overrides = cli.overrides();
     let mode = FormatMode {
         check: cli.check,
@@ -472,88 +558,136 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
         color: output.color,
     };
     let use_stdin = cli.stdin || cli.files.is_empty();
-    if use_stdin {
-        let mut input = String::new();
-        io::stdin().read_to_string(&mut input)?;
 
-        let probe_path = resolve_stdin_probe_path(&cli);
-        output.info(format!(
-            "resolving stdin configuration from {}",
-            probe_path.display()
-        ));
-        let config_result = load_effective_config(&cli, &overrides, &probe_path);
-        emit_config_diagnostics(&output, &probe_path, &config_result.diagnostics);
+    let mut state = RunState::default();
+    let mut invocation_file_count = 0usize;
+
+    let mut run_result = (|| -> Result<ExitCode, Box<dyn std::error::Error>> {
+        if use_stdin {
+            invocation_file_count = 1;
+            let mut input = String::new();
+            io::stdin().read_to_string(&mut input)?;
+
+            let probe_path = resolve_stdin_probe_path(&cli);
+            output.info(format!(
+                "resolving stdin configuration from {}",
+                probe_path.display()
+            ));
+            let config_result = load_effective_config(&cli, &overrides, &probe_path);
+            emit_config_diagnostics(&output, &probe_path, &config_result.diagnostics);
+
+            if cli.print_config {
+                print_config(&config_result.config)?;
+                return Ok(ExitCode::SUCCESS);
+            }
+
+            let path = cli
+                .assume_filename
+                .as_deref()
+                .unwrap_or_else(|| Path::new("<stdin>"));
+            format_single_input(
+                path,
+                &input,
+                &config_result.config,
+                &output,
+                mode,
+                &mut state,
+                None,
+            )?;
+
+            if state.had_error {
+                return Ok(ExitCode::from(2));
+            }
+            if cli.check && state.any_unformatted {
+                return Ok(ExitCode::from(1));
+            }
+            return Ok(ExitCode::SUCCESS);
+        }
+
+        let paths = expand_globs(&cli.files)?;
+        if paths.is_empty() {
+            output.error("no files matched");
+            return Ok(ExitCode::from(2));
+        }
+        invocation_file_count = paths.len();
 
         if cli.print_config {
+            let first_path = &paths[0];
+            let config_result = load_effective_config(&cli, &overrides, first_path);
+            emit_config_diagnostics(&output, first_path, &config_result.diagnostics);
             print_config(&config_result.config)?;
             return Ok(ExitCode::SUCCESS);
         }
 
-        let mut state = RunState::default();
-        let path = cli
-            .assume_filename
-            .as_deref()
-            .unwrap_or_else(|| Path::new("<stdin>"));
-        format_single_input(
-            path,
-            &input,
-            &config_result.config,
-            &output,
-            mode,
-            &mut state,
-            None,
-        )?;
+        for path in &paths {
+            output.info(format!("formatting {}", path.display()));
+
+            let input = std::fs::read_to_string(path)?;
+            let config_result = load_effective_config(&cli, &overrides, path);
+            emit_config_diagnostics(&output, path, &config_result.diagnostics);
+
+            format_single_input(
+                path,
+                &input,
+                &config_result.config,
+                &output,
+                mode,
+                &mut state,
+                Some(path.as_path()),
+            )?;
+        }
 
         if state.had_error {
-            return Ok(ExitCode::from(2));
+            Ok(ExitCode::from(2))
+        } else if cli.check && state.any_unformatted {
+            Ok(ExitCode::from(1))
+        } else {
+            Ok(ExitCode::SUCCESS)
         }
-        if cli.check && state.any_unformatted {
-            return Ok(ExitCode::from(1));
+    })();
+
+    if let Some(session) = trace_session.take() {
+        drop(session.flush_guard);
+
+        if let Some(summary_path) = session.trace_summary_output.as_deref() {
+            let file_count = if invocation_file_count > 0 {
+                invocation_file_count
+            } else {
+                state.files_processed
+            };
+            let summary_input = trace_summary::TraceSummaryInput {
+                tool_version: env!("CARGO_PKG_VERSION"),
+                mode: trace_summary::TraceModeFlags {
+                    check: mode.check,
+                    diff: mode.diff,
+                    write: mode.write,
+                    stdin: use_stdin,
+                },
+                file_count,
+                input_bytes_total: state.input_bytes_total,
+                changed_files: state.changed_files,
+                error_count: state.error_count,
+                total_wall_ms: session.started_at.elapsed().as_secs_f64() * 1000.0,
+                file_records: state.file_records.clone(),
+            };
+
+            if let Err(error) = trace_summary::write_summary_from_trace(
+                &session.trace_output,
+                summary_path,
+                &summary_input,
+            ) {
+                output.error(format!(
+                    "failed to write trace summary {}: {error}",
+                    summary_path.display()
+                ));
+                if matches!(run_result, Ok(code) if code == ExitCode::SUCCESS) {
+                    run_result = Ok(ExitCode::from(2));
+                }
+            }
         }
-        return Ok(ExitCode::SUCCESS);
     }
 
-    let paths = expand_globs(&cli.files)?;
-    if paths.is_empty() {
-        output.error("no files matched");
-        return Ok(ExitCode::from(2));
-    }
-
-    if cli.print_config {
-        let first_path = &paths[0];
-        let config_result = load_effective_config(&cli, &overrides, first_path);
-        emit_config_diagnostics(&output, first_path, &config_result.diagnostics);
-        print_config(&config_result.config)?;
-        return Ok(ExitCode::SUCCESS);
-    }
-
-    let mut state = RunState::default();
-
-    for path in &paths {
-        output.info(format!("formatting {}", path.display()));
-
-        let input = std::fs::read_to_string(path)?;
-        let config_result = load_effective_config(&cli, &overrides, path);
-        emit_config_diagnostics(&output, path, &config_result.diagnostics);
-
-        format_single_input(
-            path,
-            &input,
-            &config_result.config,
-            &output,
-            mode,
-            &mut state,
-            Some(path.as_path()),
-        )?;
-    }
-
-    if state.had_error {
-        Ok(ExitCode::from(2))
-    } else if cli.check && state.any_unformatted {
-        Ok(ExitCode::from(1))
-    } else {
-        Ok(ExitCode::SUCCESS)
-    }
+    run_result
 }
 
 fn main() -> ExitCode {

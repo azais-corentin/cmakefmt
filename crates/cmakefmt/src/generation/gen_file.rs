@@ -1,11 +1,12 @@
+use tracing::info_span;
+
+use crate::configuration::{Configuration, EndCommandArgs, apply_inline_overrides};
+use crate::instrumentation::{EVENT_GEN_FILE, EVENT_GEN_FILE_COMMAND};
+use crate::parser::ast::{Argument, CommandInvocation, File, FileElement};
 use crate::printer::ir_helpers;
 use crate::printer::{PrintItems, Signal};
 
-use crate::configuration::{Configuration, EndCommandArgs, apply_inline_overrides};
-use crate::parser::ast::{Argument, CommandInvocation, File, FileElement};
-
 use super::gen_command::gen_command;
-
 /// Flow-control commands that increase indentation for the block following them.
 const BLOCK_OPENERS: &[&str] = &["if", "foreach", "while", "function", "macro", "block"];
 
@@ -326,12 +327,12 @@ fn emit_comment_with_opening_indent(
 }
 
 pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems {
+    let _file_stage = info_span!(EVENT_GEN_FILE, element_count = file.elements.len()).entered();
     let mut items = PrintItems::new();
     let mut pending_blanks: u8 = 0;
     let mut indent_level: u32 = 0;
     let mut first = true;
     let mut just_opened_block = false;
-
     // Config stack for push/pop directives
     let mut config_stack: Vec<Configuration> = Vec::new();
     let mut current_config = config.clone();
@@ -431,6 +432,14 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
         match element {
             FileElement::Command(cmd) => {
                 let cmd_name = cmd.name.text(source);
+                let command_stage = info_span!(
+                    EVENT_GEN_FILE_COMMAND,
+                    command = cmd_name,
+                    indent_level,
+                    argument_count = cmd.arguments.len(),
+                    preserve_verbatim = tracing::field::Empty
+                );
+                let _command_entered = command_stage.enter();
 
                 // Adjust indent BEFORE emitting the command for middles/closers
                 let was_in_block = indent_level > 0;
@@ -445,6 +454,7 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
 
                 let preserve_verbatim =
                     skip_next_command || is_ignored_command(cmd_name, &current_config);
+                command_stage.record("preserve_verbatim", preserve_verbatim);
                 if skip_next_command {
                     skip_next_command = false;
                 }

@@ -14,4 +14,9 @@ anyhow = "1.0.102"
 clap = { version = "4.6.0", features = ["derive"] }
 cmakefmt = { path = "../cmakefmt", features = ["cli"] }
 glob = "0.3.3"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = { version = "1.0.149", features = ["preserve_order"] }
 toml = "0.9.8"
+tracing = "0.1.44"
+tracing-chrome = "0.7.2"
+tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt"] }

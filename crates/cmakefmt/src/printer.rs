@@ -7,6 +7,10 @@
 //! No backtracking, conditions, or line-width measurement — cmakefmt makes all layout decisions
 //! in the generation layer.
 
+use tracing::info_span;
+
+use crate::instrumentation::EVENT_PRINTER_FORMAT;
+
 // ── IR types ────────────────────────────────────────────────────────────────
 
 /// A signal that controls printer state (indentation, newlines).
@@ -188,6 +192,7 @@ pub struct PrintOptions {
 /// Mirrors `dprint_core::formatting::format`: accepts a closure that produces the items and
 /// options that control rendering. The closure form exists for API compatibility.
 pub fn format(get_items: impl FnOnce() -> PrintItems, options: PrintOptions) -> String {
+    let _stage = info_span!(EVENT_PRINTER_FORMAT).entered();
     let items = get_items();
     render(&items, &options)
 }

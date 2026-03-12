@@ -3,22 +3,48 @@ use std::path::Path;
 use crate::printer::{PrintOptions, format as printer_format};
 use anyhow::Result;
 use glob::Pattern;
+use tracing::info_span;
 
 use crate::configuration::{Configuration, NewLineKind, apply_inline_overrides};
 use crate::generation::gen_file;
+use crate::instrumentation::{
+    EVENT_FORMAT_BOM_STRIP, EVENT_FORMAT_BYPASS_CHECK, EVENT_FORMAT_FINAL_NEWLINE,
+    EVENT_FORMAT_FINALIZE_WHITESPACE, EVENT_FORMAT_GENERATE_IR, EVENT_FORMAT_NORMALIZE_BARE_CR,
+    EVENT_FORMAT_PARSE, EVENT_FORMAT_PIPELINE, EVENT_FORMAT_POST_PROCESS,
+    EVENT_FORMAT_PRINT, EVENT_FORMAT_RESOLVE_OPTIONS, EVENT_FORMAT_RESTORE_BARE_CR,
+    span_format_invocation,
+};
 use crate::parser;
 
 pub fn format_text(path: &Path, input: &str, config: &Configuration) -> Result<Option<String>> {
-    if should_bypass_formatting(path, config) {
+    let invocation_span = span_format_invocation(path, input.len());
+    let _invocation_entered = invocation_span.enter();
+
+    let bypassed = {
+        let _stage =
+            info_span!(EVENT_FORMAT_BYPASS_CHECK, ignore_pattern_count = config.ignore_patterns.len())
+                .entered();
+        should_bypass_formatting(path, config)
+    };
+    invocation_span.record("bypassed", bypassed);
+    if bypassed {
         return Ok(None);
     }
 
-    let text = strip_bom(input);
-    let result = format_inner(text, config)?;
-    if result == input {
-        Ok(None)
-    } else {
+    let text = {
+        let _stage = info_span!(EVENT_FORMAT_BOM_STRIP).entered();
+        strip_bom(input)
+    };
+    let result = {
+        let _stage = info_span!(EVENT_FORMAT_PIPELINE).entered();
+        format_inner(text, config)?
+    };
+    let changed = result != input;
+    invocation_span.record("changed", changed);
+    if changed {
         Ok(Some(result))
+    } else {
+        Ok(None)
     }
 }
 
@@ -111,17 +137,24 @@ fn format_inner(text: &str, config: &Configuration) -> Result<String> {
     let bare_cr = has_bare_cr(text);
     let normalized;
     let parse_text = if bare_cr {
+        let _stage = info_span!(EVENT_FORMAT_NORMALIZE_BARE_CR, input_bytes = text.len()).entered();
         normalized = normalize_bare_crs(text);
         normalized.as_str()
     } else {
         text
     };
 
-    let file = parser::parse(parse_text)?;
+    let file = {
+        let _stage = info_span!(EVENT_FORMAT_PARSE, input_bytes = parse_text.len()).entered();
+        parser::parse(parse_text)?
+    };
 
     // Detect line ending from the ORIGINAL text (bare CRs excluded from counting).
     let newline = resolve_new_line_kind(text, config.new_line_kind);
-    let print_config = resolve_print_options_config(parse_text, config);
+    let print_config = {
+        let _stage = info_span!(EVENT_FORMAT_RESOLVE_OPTIONS).entered();
+        resolve_print_options_config(parse_text, config)
+    };
     let print_options = PrintOptions {
         max_width: print_config.line_width,
         indent_width: print_config.indent_width,
@@ -129,18 +162,39 @@ fn format_inner(text: &str, config: &Configuration) -> Result<String> {
         new_line_text: newline,
     };
 
-    let result = printer_format(|| gen_file(&file, parse_text, config), print_options);
-    let result = crate::post_process::post_process_alignments(&result, config);
+    let result = {
+        let _stage = info_span!(EVENT_FORMAT_PRINT).entered();
+        printer_format(
+            || {
+                let _gen_stage =
+                    info_span!(EVENT_FORMAT_GENERATE_IR, file_elements = file.elements.len())
+                        .entered();
+                gen_file(&file, parse_text, config)
+            },
+            print_options,
+        )
+    };
+    let result = {
+        let _stage = info_span!(EVENT_FORMAT_POST_PROCESS).entered();
+        crate::post_process::post_process_alignments(&result, config)
+    };
 
     // Restore whitespace where config says to preserve (trimTrailingWhitespace,
     // collapseSpaces) by comparing formatted output with original input.
-    let result = finalize_whitespace(&result, parse_text, config, newline);
+    let result = {
+        let _stage = info_span!(EVENT_FORMAT_FINALIZE_WHITESPACE).entered();
+        finalize_whitespace(&result, parse_text, config, newline)
+    };
 
     // Apply finalNewline semantics.
-    let result = apply_final_newline(&result, text, config, newline);
+    let result = {
+        let _stage = info_span!(EVENT_FORMAT_FINAL_NEWLINE).entered();
+        apply_final_newline(&result, text, config, newline)
+    };
 
     // Restore bare CRs at their original positions.
     let result = if bare_cr {
+        let _stage = info_span!(EVENT_FORMAT_RESTORE_BARE_CR).entered();
         restore_bare_crs(&result, text)
     } else {
         result

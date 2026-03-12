@@ -1,6 +1,8 @@
 use anyhow::{Result, bail};
 use logos::Logos;
+use tracing::info_span;
 
+use crate::instrumentation::{EVENT_PARSER_COMMAND, EVENT_PARSER_FILE};
 use super::ast::{Argument, CommandInvocation, File, FileElement, Span};
 use super::token::Token;
 
@@ -80,6 +82,7 @@ impl<'a> Parser<'a> {
 
 /// Parse CMake source text into an AST.
 pub fn parse(source: &str) -> Result<File> {
+    let _stage = info_span!(EVENT_PARSER_FILE, input_bytes = source.len()).entered();
     let mut parser = Parser::new(source);
     let elements = parse_file_elements(&mut parser)?;
     Ok(File { elements })
@@ -133,6 +136,8 @@ fn parse_file_elements(p: &mut Parser) -> Result<Vec<FileElement>> {
 }
 
 fn parse_command_invocation(p: &mut Parser) -> Result<CommandInvocation> {
+    let _stage = info_span!(EVENT_PARSER_COMMAND).entered();
+
     // Consume command name (UnquotedText)
     let (_, name_span) = p.advance().unwrap();
 

@@ -56,18 +56,35 @@ formatting decisions.
 
 Suppress non-error output.
 
+### `--trace-output <path>`
+
+Enable tracing and write Chrome trace JSON (`traceEvents`) to the provided path.
+One trace file is emitted per CLI invocation.
+
+### `--trace-summary-output <path>`
+
+Write a normalized summary JSON (stage aggregates, hotspots, per-file timing) to the
+provided path. Requires `--trace-output`.
+
+> Privacy note: the summary intentionally excludes CMake source snippets and argument text.
+
+### `--trace-filter <directive>`
+
+Optional `tracing_subscriber::EnvFilter` directive string used when trace capture is
+enabled. If omitted, the default filter is `cmakefmt=info,cmakefmt_cli=info`.
+
 ### `--print-config`
 
 Print the resolved configuration (after merging defaults, config file, and CLI overrides)
 as TOML to stdout. Useful for debugging.
-
 ### Flag Interactions
 
-| Combination                           | Behavior                                                                                                                                             |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--check` + `--diff`                  | Both can be used together. `--diff` prints the unified diff to stdout; `--check` controls the exit code. No changes needed → exit 0, no diff output. |
-| `--check` + `--write`                 | Mutually exclusive. The formatter exits with code 2 and a diagnostic message.                                                                        |
-| `--diff` + `--write`                  | Mutually exclusive. The formatter exits with code 2 and a diagnostic message.                                                                        |
-| `--stdin` + file arguments            | Error, exit code 2 (see `--stdin` above).                                                                                                            |
-| `--quiet` + `--verbose`               | `--quiet` wins; non-error output is suppressed.                                                                                                      |
-| `--assume-filename` without `--stdin` | Warning, flag is ignored.                                                                                                                            |
+| Combination                                       | Behavior                                                                                                                                             |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--check` + `--diff`                              | Both can be used together. `--diff` prints the unified diff to stdout; `--check` controls the exit code. No changes needed → exit 0, no diff output. |
+| `--check` + `--write`                             | Mutually exclusive. The formatter exits with code 2 and a diagnostic message.                                                                        |
+| `--diff` + `--write`                              | Mutually exclusive. The formatter exits with code 2 and a diagnostic message.                                                                        |
+| `--stdin` + file arguments                        | Error, exit code 2 (see `--stdin` above).                                                                                                            |
+| `--quiet` + `--verbose`                           | `--quiet` wins; non-error output is suppressed.                                                                                                      |
+| `--assume-filename` without `--stdin`             | Warning, flag is ignored.                                                                                                                            |
+| `--trace-summary-output` without `--trace-output` | Error, exit code 2.                                                                                                                                  |

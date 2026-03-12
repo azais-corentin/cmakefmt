@@ -4,7 +4,12 @@
 //! (consecutive set alignment, trailing comment alignment at file scope) which
 //! cannot be expressed within the per-command IR generation.
 
+use tracing::info_span;
+
 use crate::configuration::{CommentPreservation, Configuration, apply_inline_overrides};
+use crate::instrumentation::{
+    EVENT_POST_PROCESS, EVENT_POST_PROCESS_ALIGN_BLOCK, EVENT_POST_PROCESS_REFLOW_COMMENT,
+};
 
 /// Apply all post-processing alignment passes to the formatted output.
 ///
@@ -13,18 +18,29 @@ use crate::configuration::{CommentPreservation, Configuration, apply_inline_over
 /// - `alignConsecutiveSet`: column-align values in consecutive `set()` calls.
 /// - `alignTrailingComments`: column-align trailing `#` comments on consecutive lines.
 pub fn post_process_alignments(text: &str, base_config: &Configuration) -> String {
+    let _stage = info_span!(EVENT_POST_PROCESS, input_bytes = text.len()).entered();
     let newline = detect_newline(text);
     let mut lines: Vec<String> = split_lines(text, newline);
 
     // Build per-line config snapshot used by the reflow pass.
     let initial_configs = resolve_per_line_config(&lines, base_config);
-    lines = reflow_standalone_comment_blocks(&lines, &initial_configs);
+    lines = {
+        let _reflow_stage = info_span!(EVENT_POST_PROCESS_REFLOW_COMMENT).entered();
+        reflow_standalone_comment_blocks(&lines, &initial_configs)
+    };
 
     // Re-resolve config after reflow because line counts may have changed.
     let configs = resolve_per_line_config(&lines, base_config);
 
-    align_consecutive_set_lines(&mut lines, &configs);
-    align_trailing_comment_lines(&mut lines, &configs, newline);
+    {
+        let _set_stage = info_span!(EVENT_POST_PROCESS_ALIGN_BLOCK, block = "set").entered();
+        align_consecutive_set_lines(&mut lines, &configs);
+    }
+    {
+        let _comment_stage =
+            info_span!(EVENT_POST_PROCESS_ALIGN_BLOCK, block = "trailing_comment").entered();
+        align_trailing_comment_lines(&mut lines, &configs, newline);
+    }
 
     join_lines(&lines, newline)
 }

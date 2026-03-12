@@ -1,3 +1,8 @@
+---
+name: criterion-bench
+description: Run Criterion benchmarks and detect performance regressions.
+---
+
 # Criterion Benchmark Skill
 
 How to run Criterion 0.5 benchmarks, compare baselines, and detect performance regressions.
