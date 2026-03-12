@@ -418,7 +418,7 @@ pub fn gen_command(
     source: &str,
     config: &Configuration,
     indent_depth: u32,
- ) -> PrintItems {
+) -> PrintItems {
     // Resolve per-command overrides before any formatting decisions
     let raw_name = cmd.name.text(source);
     let command_stage = info_span!(

@@ -420,7 +420,7 @@ fn record_trace_file_result(
     input: &str,
     changed: bool,
     status: &str,
- ) {
+) {
     state.file_records.push(trace_summary::TraceFileRecord {
         path: path.display().to_string(),
         input_bytes: input.len() as u64,
@@ -527,7 +527,10 @@ fn start_trace_session(cli: &Cli) -> Result<Option<TraceSession>, Box<dyn std::e
         None => EnvFilter::new("cmakefmt=info,cmakefmt_cli=info"),
     };
 
-    Registry::default().with(filter).with(chrome_layer).try_init()?;
+    Registry::default()
+        .with(filter)
+        .with(chrome_layer)
+        .try_init()?;
 
     Ok(Some(TraceSession {
         trace_output,

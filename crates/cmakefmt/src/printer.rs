@@ -33,8 +33,10 @@ pub enum Signal {
 /// A single item in the print stream.
 #[derive(Debug, Clone)]
 pub enum PrintItem {
-    /// A text fragment. Never contains `\n` — newlines are always [`Signal::NewLine`].
+    /// An owned text fragment. Never contains `\n` — newlines are always [`Signal::NewLine`].
     String(String),
+    /// A static text fragment used for punctuation like `(`, `)`, and `,`.
+    Static(&'static str),
     /// A single space character.
     Space,
     /// A printer signal (indent, newline, etc.).
@@ -65,13 +67,13 @@ impl PrintItems {
         }
     }
 
-    /// Append a borrowed string fragment (cloned into an owned `String`).
+    /// Append a static string fragment.
     ///
     /// In dprint-core this computes display width for CJK characters; cmakefmt only calls it
     /// for single ASCII characters like `(`, `)`, and `,`, so width computation is unnecessary.
-    pub fn push_str_runtime_width_computed(&mut self, text: &str) {
+    pub fn push_str_runtime_width_computed(&mut self, text: &'static str) {
         if !text.is_empty() {
-            self.items.push(PrintItem::String(text.to_string()));
+            self.items.push(PrintItem::Static(text));
         }
     }
 
@@ -203,6 +205,9 @@ fn render(items: &PrintItems, options: &PrintOptions) -> String {
     let mut indent_level: u8 = 0;
     let mut ignore_indent_count: u8 = 0;
     let mut at_line_start = true;
+    // Cache expanded indent prefixes by level (index = indent level).
+    // This avoids rebuilding the same N-space or N-tab prefixes for every line.
+    let mut indent_cache = vec![String::new()];
 
     for item in &items.items {
         match item {
@@ -234,6 +239,7 @@ fn render(items: &PrintItems, options: &PrintOptions) -> String {
                         indent_level,
                         ignore_indent_count,
                         options,
+                        &mut indent_cache,
                     );
                     out.push('\t');
                 }
@@ -245,6 +251,18 @@ fn render(items: &PrintItems, options: &PrintOptions) -> String {
                     indent_level,
                     ignore_indent_count,
                     options,
+                    &mut indent_cache,
+                );
+                out.push_str(text);
+            }
+            PrintItem::Static(text) => {
+                emit_indent_if_needed(
+                    &mut out,
+                    &mut at_line_start,
+                    indent_level,
+                    ignore_indent_count,
+                    options,
+                    &mut indent_cache,
                 );
                 out.push_str(text);
             }
@@ -255,6 +273,7 @@ fn render(items: &PrintItems, options: &PrintOptions) -> String {
                     indent_level,
                     ignore_indent_count,
                     options,
+                    &mut indent_cache,
                 );
                 out.push(' ');
             }
@@ -272,21 +291,34 @@ fn emit_indent_if_needed(
     indent_level: u8,
     ignore_indent_count: u8,
     options: &PrintOptions,
+    indent_cache: &mut Vec<String>,
 ) {
     if *at_line_start {
         *at_line_start = false;
         if indent_level > 0 && ignore_indent_count == 0 {
-            if options.use_tabs {
-                for _ in 0..indent_level {
-                    out.push('\t');
-                }
-            } else {
-                let spaces = (indent_level as usize) * (options.indent_width as usize);
-                for _ in 0..spaces {
-                    out.push(' ');
-                }
+            let indent_level = indent_level as usize;
+            ensure_indent_prefix(indent_cache, indent_level, options);
+            out.push_str(&indent_cache[indent_level]);
+        }
+    }
+}
+
+#[inline]
+fn ensure_indent_prefix(
+    indent_cache: &mut Vec<String>,
+    indent_level: usize,
+    options: &PrintOptions,
+) {
+    while indent_cache.len() <= indent_level {
+        let mut prefix = indent_cache[indent_cache.len() - 1].clone();
+        if options.use_tabs {
+            prefix.push('\t');
+        } else {
+            for _ in 0..options.indent_width {
+                prefix.push(' ');
             }
         }
+        indent_cache.push(prefix);
     }
 }
 

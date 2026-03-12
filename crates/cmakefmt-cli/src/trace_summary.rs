@@ -15,7 +15,10 @@ const STAGE_EVENT_NAMES: &[(&str, &str)] = &[
     ("cmakefmt.format.pipeline", "pipeline"),
     ("cmakefmt.format.normalize_bare_cr", "normalizeBareCr"),
     ("cmakefmt.format.parse", "parse"),
-    ("cmakefmt.format.resolve_print_options", "resolvePrintOptions"),
+    (
+        "cmakefmt.format.resolve_print_options",
+        "resolvePrintOptions",
+    ),
     ("cmakefmt.format.generate_ir", "generateIr"),
     ("cmakefmt.format.print", "print"),
     ("cmakefmt.format.post_process", "postProcess"),
@@ -30,7 +33,10 @@ const STAGE_EVENT_NAMES: &[(&str, &str)] = &[
     ("cmakefmt.printer.format", "printerFormat"),
     ("cmakefmt.post_process", "postProcessAll"),
     ("cmakefmt.post_process.align_block", "postProcessAlignBlock"),
-    ("cmakefmt.post_process.reflow_comment", "postProcessReflowComment"),
+    (
+        "cmakefmt.post_process.reflow_comment",
+        "postProcessReflowComment",
+    ),
 ];
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -178,7 +184,8 @@ pub(crate) fn write_summary_from_trace(
     events.sort_by(|a, b| a.start_us.total_cmp(&b.start_us));
     derive_self_time(&mut events);
 
-    let stage_name_map: HashMap<&'static str, &'static str> = STAGE_EVENT_NAMES.iter().copied().collect();
+    let stage_name_map: HashMap<&'static str, &'static str> =
+        STAGE_EVENT_NAMES.iter().copied().collect();
     let stages = build_stage_aggregates(&events, &stage_name_map, summary_input.total_wall_ms);
     let hotspots = build_hotspot_aggregates(&events);
     let files = build_file_summaries(&events, &stage_name_map, &summary_input.file_records);
@@ -448,15 +455,30 @@ fn build_file_summaries(
         files.push(FileSummary {
             path: record
                 .map(|f| f.path.clone())
-                .or_else(|| invocation.args.as_ref().and_then(|a| extract_string_field(a, "path")))
+                .or_else(|| {
+                    invocation
+                        .args
+                        .as_ref()
+                        .and_then(|a| extract_string_field(a, "path"))
+                })
                 .unwrap_or_else(|| format!("<invocation-{index}>")),
             input_bytes: record
                 .map(|f| f.input_bytes)
-                .or_else(|| invocation.args.as_ref().and_then(|a| extract_u64_field(a, "input_bytes")))
+                .or_else(|| {
+                    invocation
+                        .args
+                        .as_ref()
+                        .and_then(|a| extract_u64_field(a, "input_bytes"))
+                })
                 .unwrap_or_default(),
             changed: record
                 .map(|f| f.changed)
-                .or_else(|| invocation.args.as_ref().and_then(|a| extract_bool_field(a, "changed")))
+                .or_else(|| {
+                    invocation
+                        .args
+                        .as_ref()
+                        .and_then(|a| extract_bool_field(a, "changed"))
+                })
                 .unwrap_or(false),
             stage_durations_ms,
             status: record

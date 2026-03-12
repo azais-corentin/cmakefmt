@@ -10,9 +10,8 @@ use crate::generation::gen_file;
 use crate::instrumentation::{
     EVENT_FORMAT_BOM_STRIP, EVENT_FORMAT_BYPASS_CHECK, EVENT_FORMAT_FINAL_NEWLINE,
     EVENT_FORMAT_FINALIZE_WHITESPACE, EVENT_FORMAT_GENERATE_IR, EVENT_FORMAT_NORMALIZE_BARE_CR,
-    EVENT_FORMAT_PARSE, EVENT_FORMAT_PIPELINE, EVENT_FORMAT_POST_PROCESS,
-    EVENT_FORMAT_PRINT, EVENT_FORMAT_RESOLVE_OPTIONS, EVENT_FORMAT_RESTORE_BARE_CR,
-    span_format_invocation,
+    EVENT_FORMAT_PARSE, EVENT_FORMAT_PIPELINE, EVENT_FORMAT_POST_PROCESS, EVENT_FORMAT_PRINT,
+    EVENT_FORMAT_RESOLVE_OPTIONS, EVENT_FORMAT_RESTORE_BARE_CR, span_format_invocation,
 };
 use crate::parser;
 
@@ -21,9 +20,11 @@ pub fn format_text(path: &Path, input: &str, config: &Configuration) -> Result<O
     let _invocation_entered = invocation_span.enter();
 
     let bypassed = {
-        let _stage =
-            info_span!(EVENT_FORMAT_BYPASS_CHECK, ignore_pattern_count = config.ignore_patterns.len())
-                .entered();
+        let _stage = info_span!(
+            EVENT_FORMAT_BYPASS_CHECK,
+            ignore_pattern_count = config.ignore_patterns.len()
+        )
+        .entered();
         should_bypass_formatting(path, config)
     };
     invocation_span.record("bypassed", bypassed);
@@ -41,11 +42,7 @@ pub fn format_text(path: &Path, input: &str, config: &Configuration) -> Result<O
     };
     let changed = result != input;
     invocation_span.record("changed", changed);
-    if changed {
-        Ok(Some(result))
-    } else {
-        Ok(None)
-    }
+    if changed { Ok(Some(result)) } else { Ok(None) }
 }
 
 fn should_bypass_formatting(path: &Path, config: &Configuration) -> bool {
@@ -166,9 +163,11 @@ fn format_inner(text: &str, config: &Configuration) -> Result<String> {
         let _stage = info_span!(EVENT_FORMAT_PRINT).entered();
         printer_format(
             || {
-                let _gen_stage =
-                    info_span!(EVENT_FORMAT_GENERATE_IR, file_elements = file.elements.len())
-                        .entered();
+                let _gen_stage = info_span!(
+                    EVENT_FORMAT_GENERATE_IR,
+                    file_elements = file.elements.len()
+                )
+                .entered();
                 gen_file(&file, parse_text, config)
             },
             print_options,
