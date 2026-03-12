@@ -157,8 +157,8 @@ fn format_inner(text: &str, config: &Configuration) -> Result<String> {
         indent_width: print_config.indent_width,
         use_tabs: print_config.use_tabs,
         new_line_text: newline,
+        initial_capacity: parse_text.len(),
     };
-
     let result = {
         let _stage = info_span!(EVENT_FORMAT_PRINT).entered();
         printer_format(

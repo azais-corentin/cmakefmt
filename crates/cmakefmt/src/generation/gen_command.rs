@@ -66,14 +66,25 @@ fn is_literal_token(text: &str) -> bool {
         .any(|&lit| lit.eq_ignore_ascii_case(text))
 }
 
+/// Apply case style in-place on an owned string to avoid extra allocations when
+/// the caller already materialized token text.
+fn apply_case_owned(mut text: String, style: CaseStyle) -> String {
+    match style {
+        CaseStyle::Lower => text.make_ascii_lowercase(),
+        CaseStyle::Upper => text.make_ascii_uppercase(),
+        CaseStyle::Preserve => {}
+    }
+    text
+}
+
 /// Apply literal casing per §4.4. Only applies to unquoted arguments that match
 /// the literal token list and are NOT classified as keywords for the current command.
 fn apply_literal_case(text: &str, style: CaseStyle) -> String {
-    match style {
-        CaseStyle::Lower => text.to_ascii_lowercase(),
-        CaseStyle::Upper => text.to_ascii_uppercase(),
-        CaseStyle::Preserve => text.to_string(),
-    }
+    apply_case_owned(text.to_string(), style)
+}
+
+fn apply_literal_case_owned(text: String, style: CaseStyle) -> String {
+    apply_case_owned(text, style)
 }
 
 /// Check if a token is a keyword in the context of a specific command.
@@ -290,21 +301,17 @@ fn is_sort_group_keyword(text: &str) -> bool {
 }
 
 fn apply_command_case(name: &str, style: CaseStyle) -> String {
-    match style {
-        CaseStyle::Lower => name.to_ascii_lowercase(),
-        CaseStyle::Upper => name.to_ascii_uppercase(),
-        CaseStyle::Preserve => name.to_string(),
-    }
+    apply_case_owned(name.to_string(), style)
 }
 
 /// Apply keyword casing. Unlike the old version, this does NOT normalize booleans —
 /// boolean/literal casing is now handled separately via literalCase.
 fn apply_keyword_case(text: &str, style: CaseStyle) -> String {
-    match style {
-        CaseStyle::Lower => text.to_ascii_lowercase(),
-        CaseStyle::Upper => text.to_ascii_uppercase(),
-        CaseStyle::Preserve => text.to_string(),
-    }
+    apply_case_owned(text.to_string(), style)
+}
+
+fn apply_keyword_case_owned(text: String, style: CaseStyle) -> String {
+    apply_case_owned(text, style)
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -1082,13 +1089,13 @@ fn try_single_line(
                     .map(|(i, a)| {
                         let t = arg_inline_text(a);
                         if keyword_positions.contains(&i) {
-                            apply_keyword_case(&t, config.keyword_case)
+                            apply_keyword_case_owned(t, config.keyword_case)
                         } else if !a.is_bracket
                             && !t.starts_with('"')
                             && !t.starts_with('#')
                             && is_literal_token(&t)
                         {
-                            apply_literal_case(&t, config.literal_case)
+                            apply_literal_case_owned(t, config.literal_case)
                         } else {
                             t
                         }
@@ -1100,13 +1107,13 @@ fn try_single_line(
                 .map(|a| {
                     let t = arg_inline_text(a);
                     if a.is_keyword {
-                        apply_keyword_case(&t, config.keyword_case)
+                        apply_keyword_case_owned(t, config.keyword_case)
                     } else if !a.is_bracket
                         && !t.starts_with('"')
                         && !t.starts_with('#')
                         && is_literal_token(&t)
                     {
-                        apply_literal_case(&t, config.literal_case)
+                        apply_literal_case_owned(t, config.literal_case)
                     } else {
                         t
                     }
@@ -1119,13 +1126,13 @@ fn try_single_line(
             .map(|a| {
                 let t = arg_inline_text(a);
                 if a.is_keyword {
-                    apply_keyword_case(&t, config.keyword_case)
+                    apply_keyword_case_owned(t, config.keyword_case)
                 } else if !a.is_bracket
                     && !t.starts_with('"')
                     && !t.starts_with('#')
                     && is_literal_token(&t)
                 {
-                    apply_literal_case(&t, config.literal_case)
+                    apply_literal_case_owned(t, config.literal_case)
                 } else {
                     t
                 }
@@ -3382,10 +3389,11 @@ fn emit_section_values_inner(
                         val_items.push_string(apply_keyword_case(&kw.text, config.keyword_case));
                         for v in all_group_values {
                             val_items.push_space();
+                            let raw = arg_inline_text(v);
                             let vt = if v.is_keyword {
-                                apply_keyword_case(&arg_inline_text(v), config.keyword_case)
+                                apply_keyword_case_owned(raw, config.keyword_case)
                             } else {
-                                arg_inline_text(v)
+                                raw
                             };
                             val_items.extend(ir_helpers::gen_from_raw_string(&vt));
                         }
@@ -3523,13 +3531,13 @@ fn gen_condition_closer_multi_line(
     for arg in args {
         let raw = arg_inline_text(arg);
         let token = if arg.is_keyword {
-            apply_keyword_case(&raw, config.keyword_case)
+            apply_keyword_case_owned(raw, config.keyword_case)
         } else if !arg.is_bracket
             && !raw.starts_with('"')
             && !raw.starts_with('#')
             && is_literal_token(&raw)
         {
-            apply_literal_case(&raw, config.literal_case)
+            apply_literal_case_owned(raw, config.literal_case)
         } else {
             raw
         };
@@ -4110,7 +4118,7 @@ fn emit_cond_expr_inline(items: &mut PrintItems, expr: &CondExpr<'_>, config: &C
         CondExpr::Atom(arg) => {
             let t = arg_inline_text(arg);
             let t = if arg.is_keyword {
-                apply_keyword_case(&t, config.keyword_case)
+                apply_keyword_case_owned(t, config.keyword_case)
             } else {
                 t
             };

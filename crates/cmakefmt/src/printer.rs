@@ -185,6 +185,8 @@ pub struct PrintOptions {
     pub use_tabs: bool,
     /// The string to emit for each newline (`"\n"` or `"\r\n"`).
     pub new_line_text: &'static str,
+    /// Initial output buffer capacity hint in bytes.
+    pub initial_capacity: usize,
 }
 
 // ── Printer ─────────────────────────────────────────────────────────────────
@@ -201,7 +203,7 @@ pub fn format(get_items: impl FnOnce() -> PrintItems, options: PrintOptions) -> 
 
 /// Walk the item stream and produce the final formatted text.
 fn render(items: &PrintItems, options: &PrintOptions) -> String {
-    let mut out = String::new();
+    let mut out = String::with_capacity(options.initial_capacity);
     let mut indent_level: u8 = 0;
     let mut ignore_indent_count: u8 = 0;
     let mut at_line_start = true;
@@ -335,6 +337,7 @@ mod tests {
                 indent_width: 2,
                 use_tabs: false,
                 new_line_text: "\n",
+                initial_capacity: 0,
             },
         );
         assert_eq!(result, "");
@@ -358,6 +361,7 @@ mod tests {
                 indent_width: 2,
                 use_tabs: false,
                 new_line_text: "\n",
+                initial_capacity: 0,
             },
         );
         assert_eq!(result, "hello\n  world\n");
@@ -378,6 +382,7 @@ mod tests {
                 indent_width: 4,
                 use_tabs: true,
                 new_line_text: "\n",
+                initial_capacity: 0,
             },
         );
         assert_eq!(result, "\tindented");
@@ -406,6 +411,7 @@ mod tests {
                 indent_width: 2,
                 use_tabs: false,
                 new_line_text: "\n",
+                initial_capacity: 0,
             },
         );
         assert_eq!(result, "  indented\nraw\nalso raw\n  back to indent");
@@ -421,6 +427,7 @@ mod tests {
                 indent_width: 2,
                 use_tabs: false,
                 new_line_text: "\n",
+                initial_capacity: 0,
             },
         );
         assert_eq!(result, "line1\nline2\nline3");
@@ -436,6 +443,7 @@ mod tests {
                 indent_width: 2,
                 use_tabs: false,
                 new_line_text: "\n",
+                initial_capacity: 0,
             },
         );
         assert_eq!(result, "col1\tcol2");
@@ -453,6 +461,7 @@ mod tests {
                 indent_width: 4,
                 use_tabs: false,
                 new_line_text: "\n",
+                initial_capacity: 0,
             },
         );
         // Indent emitted because at_line_start is true at the beginning
@@ -471,6 +480,7 @@ mod tests {
                 indent_width: 2,
                 use_tabs: false,
                 new_line_text: "\n",
+                initial_capacity: 0,
             },
         );
         assert_eq!(result, "      deep");
@@ -491,6 +501,7 @@ mod tests {
                 indent_width: 2,
                 use_tabs: false,
                 new_line_text: "\r\n",
+                initial_capacity: 0,
             },
         );
         assert_eq!(result, "a\r\nb");
@@ -506,6 +517,7 @@ mod tests {
                 indent_width: 2,
                 use_tabs: false,
                 new_line_text: "\n",
+                initial_capacity: 0,
             },
         );
         assert_eq!(result, "line1\n");
