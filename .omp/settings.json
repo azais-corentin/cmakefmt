@@ -1,0 +1,10 @@
+{
+  // "modelRoles": {
+  //   "default": "openai-codex/gpt-5.3-codex",
+  //   "plan": "openai-codex/gpt-5.3-codex",
+  //   "slow": "openai-codex/gpt-5.3-codex",
+  //   "smol": "openai-codex/gpt-5.3-codex",
+  //   "vision": "openai-codex/gpt-5.3-codex",
+  //   "commit": "openai-codex/gpt-5.3-codex"
+  // }
+}
