@@ -34,7 +34,25 @@ pub fn post_process_alignments(text: &str, base_config: &Configuration) -> Strin
 // ---------------------------------------------------------------------------
 
 fn detect_newline(text: &str) -> &'static str {
-    if text.contains("\r\n") { "\r\n" } else { "\n" }
+    // Count dominant line ending: CRLF vs standalone LF. Bare \r is not counted.
+    let bytes = text.as_bytes();
+    let len = bytes.len();
+    let mut lf: u32 = 0;
+    let mut crlf: u32 = 0;
+    let mut i = 0;
+    while i < len {
+        if bytes[i] == b'\r' {
+            if i + 1 < len && bytes[i + 1] == b'\n' {
+                crlf += 1;
+                i += 2;
+                continue;
+            }
+        } else if bytes[i] == b'\n' {
+            lf += 1;
+        }
+        i += 1;
+    }
+    if crlf > lf { "\r\n" } else { "\n" }
 }
 
 fn split_lines(text: &str, newline: &str) -> Vec<String> {
