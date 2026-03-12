@@ -471,8 +471,9 @@ pub fn gen_command(
     if should_sort_for_command(raw_name, config, cmd_kind.as_ref()) {
         sort_argument_groups(&mut arguments, config, cmd_kind.as_ref());
     }
+    let has_keyword_args = arguments.iter().any(|arg| arg.is_keyword);
     // Sort keyword sections if enabled
-    if config.sort_keyword_sections {
+    if config.sort_keyword_sections && has_keyword_args {
         if let Some(order) = canonical_section_order(raw_name) {
             sort_keyword_sections_by_order(&mut arguments, order);
         } else if let Some(candidates) = non_canonical_section_keywords(raw_name) {
@@ -498,7 +499,6 @@ pub fn gen_command(
         && count_wrap_arguments(&arguments) > config.wrap_arg_threshold as usize;
     let magic_trailing_newline =
         config.magic_trailing_newline && has_magic_trailing_newline_signal(cmd, source, &arguments);
-    let has_keyword_args = arguments.iter().any(|arg| arg.is_keyword);
     let allow_single_line_by_style = match config.wrap_style {
         WrapStyle::Cascade => true,
         WrapStyle::Vertical => count_wrap_arguments(&arguments) <= 2,
@@ -525,10 +525,9 @@ pub fn gen_command(
         } else {
             match cmd_kind {
                 Some(CommandKind::ConditionSyntax) => {
-                    let is_condition_closer = matches!(
-                        formatted_name.to_ascii_lowercase().as_str(),
-                        "endif" | "endwhile" | "else"
-                    );
+                    let is_condition_closer = formatted_name.eq_ignore_ascii_case("endif")
+                        || formatted_name.eq_ignore_ascii_case("endwhile")
+                        || formatted_name.eq_ignore_ascii_case("else");
                     if is_condition_closer {
                         items.extend(gen_condition_closer_multi_line(
                             &arguments,
@@ -810,21 +809,22 @@ fn build_argument_list_from_args(
     cmd_kind: Option<&CommandKind>,
 ) -> Vec<FormattedArg> {
     let mut result = Vec::new();
+    let arg_ranges: Vec<(usize, usize)> = args.iter().map(arg_source_range).collect();
     let mut i = 0;
 
     while i < args.len() {
         let preserve_source_blank_lines =
             config.align_arg_groups || !matches!(config.sort_arguments, SortArguments::Disabled);
         let blank_line_before = if preserve_source_blank_lines && i > 0 {
-            let prev_end = arg_source_range(&args[i - 1]).1;
-            let (current_start, _) = arg_source_range(&args[i]);
+            let prev_end = arg_ranges[i - 1].1;
+            let current_start = arg_ranges[i].0;
             has_blank_line_between(source, prev_end, current_start)
         } else {
             false
         };
         let new_line_before = if i > 0 {
-            let prev_end = arg_source_range(&args[i - 1]).1;
-            let (current_start, _) = arg_source_range(&args[i]);
+            let prev_end = arg_ranges[i - 1].1;
+            let current_start = arg_ranges[i].0;
             source[prev_end..current_start].contains('\n')
         } else {
             false
@@ -892,7 +892,7 @@ fn build_argument_list_from_args(
                 let comment_text = span.text(source).to_string();
                 // Only attach to previous arg if on the same source line
                 let same_line = if i > 0 {
-                    let prev_end = arg_source_range(&args[i - 1]).1;
+                    let prev_end = arg_ranges[i - 1].1;
                     !source[prev_end..span.start].contains('\n')
                 } else {
                     false
@@ -921,7 +921,7 @@ fn build_argument_list_from_args(
                 let comment_text = span.text(source).to_string();
                 // Only attach to previous arg if on the same source line
                 let same_line = if i > 0 {
-                    let prev_end = arg_source_range(&args[i - 1]).1;
+                    let prev_end = arg_ranges[i - 1].1;
                     !source[prev_end..span.start].contains('\n')
                 } else {
                     false
@@ -1041,6 +1041,10 @@ fn try_single_line(
     indent_depth: u32,
     allow_single_line: bool,
 ) -> Option<PrintItems> {
+    if !allow_single_line {
+        return None;
+    }
+
     // If any argument has a trailing line comment, force multi-line
     if args
         .iter()
@@ -1062,10 +1066,6 @@ fn try_single_line(
         return None;
     }
 
-    if !allow_single_line {
-        return None;
-    }
-
     if config.blank_line_between_sections
         && args.iter().filter(|arg| arg.is_keyword).take(2).count() >= 2
     {
@@ -1083,12 +1083,15 @@ fn try_single_line(
     let args_text: Vec<String> = if let Some(ref ck) = cmd_kind {
         match ck {
             CommandKind::Known(spec) => {
-                let keyword_positions = compute_keyword_positions(args, spec);
+                let mut is_keyword_position = vec![false; args.len()];
+                for idx in compute_keyword_positions(args, spec) {
+                    is_keyword_position[idx] = true;
+                }
                 args.iter()
                     .enumerate()
                     .map(|(i, a)| {
                         let t = arg_inline_text(a);
-                        if keyword_positions.contains(&i) {
+                        if is_keyword_position[i] {
                             apply_keyword_case_owned(t, config.keyword_case)
                         } else if !a.is_bracket
                             && !t.starts_with('"')
@@ -1140,7 +1143,9 @@ fn try_single_line(
             .collect()
     } else {
         // Unknown command: preserve original casing
-        args.iter().map(arg_inline_text).collect()
+        args.iter()
+            .map(arg_inline_text)
+            .collect()
     };
     let args_width: usize = args_text.iter().map(|s| s.len()).sum::<usize>()
         + if args_text.len() > 1 {
@@ -1150,10 +1155,9 @@ fn try_single_line(
         };
     let total = base_indent + cmd_name.len() + 1 + args_width + close_overhead;
 
-    let keep_condition_header_inline = matches!(
-        cmd_name.to_ascii_lowercase().as_str(),
-        "if" | "while" | "elseif"
-    );
+    let keep_condition_header_inline = cmd_name.eq_ignore_ascii_case("if")
+        || cmd_name.eq_ignore_ascii_case("while")
+        || cmd_name.eq_ignore_ascii_case("elseif");
     let line_width = config.line_width as usize;
     let has_keyword_args = args.iter().any(|arg| arg.is_keyword);
     let has_unbreakable_long_token = cmd_name.len() > line_width
@@ -1231,11 +1235,7 @@ fn compute_keyword_positions(args: &[FormattedArg], spec: &CommandSpec) -> Vec<u
         let kw_type = get_keyword_type(&args[i], spec);
         let is_section = is_section_keyword(&args[i], spec);
         // Skip once_keywords that have already been consumed
-        let arg_upper = args[i].text.to_ascii_uppercase();
-        let is_once = spec
-            .once_keywords
-            .iter()
-            .any(|&ok| ok.eq_ignore_ascii_case(&arg_upper));
+        let is_once = kw_type.is_some() && is_once_keyword_text(&args[i].text, spec);
         if kw_type.is_some() && is_once && once_keyword_seen {
             i += 1;
             continue;
@@ -1282,13 +1282,9 @@ fn compute_keyword_positions(args: &[FormattedArg], spec: &CommandSpec) -> Vec<u
                     // Skip until next keyword
                     while i < args.len() {
                         let inner_kw = get_keyword_type(&args[i], spec);
-                        let inner_upper = args[i].text.to_ascii_uppercase();
                         let inner_is_blocked_once = inner_kw.is_some()
-                            && spec
-                                .once_keywords
-                                .iter()
-                                .any(|&ok| ok.eq_ignore_ascii_case(&inner_upper))
-                            && once_keyword_seen;
+                            && once_keyword_seen
+                            && is_once_keyword_text(&args[i].text, spec);
                         if !inner_is_blocked_once
                             && (inner_kw.is_some() || is_section_keyword(&args[i], spec))
                         {
@@ -1361,6 +1357,13 @@ fn get_keyword_type(arg: &FormattedArg, spec: &CommandSpec) -> Option<KwType> {
         .iter()
         .find(|(name, _)| name.eq_ignore_ascii_case(&arg.text))
         .map(|(_, kt)| *kt)
+}
+
+#[inline]
+fn is_once_keyword_text(text: &str, spec: &CommandSpec) -> bool {
+    spec.once_keywords
+        .iter()
+        .any(|&keyword| keyword.eq_ignore_ascii_case(text))
 }
 
 fn has_blank_line_between(source: &str, start: usize, end: usize) -> bool {
@@ -1500,11 +1503,7 @@ fn split_arguments<'a>(
             && spec.keywords.is_empty()
             && spec.sections.is_empty();
         // Skip once_keywords that have already been consumed
-        let arg_upper = main_args[i].text.to_ascii_uppercase();
-        let is_once = spec
-            .once_keywords
-            .iter()
-            .any(|&ok| ok.eq_ignore_ascii_case(&arg_upper));
+        let is_once = kw_type.is_some() && is_once_keyword_text(&main_args[i].text, spec);
         if kw_type.is_some() && is_once && once_keyword_seen {
             current_positional.push(&main_args[i]);
             i += 1;
@@ -1605,13 +1604,9 @@ fn split_arguments<'a>(
                             && spec.sections.is_empty();
 
                         // Already-seen once_keywords are not treated as keywords
-                        let inner_upper = main_args[i].text.to_ascii_uppercase();
                         let inner_is_blocked_once = inner_kw.is_some()
-                            && spec
-                                .once_keywords
-                                .iter()
-                                .any(|&ok| ok.eq_ignore_ascii_case(&inner_upper))
-                            && once_keyword_seen;
+                            && once_keyword_seen
+                            && is_once_keyword_text(&main_args[i].text, spec);
 
                         if !inner_is_blocked_once
                             && (inner_kw.is_some()
