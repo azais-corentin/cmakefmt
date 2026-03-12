@@ -113,6 +113,7 @@ pub fn resolve_config(
 #[cfg(target_arch = "wasm32")]
 mod wasm {
     use dprint_core::configuration::{ConfigKeyMap, GlobalConfiguration};
+    use dprint_core::generate_plugin_code;
     use dprint_core::plugins::{
         CheckConfigUpdatesMessage, ConfigChange, FormatResult, PluginInfo,
         PluginResolveConfigurationResult, SyncFormatRequest, SyncHostFormatRequest,
@@ -168,5 +169,5 @@ mod wasm {
         }
     }
 
-    dprint_core::generate_plugin_code!(CmakePluginHandler, CmakePluginHandler);
+    generate_plugin_code!(CmakePluginHandler, CmakePluginHandler);
 }
