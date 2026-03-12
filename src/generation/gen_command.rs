@@ -215,12 +215,7 @@ fn canonical_section_order(cmd_name: &str) -> Option<&'static [&'static str]> {
             "LINK_PRIVATE",
             "LINK_INTERFACE_LIBRARIES",
         ]),
-        "target_sources"
-        | "target_compile_definitions"
-        | "target_compile_options"
-        | "target_compile_features"
-        | "target_link_options"
-        | "target_include_directories" => Some(&["PUBLIC", "INTERFACE", "PRIVATE"]),
+        "target_sources" => Some(&["PUBLIC", "INTERFACE", "PRIVATE"]),
         "install" => Some(&[
             "ARCHIVE",
             "LIBRARY",
@@ -236,6 +231,44 @@ fn canonical_section_order(cmd_name: &str) -> Option<&'static [&'static str]> {
         "export" => Some(&["PACKAGE_DEPENDENCY", "TARGET", "VERSION"]),
         _ => None,
     }
+}
+
+/// Commands with section-like keywords but no canonical order in Appendix F.
+fn non_canonical_section_keywords(cmd_name: &str) -> Option<&'static [&'static str]> {
+    let lower = cmd_name.to_ascii_lowercase();
+    match lower.as_str() {
+        "target_compile_definitions"
+        | "target_compile_options"
+        | "target_compile_features"
+        | "target_link_options"
+        | "target_include_directories" => Some(&["PUBLIC", "INTERFACE", "PRIVATE"]),
+        _ => None,
+    }
+}
+
+/// Keep keyword sections in their first-seen order while preserving section boundaries.
+fn sort_keyword_sections_in_source_order(args: &mut Vec<FormattedArg>, candidates: &[&str]) {
+    let mut seen: Vec<String> = Vec::new();
+    for arg in args.iter() {
+        if !arg.is_keyword
+            || !candidates
+                .iter()
+                .any(|keyword| keyword.eq_ignore_ascii_case(&arg.text))
+            || seen
+                .iter()
+                .any(|keyword| keyword.eq_ignore_ascii_case(&arg.text))
+        {
+            continue;
+        }
+        seen.push(arg.text.clone());
+    }
+
+    if seen.is_empty() {
+        return;
+    }
+
+    let order: Vec<&str> = seen.iter().map(String::as_str).collect();
+    sort_keyword_sections_by_order(args, &order);
 }
 
 fn is_known_keyword(text: &str, cmd_kind: Option<&CommandKind>, config: &Configuration) -> bool {
@@ -421,10 +454,12 @@ pub fn gen_command(
         sort_argument_groups(&mut arguments, config, cmd_kind.as_ref());
     }
     // Sort keyword sections if enabled
-    if config.sort_keyword_sections
-        && let Some(order) = canonical_section_order(raw_name)
-    {
-        sort_keyword_sections_by_order(&mut arguments, order);
+    if config.sort_keyword_sections {
+        if let Some(order) = canonical_section_order(raw_name) {
+            sort_keyword_sections_by_order(&mut arguments, order);
+        } else if let Some(candidates) = non_canonical_section_keywords(raw_name) {
+            sort_keyword_sections_in_source_order(&mut arguments, candidates);
+        }
     }
 
     let single_line_paren_spacing =
