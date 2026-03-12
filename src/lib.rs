@@ -1,8 +1,8 @@
 mod configuration;
 mod format_text;
 mod generation;
-mod post_process;
 mod parser;
+mod post_process;
 
 #[cfg(target_arch = "wasm32")]
 mod wasm_plugin;

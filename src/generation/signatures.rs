@@ -172,7 +172,10 @@ static TARGET_SOURCES_KW: &[(&str, KwType)] = &[
     ("INTERFACE", KwType::MultiValue),
     ("PUBLIC", KwType::MultiValue),
     ("PRIVATE", KwType::MultiValue),
-    ("FILE_SET", KwType::Group(1, TARGET_SOURCES_FILE_SET_GROUP_KW)),
+    (
+        "FILE_SET",
+        KwType::Group(1, TARGET_SOURCES_FILE_SET_GROUP_KW),
+    ),
 ];
 
 static TARGET_SOURCES_FILE_SET_GROUP_KW: &[(&str, KwType)] = &[

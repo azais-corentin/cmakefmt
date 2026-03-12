@@ -4,18 +4,23 @@
 //! (consecutive set alignment, trailing comment alignment at file scope) which
 //! cannot be expressed within the per-command IR generation.
 
-use crate::configuration::{Configuration, apply_inline_overrides};
+use crate::configuration::{CommentPreservation, Configuration, apply_inline_overrides};
 
 /// Apply all post-processing alignment passes to the formatted output.
 ///
 /// Currently handles:
+/// - `commentPreservation = reflow`: reflow standalone `# ...` comment blocks.
 /// - `alignConsecutiveSet`: column-align values in consecutive `set()` calls.
 /// - `alignTrailingComments`: column-align trailing `#` comments on consecutive lines.
 pub fn post_process_alignments(text: &str, base_config: &Configuration) -> String {
     let newline = detect_newline(text);
     let mut lines: Vec<String> = split_lines(text, newline);
 
-    // Build per-line config snapshot for alignment-relevant settings.
+    // Build per-line config snapshot used by the reflow pass.
+    let initial_configs = resolve_per_line_config(&lines, base_config);
+    lines = reflow_standalone_comment_blocks(&lines, &initial_configs);
+
+    // Re-resolve config after reflow because line counts may have changed.
     let configs = resolve_per_line_config(&lines, base_config);
 
     align_consecutive_set_lines(&mut lines, &configs);
@@ -45,12 +50,14 @@ fn join_lines(lines: &[String], newline: &str) -> String {
 // Per-line configuration tracking (for pragma push/pop)
 // ---------------------------------------------------------------------------
 
-/// Snapshot of alignment-relevant config at a given line.
+/// Snapshot of post-processing-relevant config at a given line.
 #[derive(Clone)]
 struct LineConfig {
     align_consecutive_set: bool,
     align_trailing_comments: bool,
     comment_gap: u8,
+    comment_preservation: CommentPreservation,
+    comment_width: u32,
 }
 
 impl LineConfig {
@@ -59,6 +66,8 @@ impl LineConfig {
             align_consecutive_set: config.align_consecutive_set,
             align_trailing_comments: config.align_trailing_comments,
             comment_gap: config.comment_gap,
+            comment_preservation: config.comment_preservation,
+            comment_width: config.effective_comment_width(),
         }
     }
 }
@@ -116,6 +125,329 @@ fn is_pop_directive(comment_line: &str) -> bool {
         return false;
     };
     rest.trim() == "pop"
+}
+
+// ---------------------------------------------------------------------------
+// commentPreservation = reflow
+// ---------------------------------------------------------------------------
+
+fn reflow_standalone_comment_blocks(lines: &[String], configs: &[LineConfig]) -> Vec<String> {
+    let mut result = Vec::with_capacity(lines.len());
+    let mut i = 0;
+
+    while i < lines.len() {
+        if !should_reflow_comment_line(&lines[i], &configs[i]) {
+            result.push(lines[i].clone());
+            i += 1;
+            continue;
+        }
+
+        let start = i;
+        let target_width = configs[i].comment_width as usize;
+        i += 1;
+
+        while i < lines.len()
+            && should_reflow_comment_line(&lines[i], &configs[i])
+            && configs[i].comment_width as usize == target_width
+        {
+            i += 1;
+        }
+
+        result.extend(reflow_comment_block(&lines[start..i], target_width));
+    }
+
+    result
+}
+
+fn should_reflow_comment_line(line: &str, config: &LineConfig) -> bool {
+    config.comment_preservation == CommentPreservation::Reflow
+        && is_standalone_comment_line(line)
+        && !is_pragma_comment_line(line)
+}
+
+fn is_standalone_comment_line(line: &str) -> bool {
+    line.trim_start().starts_with('#')
+}
+
+fn is_pragma_comment_line(line: &str) -> bool {
+    let Some(rest) = line.trim_start().strip_prefix('#') else {
+        return false;
+    };
+    let rest = rest.trim_start();
+    let Some(rest) = rest.strip_prefix(PRAGMA_PREFIX) else {
+        return false;
+    };
+
+    matches!(
+        rest.split_whitespace().next(),
+        Some("push" | "pop" | "off" | "on" | "skip")
+    )
+}
+
+#[derive(Clone)]
+struct ParsedCommentLine {
+    outer_prefix: String,
+    leading_ws: String,
+    content: String,
+    raw: String,
+}
+
+impl ParsedCommentLine {
+    fn parse(line: &str) -> Option<Self> {
+        let hash_idx = line.find('#')?;
+        if !line[..hash_idx].chars().all(char::is_whitespace) {
+            return None;
+        }
+
+        let outer_prefix = line[..hash_idx].to_string();
+        let after_hash = line[hash_idx + 1..].trim_end_matches([' ', '\t']);
+        let ws_end = after_hash
+            .char_indices()
+            .find(|(_, ch)| !ch.is_whitespace())
+            .map_or(after_hash.len(), |(idx, _)| idx);
+
+        Some(Self {
+            outer_prefix,
+            leading_ws: after_hash[..ws_end].to_string(),
+            content: after_hash[ws_end..].to_string(),
+            raw: line.to_string(),
+        })
+    }
+
+    fn is_blank(&self) -> bool {
+        self.content.is_empty()
+    }
+
+    fn is_fence_marker(&self) -> bool {
+        self.content.trim() == "```"
+    }
+
+    fn leading_ws_len(&self) -> usize {
+        self.leading_ws.chars().count()
+    }
+}
+
+struct ListMarker {
+    prefix: String,
+    text: String,
+}
+
+fn parse_list_marker(content: &str) -> Option<ListMarker> {
+    let bytes = content.as_bytes();
+    if bytes.is_empty() {
+        return None;
+    }
+
+    let mut token_end = 0;
+    if matches!(bytes[0], b'-' | b'*' | b'+') {
+        token_end = 1;
+    } else if bytes[0].is_ascii_digit() {
+        while token_end < bytes.len() && bytes[token_end].is_ascii_digit() {
+            token_end += 1;
+        }
+        if token_end == 0 || token_end >= bytes.len() {
+            return None;
+        }
+        if !matches!(bytes[token_end], b'.' | b')') {
+            return None;
+        }
+        token_end += 1;
+    } else {
+        return None;
+    }
+
+    let mut prefix_end = token_end;
+    while prefix_end < bytes.len() && bytes[prefix_end].is_ascii_whitespace() {
+        prefix_end += 1;
+    }
+
+    if prefix_end == token_end && token_end < bytes.len() {
+        return None;
+    }
+
+    Some(ListMarker {
+        prefix: content[..prefix_end].to_string(),
+        text: content[prefix_end..].to_string(),
+    })
+}
+
+fn wrap_comment_words(
+    words: &[String],
+    width: usize,
+    first_prefix: &str,
+    continuation_prefix: &str,
+) -> Vec<String> {
+    if words.is_empty() {
+        return vec![first_prefix.trim_end().to_string()];
+    }
+
+    let mut lines = Vec::new();
+    let mut current_prefix = first_prefix;
+    let mut current = current_prefix.to_string();
+    let mut current_len = current_prefix.chars().count();
+
+    for word in words {
+        let word_len = word.chars().count();
+        let prefix_len = current_prefix.chars().count();
+        let needs_space = current_len > prefix_len;
+        let candidate_len = current_len + usize::from(needs_space) + word_len;
+
+        if candidate_len >= width && current_len > prefix_len {
+            lines.push(current);
+            current_prefix = continuation_prefix;
+            current = current_prefix.to_string();
+            current_len = current_prefix.chars().count();
+        }
+
+        let current_prefix_len = current_prefix.chars().count();
+        if current_len > current_prefix_len {
+            current.push(' ');
+            current_len += 1;
+        }
+
+        current.push_str(word);
+        current_len += word_len;
+    }
+
+    lines.push(current);
+    lines
+}
+
+fn reflow_comment_block(lines: &[String], width: usize) -> Vec<String> {
+    let parsed: Vec<ParsedCommentLine> = lines
+        .iter()
+        .filter_map(|line| ParsedCommentLine::parse(line))
+        .collect();
+
+    if parsed.is_empty() {
+        return lines.to_vec();
+    }
+
+    let baseline = parsed
+        .iter()
+        .filter(|line| !line.is_blank())
+        .map(ParsedCommentLine::leading_ws_len)
+        .min()
+        .unwrap_or(0);
+
+    let mut result = Vec::new();
+    let mut i = 0;
+    let mut in_fence = false;
+
+    while i < parsed.len() {
+        let line = &parsed[i];
+
+        if in_fence {
+            result.push(line.raw.clone());
+            if line.is_fence_marker() {
+                in_fence = false;
+            }
+            i += 1;
+            continue;
+        }
+
+        if line.is_fence_marker() {
+            result.push(line.raw.clone());
+            in_fence = true;
+            i += 1;
+            continue;
+        }
+
+        if line.is_blank() {
+            result.push(format!("{}#", line.outer_prefix));
+            i += 1;
+            continue;
+        }
+
+        if line.leading_ws_len() >= baseline + 4 {
+            result.push(line.raw.clone());
+            i += 1;
+            continue;
+        }
+
+        if let Some(marker) = parse_list_marker(&line.content) {
+            let base_outer = line.outer_prefix.clone();
+            let base_indent = line.leading_ws_len();
+            let continuation_indent = base_indent + marker.prefix.chars().count();
+            let first_prefix = format!("{}#{}{}", base_outer, line.leading_ws, marker.prefix);
+            let continuation_prefix = format!("{}#{}", base_outer, " ".repeat(continuation_indent));
+
+            let words: Vec<String> = marker.text.split_whitespace().map(str::to_string).collect();
+            let mut continuation_lines: Vec<String> = Vec::new();
+
+            i += 1;
+            while i < parsed.len() {
+                let next = &parsed[i];
+                if next.outer_prefix != base_outer
+                    || next.is_blank()
+                    || next.is_fence_marker()
+                    || next.leading_ws_len() >= baseline + 4
+                {
+                    break;
+                }
+
+                if parse_list_marker(&next.content).is_some() {
+                    if next.leading_ws_len() <= base_indent {
+                        break;
+                    }
+                    continuation_lines.push(next.raw.clone());
+                    i += 1;
+                    continue;
+                }
+
+                if next.leading_ws_len() > base_indent {
+                    continuation_lines.push(next.raw.clone());
+                    i += 1;
+                    continue;
+                }
+
+                break;
+            }
+
+            result.extend(wrap_comment_words(
+                &words,
+                width,
+                &first_prefix,
+                &continuation_prefix,
+            ));
+            result.extend(continuation_lines);
+            continue;
+        }
+
+        let base_outer = line.outer_prefix.clone();
+        let base_ws = line.leading_ws.clone();
+        let prefix = format!("{}#{}", base_outer, base_ws);
+        let mut words: Vec<String> = line
+            .content
+            .split_whitespace()
+            .map(str::to_string)
+            .collect();
+
+        i += 1;
+        while i < parsed.len() {
+            let next = &parsed[i];
+            if next.outer_prefix != base_outer
+                || next.is_blank()
+                || next.is_fence_marker()
+                || next.leading_ws_len() >= baseline + 4
+            {
+                break;
+            }
+            if parse_list_marker(&next.content).is_some() {
+                break;
+            }
+            if next.leading_ws != base_ws {
+                break;
+            }
+
+            words.extend(next.content.split_whitespace().map(str::to_string));
+            i += 1;
+        }
+
+        result.extend(wrap_comment_words(&words, width, &prefix, &prefix));
+    }
+
+    result
 }
 
 // ---------------------------------------------------------------------------

@@ -394,6 +394,12 @@ pub fn gen_command(
     // Command name with casing
     let formatted_name = apply_command_case(raw_name, config.command_case);
 
+    // Multi-line quoted/bracket arguments are emitted via the raw command path so
+    // their internal content and line endings remain byte-preserved.
+    if has_multiline_verbatim_argument(&cmd.arguments, source) {
+        return gen_unknown_command(cmd, source, config, &formatted_name);
+    }
+
     // Check if this is an unknown command — preserve original formatting
     // But if customKeywords is set, unknown commands may still have keyword recognition
     let cmd_kind = lookup_command(raw_name);
@@ -610,7 +616,11 @@ fn emit_unknown_args_raw(
         }
 
         let arg_text = &source[arg_start..arg_end];
-        items.extend(ir_helpers::gen_from_raw_string(arg_text));
+        if matches!(arg, Argument::Bracket(_) | Argument::Quoted(_)) && arg_text.contains('\n') {
+            emit_text_preserving_line_endings(items, arg_text);
+        } else {
+            items.extend(ir_helpers::gen_from_raw_string(arg_text));
+        }
         pos = arg_end;
     }
 
@@ -620,6 +630,44 @@ fn emit_unknown_args_raw(
     if trailing.contains('\n') {
         items.push_signal(Signal::NewLine);
     }
+}
+
+fn emit_text_preserving_line_endings(items: &mut PrintItems, text: &str) {
+    if !text.contains('\n') {
+        items.extend(ir_helpers::gen_from_raw_string(text));
+        return;
+    }
+
+    items.push_signal(Signal::StartIgnoringIndent);
+    let bytes = text.as_bytes();
+    let mut segment_start = 0;
+    let mut i = 0;
+
+    while i < bytes.len() {
+        if bytes[i] == b'\n' {
+            let mut segment_end = i;
+            let had_cr = segment_end > segment_start && bytes[segment_end - 1] == b'\r';
+            if had_cr {
+                segment_end -= 1;
+            }
+
+            if segment_end > segment_start {
+                items.push_string(text[segment_start..segment_end].to_string());
+            }
+            if had_cr {
+                items.push_string("\r".to_string());
+            }
+            items.push_signal(Signal::NewLine);
+            segment_start = i + 1;
+        }
+        i += 1;
+    }
+
+    if segment_start < text.len() {
+        items.push_string(text[segment_start..].to_string());
+    }
+
+    items.push_signal(Signal::FinishIgnoringIndent);
 }
 
 fn arg_source_range(arg: &Argument) -> (usize, usize) {
@@ -639,6 +687,17 @@ fn arg_source_range(arg: &Argument) -> (usize, usize) {
             }
         }
     }
+}
+
+fn has_multiline_verbatim_argument(arguments: &[Argument], source: &str) -> bool {
+    arguments.iter().any(|arg| match arg {
+        Argument::Bracket(span) | Argument::Quoted(span) => {
+            let text = span.text(source);
+            text.contains('\n') || text.contains('\r')
+        }
+        Argument::ParenGroup { arguments } => has_multiline_verbatim_argument(arguments, source),
+        Argument::Unquoted(_) | Argument::LineComment(_) | Argument::BracketComment(_) => false,
+    })
 }
 
 fn strip_base_indent(line: &str, base_indent_len: usize) -> &str {

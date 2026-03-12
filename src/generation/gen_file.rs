@@ -291,6 +291,40 @@ fn should_insert_min_blank_lines_before(
     }
 }
 
+fn indent_prefix(indent_level: u32, config: &Configuration) -> String {
+    if config.use_tabs {
+        "\t".repeat(indent_level as usize)
+    } else {
+        " ".repeat(indent_level as usize * config.indent_width as usize)
+    }
+}
+
+fn emit_comment_with_opening_indent(
+    items: &mut PrintItems,
+    comment_text: &str,
+    indent_level: u32,
+    config: &Configuration,
+) {
+    if indent_level == 0 {
+        items.extend(ir_helpers::gen_from_raw_string(comment_text));
+        return;
+    }
+
+    let prefix = indent_prefix(indent_level, config);
+    if let Some(first_newline) = comment_text.find('\n') {
+        let mut rendered = String::with_capacity(prefix.len() + comment_text.len());
+        rendered.push_str(&prefix);
+        rendered.push_str(&comment_text[..first_newline]);
+        rendered.push_str(&comment_text[first_newline..]);
+        items.extend(ir_helpers::gen_from_raw_string(&rendered));
+    } else {
+        let mut rendered = String::with_capacity(prefix.len() + comment_text.len());
+        rendered.push_str(&prefix);
+        rendered.push_str(comment_text);
+        items.extend(ir_helpers::gen_from_raw_string(&rendered));
+    }
+}
+
 pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems {
     let mut items = PrintItems::new();
     let mut pending_blanks: u8 = 0;
@@ -485,12 +519,12 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
                     items.push_signal(Signal::NewLine);
                 }
                 first = false;
-                let comment_items = ir_helpers::gen_from_raw_string(comment_text);
-                if indent_level > 0 {
-                    items.extend(ir_helpers::with_indent_times(comment_items, indent_level));
-                } else {
-                    items.extend(comment_items);
-                }
+                emit_comment_with_opening_indent(
+                    &mut items,
+                    comment_text,
+                    indent_level,
+                    &current_config,
+                );
 
                 if is_skip {
                     skip_next_command = true;
@@ -512,12 +546,12 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
                 }
                 first = false;
                 let comment_text = span.text(source);
-                let comment_items = ir_helpers::gen_from_raw_string(comment_text);
-                if indent_level > 0 {
-                    items.extend(ir_helpers::with_indent_times(comment_items, indent_level));
-                } else {
-                    items.extend(comment_items);
-                }
+                emit_comment_with_opening_indent(
+                    &mut items,
+                    comment_text,
+                    indent_level,
+                    &current_config,
+                );
             }
             FileElement::BlankLine => unreachable!(),
         }
