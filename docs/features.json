@@ -490,9 +490,9 @@
             "F007"
           ],
           "complexity": "large",
-          "status": "stuck",
-          "passes": false,
-          "notes": "Implemented 17_interactions behaviors; `CMAKEFMT_TEST_FILTER=17_interactions cargo test --test formatter_tests test_formatter_files` passes, but full `cargo test --test formatter_tests test_formatter_files` still fails in 24 fixtures (primarily wrapping/sorting areas outside Appendix E fixtures)."
+          "status": "done",
+          "passes": true,
+          "notes": ""
         }
       ]
     },

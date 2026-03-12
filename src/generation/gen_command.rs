@@ -444,8 +444,14 @@ pub fn gen_command(
         && count_wrap_arguments(&arguments) > config.wrap_arg_threshold as usize;
     let magic_trailing_newline =
         config.magic_trailing_newline && has_magic_trailing_newline_signal(cmd, source, &arguments);
-    let allow_single_line = matches!(config.wrap_style, WrapStyle::Cascade)
-        && !(force_one_per_line || magic_trailing_newline || avoid_inline_compaction);
+    let has_keyword_args = arguments.iter().any(|arg| arg.is_keyword);
+    let allow_single_line_by_style = match config.wrap_style {
+        WrapStyle::Cascade => true,
+        WrapStyle::Vertical => count_wrap_arguments(&arguments) <= 2,
+    };
+    let allow_single_line = allow_single_line_by_style
+        && !(force_one_per_line || magic_trailing_newline || avoid_inline_compaction)
+        && !(source_is_multiline && has_keyword_args);
     if !arguments.is_empty() {
         let single_line = try_single_line(
             &formatted_name,
@@ -753,7 +759,9 @@ fn build_argument_list_from_args(
     let mut i = 0;
 
     while i < args.len() {
-        let blank_line_before = if i > 0 {
+        let preserve_source_blank_lines =
+            config.align_arg_groups || !matches!(config.sort_arguments, SortArguments::Disabled);
+        let blank_line_before = if preserve_source_blank_lines && i > 0 {
             let prev_end = arg_source_range(&args[i - 1]).1;
             let (current_start, _) = arg_source_range(&args[i]);
             has_blank_line_between(source, prev_end, current_start)
@@ -1093,6 +1101,7 @@ fn try_single_line(
         "if" | "while" | "elseif"
     );
     let line_width = config.line_width as usize;
+    let has_keyword_args = args.iter().any(|arg| arg.is_keyword);
     let has_unbreakable_long_token = cmd_name.len() > line_width
         || args_text
             .iter()
@@ -1100,8 +1109,8 @@ fn try_single_line(
     let indentation_overflow = base_indent > line_width;
     let deep_indentation = base_indent.saturating_mul(2) >= line_width;
     if !keep_condition_header_inline
-        && total > line_width
-        && !has_unbreakable_long_token
+        && ((total > line_width && !has_unbreakable_long_token)
+            || (!has_keyword_args && total == line_width))
         && !indentation_overflow
         && !deep_indentation
     {
@@ -2063,10 +2072,17 @@ fn gen_known_multi_line(
         }
     }
 
-    let opening_args = front_pos;
-    // Do NOT absorb leading positional group into opening_args.
-    // Positional args stay in `groups` for source-line-aware packing
-    // via `emit_values_with_genex_with_indent` with `pack_tokens=true`.
+    let has_keyword_groups = groups
+        .iter()
+        .any(|group| matches!(group, ArgGroup::Keyword { .. }));
+    let mut opening_args = front_pos;
+    if !config.align_arg_groups
+        && has_keyword_groups
+        && let Some(ArgGroup::Positional(args)) = groups.first()
+    {
+        opening_args.extend(args.iter().copied());
+        groups.remove(0);
+    }
 
     let command_indent = indent_depth as usize * config.indent_width as usize;
     let base_indent = (indent_depth as usize + 1) * config.indent_width as usize;
@@ -2079,9 +2095,6 @@ fn gen_known_multi_line(
         && opening_args[0].text.eq_ignore_ascii_case("TARGETS");
     let force_properties_opening =
         cmd_name.eq_ignore_ascii_case("set_target_properties") && opening_pair_values.is_some();
-    let has_keyword_groups = groups
-        .iter()
-        .any(|group| matches!(group, ArgGroup::Keyword { .. }));
     let force_one_per_line = config.wrap_arg_threshold > 0
         && count_wrap_arguments(arguments) > config.wrap_arg_threshold as usize;
     let opening_line_overflow = first_arg_same_line
@@ -2231,7 +2244,13 @@ fn gen_known_multi_line(
                             false,
                             config.effective_continuation_indent_width() as usize,
                             false,
-                            true,
+                            config.align_arg_groups
+                                || args
+                                    .iter()
+                                    .filter(|arg| arg.new_line_before)
+                                    .take(2)
+                                    .count()
+                                    >= 2,
                         );
                     }
                 } else if spec.flow_positional {
@@ -2244,7 +2263,13 @@ fn gen_known_multi_line(
                         false,
                         config.effective_continuation_indent_width() as usize,
                         false,
-                        true,
+                        config.align_arg_groups
+                            || args
+                                .iter()
+                                .filter(|arg| arg.new_line_before)
+                                .take(2)
+                                .count()
+                                >= 2,
                     );
                 }
             }
@@ -2380,7 +2405,9 @@ fn emit_keyword_group(
     let preserve_inline_keyword_layout = (config.sort_arguments_explicit
         || config.sort_keyword_sections_explicit)
         && !allow_plain_section_inline
-        && ((is_section_kw && !plain_section_keyword) || is_custom_keyword(keyword, config));
+        && (is_section_kw
+            || (keyword.is_keyword && spec.sections.is_empty())
+            || is_custom_keyword(keyword, config));
     // Try inline: keyword + all values on one line.
     let inline_width = compute_keyword_inline_width(keyword, values);
     let can_inline_content = !values.iter().any(|v| v.text.contains('\n'))
@@ -2432,6 +2459,7 @@ fn emit_keyword_group(
             .any(|(_, kw_type)| matches!(kw_type, KwType::Group(..)));
         let can_inline_section_values = !force_one_per_line
             && allow_keyword_inline
+            && !preserve_inline_keyword_layout
             && !has_subkeyword_values
             && !has_group_subkeywords
             && !continuation_is_explicit
@@ -2468,6 +2496,7 @@ fn emit_keyword_group(
                     .sum::<usize>();
             let can_inline_leading = !force_one_per_line
                 && allow_keyword_inline
+                && !preserve_inline_keyword_layout
                 && !continuation_is_explicit
                 && base_indent + leading_width <= config.line_width as usize
                 && !values[..leading_count]
@@ -4333,11 +4362,13 @@ fn sort_section_with_groups(args: &mut [FormattedArg]) {
 
         let mut leading_comments: Vec<FormattedArg> = Vec::new();
         let mut start_index = 0usize;
-        while start_index < segment.len() && is_standalone_comment(&segment[start_index]) {
+        while start_index < segment.len()
+            && is_standalone_comment(&segment[start_index])
+            && segment[start_index].blank_line_before
+        {
             leading_comments.push(segment[start_index].clone());
             start_index += 1;
         }
-
         let has_explicit_rows = segment[start_index..]
             .iter()
             .any(|item| !is_standalone_comment(item) && item.new_line_before);
