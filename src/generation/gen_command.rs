@@ -531,7 +531,7 @@ pub fn gen_command(
                         || (config.wrap_arg_threshold > 0 && magic_trailing_newline);
                     let allow_keyword_inline =
                         matches!(config.wrap_style, WrapStyle::Cascade) && !suppress_keyword_inline;
-                    let allow_opening_arg_packing = allow_keyword_inline && !magic_trailing_newline;
+                    let allow_opening_arg_packing = allow_keyword_inline;
                     items.extend(gen_known_multi_line(
                         &formatted_name,
                         &arguments,
@@ -550,7 +550,7 @@ pub fn gen_command(
                         || (config.wrap_arg_threshold > 0 && magic_trailing_newline);
                     let allow_keyword_inline =
                         matches!(config.wrap_style, WrapStyle::Cascade) && !suppress_keyword_inline;
-                    let allow_opening_arg_packing = allow_keyword_inline && !magic_trailing_newline;
+                    let allow_opening_arg_packing = allow_keyword_inline;
                     items.extend(gen_known_multi_line(
                         &formatted_name,
                         &arguments,
