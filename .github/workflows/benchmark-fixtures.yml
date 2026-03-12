@@ -43,6 +43,7 @@ jobs:
         env:
           HISTORY_BRANCH: benchmark-history
           HISTORY_FILE: benchmarks/cmakefmt-fixtures-history.json
+          GIST_PAT: ${{ secrets.GIST_PAT }}
         run: |
           set -euo pipefail
 
@@ -79,3 +80,14 @@ jobs:
 
           git -C "$history_worktree" commit -m "bench: append fixture benchmark history for ${GITHUB_SHA}"
           git -C "$history_worktree" push origin "HEAD:$HISTORY_BRANCH"
+
+          # Update GitHub Gist with latest benchmark history
+          jq -Rs --arg fn "benchmarks.json" \
+            '{files: {($fn): {content: .}}}' \
+            "$history_worktree/$HISTORY_FILE" \
+          | curl -sf -X PATCH \
+              -H "Authorization: token $GIST_PAT" \
+              -H "Accept: application/vnd.github+json" \
+              -d @- \
+              "https://api.github.com/gists/2b47692801ddaa693fb60a9138748b3c" \
+              -o /dev/null
