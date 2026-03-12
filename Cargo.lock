@@ -180,13 +180,34 @@ dependencies = [
  "anyhow",
  "clap",
  "criterion",
- "dprint-core",
  "glob",
  "imara-diff",
  "logos",
  "serde",
  "serde_json",
  "toml",
+]
+
+[[package]]
+name = "cmakefmt-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "cmakefmt",
+ "glob",
+ "toml",
+]
+
+[[package]]
+name = "cmakefmt-dprint"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cmakefmt",
+ "dprint-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

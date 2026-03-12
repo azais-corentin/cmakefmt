@@ -1,7 +1,7 @@
 use std::path::Path;
 
+use crate::printer::{PrintOptions, format as printer_format};
 use anyhow::Result;
-use dprint_core::formatting::{self, PrintOptions};
 use glob::Pattern;
 
 use crate::configuration::{Configuration, NewLineKind, apply_inline_overrides};
@@ -129,7 +129,7 @@ fn format_inner(text: &str, config: &Configuration) -> Result<String> {
         new_line_text: newline,
     };
 
-    let result = formatting::format(|| gen_file(&file, parse_text, config), print_options);
+    let result = printer_format(|| gen_file(&file, parse_text, config), print_options);
     let result = crate::post_process::post_process_alignments(&result, config);
 
     // Restore whitespace where config says to preserve (trimTrailingWhitespace,

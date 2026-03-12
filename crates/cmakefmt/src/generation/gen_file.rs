@@ -1,5 +1,5 @@
-use dprint_core::formatting::ir_helpers;
-use dprint_core::formatting::{PrintItems, Signal};
+use crate::printer::ir_helpers;
+use crate::printer::{PrintItems, Signal};
 
 use crate::configuration::{Configuration, EndCommandArgs, apply_inline_overrides};
 use crate::parser::ast::{Argument, CommandInvocation, File, FileElement};

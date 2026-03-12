@@ -1,10 +1,6 @@
 use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use dprint_core::configuration::{
-    ConfigKeyMap, ConfigKeyValue, GlobalConfiguration, NewLineKind as DprintNewLineKind,
-};
-
 use super::types::{
     CaseStyle, CommandConfiguration, CommentPreservation, Configuration, EndCommandArgs, GenexWrap,
     IndentStyle, NewLineKind, SortArguments, SpaceBeforeParen, SpaceInsideParen, WrapStyle,
@@ -38,14 +34,19 @@ pub fn load_from_cli(config: Configuration) -> ConfigLoadResult {
     }
 }
 
-/// Loads plugin configuration from dprint's key/value map and global defaults.
-pub fn load_from_dprint(
-    mut config: ConfigKeyMap,
-    global_config: &GlobalConfiguration,
+/// Loads configuration from a JSON key/value map with an optional base configuration.
+///
+/// This is the bridge point for external integrations (e.g. dprint). Callers convert their
+/// native config representation to `serde_json::Map` and pass it here. The `base` parameter
+/// lets callers pre-apply global defaults (line_width, use_tabs, etc.) before plugin-specific
+/// keys are layered on top.
+pub fn load_from_json_map(
+    map: serde_json::Map<String, serde_json::Value>,
+    base: Configuration,
 ) -> ConfigLoadResult {
-    let mut loader = Loader::new(base_from_global(global_config));
-    for (key, value) in config.drain(..) {
-        loader.apply_raw_value(&key, RawConfigValue::Dprint(value));
+    let mut loader = Loader::new(base);
+    for (key, value) in map {
+        loader.apply_raw_value(&key, RawConfigValue::Json(value));
     }
     loader.finish()
 }
@@ -1485,19 +1486,6 @@ impl Loader {
         expected: &str,
     ) -> Option<Vec<String>> {
         let mut values = match value {
-            RawConfigValue::Dprint(ConfigKeyValue::Array(items)) => {
-                let mut values = Vec::new();
-                for item in items {
-                    match item {
-                        ConfigKeyValue::String(text) => values.push(text),
-                        _ => {
-                            self.push_invalid_type(key, expected);
-                            return None;
-                        }
-                    }
-                }
-                values
-            }
             RawConfigValue::Json(serde_json::Value::Array(items)) => {
                 let mut values = Vec::new();
                 for item in items {
@@ -1581,39 +1569,7 @@ impl Loader {
     }
 }
 
-fn base_from_global(global_config: &GlobalConfiguration) -> Configuration {
-    let mut config = Configuration::default();
-
-    if let Some(line_width) = global_config.line_width {
-        config.line_width = line_width;
-    }
-
-    if let Some(indent_width) = global_config.indent_width {
-        config.indent_width = indent_width;
-    }
-
-    if let Some(use_tabs) = global_config.use_tabs {
-        config.use_tabs = use_tabs;
-        config.indent_style = if use_tabs {
-            IndentStyle::Tab
-        } else {
-            IndentStyle::Space
-        };
-    }
-
-    if let Some(new_line_kind) = global_config.new_line_kind {
-        config.new_line_kind = match new_line_kind {
-            DprintNewLineKind::Auto => NewLineKind::Auto,
-            DprintNewLineKind::LineFeed => NewLineKind::Lf,
-            DprintNewLineKind::CarriageReturnLineFeed => NewLineKind::CrLf,
-        };
-    }
-
-    config
-}
-
 enum RawConfigValue {
-    Dprint(ConfigKeyValue),
     Json(serde_json::Value),
     Text(String),
 }
@@ -1621,7 +1577,6 @@ enum RawConfigValue {
 impl RawConfigValue {
     fn into_string(self) -> Option<String> {
         match self {
-            RawConfigValue::Dprint(ConfigKeyValue::String(value)) => Some(value),
             RawConfigValue::Json(serde_json::Value::String(value)) => Some(value),
             RawConfigValue::Text(value) => Some(trim_quotes(&value)),
             _ => None,
@@ -1630,9 +1585,6 @@ impl RawConfigValue {
 
     fn as_lower_string(&self) -> Option<String> {
         match self {
-            RawConfigValue::Dprint(ConfigKeyValue::String(value)) => {
-                Some(value.to_ascii_lowercase())
-            }
             RawConfigValue::Json(serde_json::Value::String(value)) => {
                 Some(value.to_ascii_lowercase())
             }
@@ -1643,7 +1595,6 @@ impl RawConfigValue {
 
     fn as_bool(&self) -> Option<bool> {
         match self {
-            RawConfigValue::Dprint(ConfigKeyValue::Bool(value)) => Some(*value),
             RawConfigValue::Json(serde_json::Value::Bool(value)) => Some(*value),
             RawConfigValue::Text(value) => parse_bool_text(value),
             _ => None,
@@ -1662,7 +1613,6 @@ impl RawConfigValue {
 
     fn as_i64_number(&self) -> Option<i64> {
         match self {
-            RawConfigValue::Dprint(ConfigKeyValue::Number(value)) => Some(i64::from(*value)),
             RawConfigValue::Json(serde_json::Value::Number(value)) => value.as_i64(),
             RawConfigValue::Text(value) => trim_quotes(value).parse::<i64>().ok(),
             _ => None,
@@ -1671,7 +1621,6 @@ impl RawConfigValue {
 
     fn is_null(&self) -> bool {
         match self {
-            RawConfigValue::Dprint(ConfigKeyValue::Null) => true,
             RawConfigValue::Json(serde_json::Value::Null) => true,
             RawConfigValue::Text(value) => trim_quotes(value).eq_ignore_ascii_case("null"),
             _ => false,
@@ -1680,11 +1629,6 @@ impl RawConfigValue {
 
     fn into_object_entries(self) -> Option<Vec<(String, RawConfigValue)>> {
         match self {
-            RawConfigValue::Dprint(ConfigKeyValue::Object(map)) => Some(
-                map.into_iter()
-                    .map(|(key, value)| (key, RawConfigValue::Dprint(value)))
-                    .collect(),
-            ),
             RawConfigValue::Json(serde_json::Value::Object(map)) => Some(
                 map.into_iter()
                     .map(|(key, value)| (key, RawConfigValue::Json(value)))
@@ -1775,8 +1719,6 @@ fn split_respecting_brackets(s: &str) -> Vec<&str> {
 mod tests {
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
-
-    use dprint_core::configuration::ConfigKeyMap;
 
     use super::*;
 
@@ -1923,19 +1865,21 @@ mod tests {
     }
 
     #[test]
-    fn applies_global_defaults_then_source_patch() {
-        let mut map = ConfigKeyMap::new();
-        map.insert("lineWidth".to_string(), ConfigKeyValue::Number(90));
-        map.insert("sortLists".to_string(), ConfigKeyValue::Bool(true));
+    fn applies_base_defaults_then_json_map() {
+        let mut map = serde_json::Map::new();
+        map.insert(
+            "lineWidth".to_string(),
+            serde_json::Value::Number(90.into()),
+        );
+        map.insert("sortLists".to_string(), serde_json::Value::Bool(true));
 
-        let global = GlobalConfiguration {
-            line_width: Some(120),
-            indent_width: Some(6),
-            use_tabs: Some(true),
-            new_line_kind: None,
-        };
+        let mut base = Configuration::default();
+        base.line_width = 120;
+        base.indent_width = 6;
+        base.use_tabs = true;
+        base.indent_style = IndentStyle::Tab;
 
-        let result = load_from_dprint(map, &global);
+        let result = load_from_json_map(map, base);
         assert_eq!(result.config.line_width, 90);
         assert_eq!(result.config.indent_width, 6);
         assert!(result.config.use_tabs);

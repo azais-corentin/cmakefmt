@@ -1,0 +1,29 @@
+[package]
+name = "cmakefmt"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "CMake formatter"
+
+[lib]
+
+[dependencies]
+anyhow = "1.0.102"
+clap = { version = "4.5.60", features = ["derive"], optional = true }
+glob = "0.3.3"
+logos = "0.16.1"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = { version = "1.0.149", features = ["preserve_order"] }
+toml = "1.0.6"
+
+[features]
+cli = ["dep:clap"]
+
+[dev-dependencies]
+criterion = { version = "0.5.1", features = ["html_reports"] }
+imara-diff = "0.2.0"
+serde_json = "1.0.149"
+
+[[bench]]
+name = "formatter_fixtures_bench"
+harness = false

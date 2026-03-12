@@ -1,40 +1,15 @@
-[package]
-name = "cmakefmt"
-version = "0.1.0"
-edition = "2024"
-license = "MIT"
-description = "CMake formatter"
-
-[lib]
-crate-type = ["cdylib", "rlib"]
-
-[[bin]]
-name = "cmakefmt"
-path = "src/bin/cmakefmt.rs"
+[workspace]
+members = [
+    "crates/cmakefmt",
+    "crates/cmakefmt-cli",
+    "crates/cmakefmt-dprint",
+]
+resolver = "3"
 
 [profile.bench]
 debug = 2
 split-debuginfo = "unpacked"
 strip = "none"
-
-[dependencies]
-anyhow = "1.0.102"
-clap = { version = "4.5.60", features = ["derive"] }
-dprint-core = { version = "0.67.4", features = ["formatting", "wasm"] }
-glob = "0.3.3"
-logos = "0.16.1"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = { version = "1.0.149", features = ["preserve_order"] }
-toml = "1.0.6"
-
-[dev-dependencies]
-criterion = { version = "0.5.1", features = ["html_reports"] }
-imara-diff = "0.2.0"
-serde_json = "1.0.149"
-
-[[bench]]
-name = "formatter_fixtures_bench"
-harness = false
 
 [profile.release]
 lto = true

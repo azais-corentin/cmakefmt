@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::str::FromStr;
 
+#[cfg(feature = "cli")]
 use clap::ValueEnum;
 use serde::Serialize;
 
@@ -111,18 +112,20 @@ pub struct CommandConfiguration {
     pub sort_keyword_sections: Option<bool>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "cli", derive(ValueEnum))]
 pub enum NewLineKind {
     Auto,
     Lf,
     CrLf,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "cli", derive(ValueEnum))]
 pub enum CaseStyle {
     Lower,
     Upper,
-    #[value(name = "unchanged", alias = "preserve")]
+    #[cfg_attr(feature = "cli", value(name = "unchanged", alias = "preserve"))]
     Preserve,
 }
 
