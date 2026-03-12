@@ -485,9 +485,11 @@ pub fn gen_command(
                     }
                 }
                 Some(CommandKind::Known(spec)) => {
-                    let allow_keyword_inline = !force_one_per_line
-                        && matches!(config.wrap_style, WrapStyle::Cascade)
-                        && !avoid_inline_compaction;
+                    let suppress_keyword_inline = force_one_per_line
+                        || avoid_inline_compaction
+                        || (config.wrap_arg_threshold > 0 && magic_trailing_newline);
+                    let allow_keyword_inline =
+                        matches!(config.wrap_style, WrapStyle::Cascade) && !suppress_keyword_inline;
                     let allow_opening_arg_packing = allow_keyword_inline && !magic_trailing_newline;
                     items.extend(gen_known_multi_line(
                         &formatted_name,
@@ -502,9 +504,11 @@ pub fn gen_command(
                 }
                 None => {
                     // Unknown command with customKeywords — use empty spec.
-                    let allow_keyword_inline = !force_one_per_line
-                        && matches!(config.wrap_style, WrapStyle::Cascade)
-                        && !avoid_inline_compaction;
+                    let suppress_keyword_inline = force_one_per_line
+                        || avoid_inline_compaction
+                        || (config.wrap_arg_threshold > 0 && magic_trailing_newline);
+                    let allow_keyword_inline =
+                        matches!(config.wrap_style, WrapStyle::Cascade) && !suppress_keyword_inline;
                     let allow_opening_arg_packing = allow_keyword_inline && !magic_trailing_newline;
                     items.extend(gen_known_multi_line(
                         &formatted_name,
@@ -2078,6 +2082,8 @@ fn gen_known_multi_line(
     let has_keyword_groups = groups
         .iter()
         .any(|group| matches!(group, ArgGroup::Keyword { .. }));
+    let force_one_per_line = config.wrap_arg_threshold > 0
+        && count_wrap_arguments(arguments) > config.wrap_arg_threshold as usize;
     let opening_line_overflow = first_arg_same_line
         && opening_args
             .first()
@@ -2094,10 +2100,11 @@ fn gen_known_multi_line(
             }
             last_on_opening_line = true;
 
-            let can_pack_rest = (force_two_install_opening
-                || force_properties_opening
-                || allow_opening_arg_packing
-                || (allow_keyword_inline && has_keyword_groups))
+            let can_pack_rest = !force_one_per_line
+                && (force_two_install_opening
+                    || force_properties_opening
+                    || allow_opening_arg_packing
+                    || (allow_keyword_inline && has_keyword_groups))
                 && can_pack_args_on_line(
                     command_indent + cmd_name.len() + 1,
                     &opening_args,
@@ -2122,10 +2129,11 @@ fn gen_known_multi_line(
             }
         }
     } else if !opening_args.is_empty() {
-        let can_pack_all = (force_two_install_opening
-            || force_properties_opening
-            || allow_opening_arg_packing
-            || (allow_keyword_inline && has_keyword_groups))
+        let can_pack_all = !force_one_per_line
+            && (force_two_install_opening
+                || force_properties_opening
+                || allow_opening_arg_packing
+                || (allow_keyword_inline && has_keyword_groups))
             && can_pack_args_on_line(base_indent, &opening_args, config);
         if can_pack_all {
             inner.push_signal(Signal::NewLine);
@@ -2177,7 +2185,17 @@ fn gen_known_multi_line(
         last_on_opening_line = false;
         match group {
             ArgGroup::Positional(args) => {
-                if config.align_arg_groups
+                if force_one_per_line {
+                    emit_values_with_genex_with_indent(
+                        &mut inner,
+                        args.as_slice(),
+                        config,
+                        false,
+                        config.effective_continuation_indent_width() as usize,
+                        false,
+                        false,
+                    );
+                } else if config.align_arg_groups
                     && cmd_name.eq_ignore_ascii_case("install")
                     && emit_install_target_rows(&mut inner, args.as_slice(), config)
                 {
@@ -2252,6 +2270,7 @@ fn gen_known_multi_line(
                     base_indent,
                     cmd_name.eq_ignore_ascii_case("export"),
                     keyword_inline_allowed,
+                    force_one_per_line,
                 );
                 expanded_keyword_group_seen |= expanded;
                 if section_keyword {
@@ -2293,6 +2312,7 @@ fn emit_keyword_group(
     base_indent: usize,
     allow_plain_section_inline: bool,
     allow_keyword_inline: bool,
+    force_one_per_line: bool,
 ) -> bool {
     // Check for compound keyword (e.g., QUERY WINDOWS_REGISTRY)
     if let Some(first_val) = values.first()
@@ -2331,6 +2351,7 @@ fn emit_keyword_group(
             base_indent,
             allow_plain_section_inline,
             allow_keyword_inline,
+            force_one_per_line,
         );
     }
 
@@ -2369,7 +2390,8 @@ fn emit_keyword_group(
         && (keyword.trailing_comment.is_none() || keyword.trailing_is_bracket)
         && !values.iter().any(|v| v.text.starts_with('#'))
         && !values.iter().any(|v| v.text.contains("$<"));
-    if allow_keyword_inline
+    if !force_one_per_line
+        && allow_keyword_inline
         && !preserve_inline_keyword_layout
         && treat_as_regular_keyword
         && base_indent + inline_width <= config.line_width as usize
@@ -2408,8 +2430,8 @@ fn emit_keyword_group(
         let has_group_subkeywords = sub_kws
             .iter()
             .any(|(_, kw_type)| matches!(kw_type, KwType::Group(..)));
-        let can_inline_section_values = allow_keyword_inline
-            && !preserve_inline_keyword_layout
+        let can_inline_section_values = !force_one_per_line
+            && allow_keyword_inline
             && !has_subkeyword_values
             && !has_group_subkeywords
             && !continuation_is_explicit
@@ -2444,7 +2466,9 @@ fn emit_keyword_group(
                     .iter()
                     .map(|v| 1 + arg_width(v))
                     .sum::<usize>();
-            let can_inline_leading = !continuation_is_explicit
+            let can_inline_leading = !force_one_per_line
+                && allow_keyword_inline
+                && !continuation_is_explicit
                 && base_indent + leading_width <= config.line_width as usize
                 && !values[..leading_count]
                     .iter()
@@ -2502,7 +2526,10 @@ fn emit_keyword_group(
         } else if is_pair_keyword(&keyword.text, spec) {
             // Pair keyword: values are alternating key-value pairs
             emit_pair_values(items, values, config, base_indent, true);
-        } else if is_flow_keyword(&keyword.text, spec) {
+        } else if is_flow_keyword(&keyword.text, spec)
+            && !force_one_per_line
+            && !(config.blank_line_between_sections && is_section_kw)
+        {
             // Flow keyword: values flow-wrap at line width
             emit_flow_values(items, values, config, base_indent, true);
         } else {
@@ -2528,7 +2555,9 @@ fn emit_keyword_group(
                 true,
                 continuation,
                 false,
-                config.align_arg_groups,
+                config.align_arg_groups
+                    && !force_one_per_line
+                    && !(config.blank_line_between_sections && is_section_kw),
             );
 
             for comment in trailing_comments {
@@ -3374,7 +3403,7 @@ fn emit_section_values_inner(
                 wrap_indent,
                 continuation_indent,
                 true,
-                config.align_arg_groups,
+                config.align_arg_groups && !config.blank_line_between_sections,
             );
         }
     }
@@ -4269,8 +4298,9 @@ fn sort_argument_groups(
 }
 
 /// Sort a section of arguments respecting group boundaries.
-/// A blank-line-preceded comment acts as a group boundary;
-/// sorting happens independently within each sub-group.
+///
+/// A source blank line starts a new independent sort segment. Within each
+/// segment, comments remain attached to the following sortable row.
 fn sort_section_with_groups(args: &mut [FormattedArg]) {
     #[derive(Clone)]
     struct SortUnit {
@@ -4282,57 +4312,94 @@ fn sort_section_with_groups(args: &mut [FormattedArg]) {
         arg.text.starts_with('#')
     }
 
+    fn flush_row(
+        units: &mut Vec<SortUnit>,
+        row_key: &mut Option<String>,
+        row_items: &mut Vec<FormattedArg>,
+    ) {
+        if let Some(key) = row_key.take() {
+            units.push(SortUnit {
+                key,
+                items: std::mem::take(row_items),
+            });
+        }
+    }
+
     fn sort_segment(segment: &[FormattedArg]) -> Vec<FormattedArg> {
         let mut units: Vec<SortUnit> = Vec::new();
         let mut pending_comments: Vec<FormattedArg> = Vec::new();
+        let mut row_items: Vec<FormattedArg> = Vec::new();
+        let mut row_key: Option<String> = None;
 
-        for item in segment {
+        let mut leading_comments: Vec<FormattedArg> = Vec::new();
+        let mut start_index = 0usize;
+        while start_index < segment.len() && is_standalone_comment(&segment[start_index]) {
+            leading_comments.push(segment[start_index].clone());
+            start_index += 1;
+        }
+
+        let has_explicit_rows = segment[start_index..]
+            .iter()
+            .any(|item| !is_standalone_comment(item) && item.new_line_before);
+
+        for item in &segment[start_index..] {
             if is_standalone_comment(item) {
                 pending_comments.push(item.clone());
                 continue;
             }
 
-            let mut grouped_items = Vec::new();
-            grouped_items.append(&mut pending_comments);
-            grouped_items.push(item.clone());
+            let starts_new_row = if has_explicit_rows {
+                item.new_line_before && row_key.is_some()
+            } else {
+                row_key.is_some()
+            };
+            if starts_new_row {
+                flush_row(&mut units, &mut row_key, &mut row_items);
+            }
 
-            units.push(SortUnit {
-                key: item.text.to_ascii_lowercase(),
-                items: grouped_items,
-            });
+            if row_key.is_none() {
+                row_key = Some(item.text.to_ascii_lowercase());
+                row_items.append(&mut pending_comments);
+            }
+            row_items.push(item.clone());
         }
 
+        flush_row(&mut units, &mut row_key, &mut row_items);
         if units.is_empty() {
-            return pending_comments;
+            leading_comments.extend(pending_comments);
+            return leading_comments;
         }
 
         let trailing_comments = pending_comments;
         units.sort_by(|a, b| a.key.cmp(&b.key));
 
-        let mut sorted = Vec::new();
+        let mut sorted = leading_comments;
         for unit in units {
             sorted.extend(unit.items);
         }
         sorted.extend(trailing_comments);
+        let segment_starts_with_blank = segment
+            .first()
+            .map(|item| item.blank_line_before)
+            .unwrap_or(false);
+        for item in &mut sorted {
+            item.blank_line_before = false;
+        }
+        if let Some(first) = sorted.first_mut() {
+            first.blank_line_before = segment_starts_with_blank;
+        }
         sorted
     }
 
     let mut rebuilt: Vec<FormattedArg> = Vec::with_capacity(args.len());
-    let mut segment_start = 0;
-
-    for (index, arg) in args.iter().enumerate() {
-        let is_boundary = arg.text.starts_with('#') && arg.blank_line_before;
-        if !is_boundary {
+    let mut segment_start = 0usize;
+    for index in 1..args.len() {
+        if !args[index].blank_line_before {
             continue;
         }
-
-        if segment_start < index {
-            rebuilt.extend(sort_segment(&args[segment_start..index]));
-        }
-        rebuilt.push(arg.clone());
-        segment_start = index + 1;
+        rebuilt.extend(sort_segment(&args[segment_start..index]));
+        segment_start = index;
     }
-
     if segment_start < args.len() {
         rebuilt.extend(sort_segment(&args[segment_start..]));
     }

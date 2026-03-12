@@ -303,8 +303,15 @@ fn simple_diff(expected: &str, actual: &str) -> String {
     }
 }
 
-/// Returns true for any character with no visible glyph.
+/// Returns true for characters considered invisible in diffs.
+///
+/// Note: CR/LF are intentionally excluded so pure line-ending changes are
+/// treated as regular (non-invisible-only) diffs.
 fn is_invisible(c: char) -> bool {
+    if matches!(c, '\r' | '\n') {
+        return false;
+    }
+
     c.is_whitespace()
         || c.is_control()
         || matches!(
@@ -353,8 +360,8 @@ mod invisible_diff_tests {
     #[test]
     fn test_strip_invisible() {
         assert_eq!(strip_invisible("hello world"), "helloworld");
-        assert_eq!(strip_invisible("a\tb\nc"), "abc");
-        assert_eq!(strip_invisible("a\r\nb"), "ab");
+        assert_eq!(strip_invisible("a\tb\nc"), "ab\nc");
+        assert_eq!(strip_invisible("a\r\nb"), "a\r\nb");
         assert_eq!(strip_invisible(""), "");
         assert_eq!(strip_invisible("abc"), "abc");
         // Zero-width chars
@@ -389,12 +396,23 @@ mod invisible_diff_tests {
     }
 
     #[test]
-    fn test_simple_diff_trailing_newline() {
-        // Trailing newline difference — subsumed by invisible-only detection
-        let result = simple_diff("hello\n", "hello");
+    fn test_simple_diff_invisible_only_renders_crlf_symbols() {
+        let result = simple_diff("a\tb\r\n", "a  b\r\n");
         assert!(
             result.contains("invisible-only differences"),
-            "expected invisible-only legend for trailing newline diff, got: {result}"
+            "expected invisible-only legend, got: {result}"
+        );
+        assert!(result.contains('\u{240D}'), "expected CR symbol in diff");
+        assert!(result.contains('\u{240A}'), "expected LF symbol in diff");
+    }
+
+    #[test]
+    fn test_simple_diff_trailing_newline_is_not_invisible_only() {
+        // Trailing newline is now treated as a regular visible diff trigger.
+        let result = simple_diff("hello\n", "hello");
+        assert!(
+            !result.contains("invisible-only differences"),
+            "trailing newline diff should not trigger invisible-only mode, got: {result}"
         );
     }
 
