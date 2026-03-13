@@ -55,9 +55,14 @@ jobs:
 
           if git ls-remote --exit-code --heads origin "$HISTORY_BRANCH" >/dev/null; then
             git fetch origin "$HISTORY_BRANCH"
+            # Abort if the branch shares history with the default branch
+            if git merge-base "origin/$HISTORY_BRANCH" HEAD >/dev/null 2>&1; then
+              echo "::error::$HISTORY_BRANCH shares history with the default branch. Delete it and re-run." >&2
+              exit 1
+            fi
             git worktree add "$history_worktree" "origin/$HISTORY_BRANCH"
           else
-            git worktree add -b "$HISTORY_BRANCH" "$history_worktree" HEAD
+            git worktree add --orphan -b "$HISTORY_BRANCH" "$history_worktree"
           fi
 
           cp "$RUNNER_TEMP/latest-benchmark.json" "$history_worktree/latest-benchmark.json"
