@@ -1,171 +1,113 @@
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use cmakefmt::{Configuration, format_text, load_from_toml_path};
+use rstest::rstest;
 
-#[test]
-fn test_formatter_files() {
-    let formatter_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/formatter");
-    let mut failures: Vec<String> = Vec::new();
-    let mut count = 0;
+// ---------------------------------------------------------------------------
+// Per-fixture test — rstest generates one #[test] per .in.cmake file
+// ---------------------------------------------------------------------------
 
-    let mut in_files = walk_cmake_files(&formatter_dir, ".in.cmake");
-    let mut out_files = walk_cmake_files(&formatter_dir, ".out.cmake");
+#[rstest]
+fn test_fixture(#[files("tests/formatter/**/*.in.cmake")] in_path: PathBuf) {
+    let stem = in_path
+        .to_str()
+        .expect("non-utf8 path")
+        .strip_suffix(".in.cmake")
+        .expect("expected .in.cmake suffix");
+    let out_path = PathBuf::from(format!("{stem}.out.cmake"));
+    assert!(
+        out_path.exists(),
+        "Missing .out.cmake for {}",
+        in_path.display()
+    );
 
-    // Optional filter: set CMAKEFMT_TEST_FILTER to run only fixtures whose path contains the value.
-    // e.g. CMAKEFMT_TEST_FILTER=01_wrapping cargo test --test formatter_tests
-    if let Ok(filter) = std::env::var("CMAKEFMT_TEST_FILTER") {
-        in_files.retain(|p| p.to_str().map_or(false, |s| s.contains(&filter)));
-        out_files.retain(|p| p.to_str().map_or(false, |s| s.contains(&filter)));
-    }
+    let input = std::fs::read_to_string(&in_path).unwrap();
+    let expected = std::fs::read_to_string(&out_path).unwrap();
+    let config = load_fixture_config(&in_path);
 
-    in_files.sort();
-
-    let in_stems: HashSet<String> = in_files
-        .iter()
-        .map(|p| {
-            p.to_str()
-                .unwrap()
-                .strip_suffix(".in.cmake")
-                .unwrap()
-                .to_owned()
-        })
-        .collect();
-    let out_stems: HashSet<String> = out_files
-        .iter()
-        .map(|p| {
-            p.to_str()
-                .unwrap()
-                .strip_suffix(".out.cmake")
-                .unwrap()
-                .to_owned()
-        })
-        .collect();
-
-    for stem in in_stems.difference(&out_stems) {
-        failures.push(format!("Missing .out.cmake for {stem}.in.cmake"));
-    }
-    for stem in out_stems.difference(&in_stems) {
-        failures.push(format!("Missing .in.cmake for {stem}.out.cmake"));
-    }
-
-    for in_path in &in_files {
-        // foo.in.cmake -> foo.out.cmake
-        let stem = in_path
-            .to_str()
-            .expect("non-utf8 path")
-            .strip_suffix(".in.cmake")
-            .expect("expected .in.cmake extension");
-        let out_path = PathBuf::from(format!("{stem}.out.cmake"));
-
-        if !out_stems.contains(stem) {
-            continue;
+    match format_text(in_path.as_path(), &input, &config) {
+        Ok(Some(formatted)) => {
+            assert_eq_with_diff(&expected, &formatted, &in_path);
+            check_idempotency(in_path.as_path(), &formatted, &config);
         }
-
-        let input = std::fs::read_to_string(in_path).unwrap();
-        let expected = std::fs::read_to_string(&out_path).unwrap();
-        let config = load_fixture_config(in_path);
-        let cmake_path = in_path.as_path();
-
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            format_text(cmake_path, &input, &config)
-        }));
-
-        match result {
-            Err(panic_info) => {
-                let msg = panic_info
-                    .downcast_ref::<String>()
-                    .map(|s| s.as_str())
-                    .or_else(|| panic_info.downcast_ref::<&str>().copied())
-                    .unwrap_or("(no message)");
-                failures.push(format!("PANIC: {}\n{msg}", in_path.display()));
-                count += 1;
-            }
-            Ok(Ok(Some(formatted))) => {
-                if formatted != expected {
-                    failures.push(format!(
-                        "MISMATCH: {}\n--- expected\n+++ actual\n{}",
-                        in_path.display(),
-                        simple_diff(&expected, &formatted)
-                    ));
-                }
-                // Idempotency: format the output again
-                match format_text(cmake_path, &formatted, &config) {
-                    Ok(None) => { /* Already formatted — pass */ }
-                    Ok(Some(reformatted)) => {
-                        if reformatted != formatted {
-                            failures.push(format!(
-                                "IDEMPOTENCY: {}\nSecond format produced different output\n{}",
-                                in_path.display(),
-                                simple_diff(&formatted, &reformatted)
-                            ));
-                        }
-                    }
-                    Err(e) => {
-                        failures.push(format!(
-                            "IDEMPOTENCY ERROR: {}\nSecond format failed: {e}",
-                            in_path.display()
-                        ));
-                    }
-                }
-            }
-            Ok(Ok(None)) => {
-                // No change — input already formatted; it should match expected
-                if input != expected {
-                    failures.push(format!(
-                        "MISMATCH (no change returned): {}\n--- expected\n+++ input\n{}",
-                        in_path.display(),
-                        simple_diff(&expected, &input)
-                    ));
-                }
-                // Idempotency: format input again (it was already formatted)
-                match format_text(cmake_path, &input, &config) {
-                    Ok(None) => { /* Still formatted — pass */ }
-                    Ok(Some(reformatted)) => {
-                        if reformatted != input {
-                            failures.push(format!(
-                                "IDEMPOTENCY: {}\nRe-formatting already-formatted input changed it\n{}",
-                                in_path.display(),
-                                simple_diff(&input, &reformatted)
-                            ));
-                        }
-                    }
-                    Err(e) => {
-                        failures.push(format!(
-                            "IDEMPOTENCY ERROR: {}\nRe-format of unchanged input failed: {e}",
-                            in_path.display()
-                        ));
-                    }
-                }
-            }
-            Ok(Err(e)) => {
-                failures.push(format!("PARSE ERROR: {}\n{e}", in_path.display()));
-                count += 1;
-            }
+        Ok(None) => {
+            // No change — input should already match expected
+            assert_eq_with_diff(&expected, &input, &in_path);
+            check_idempotency(in_path.as_path(), &input, &config);
         }
-        count += 1;
+        Err(e) => panic!("PARSE ERROR: {}\n{e}", in_path.display()),
     }
-
-    if !failures.is_empty() {
-        panic!(
-            "{}/{count} formatter tests failed:
-
-{}",
-            failures.len(),
-            failures.join("\n\n---\n\n")
-        );
-    }
-
-    assert!(count > 0, "No formatter test files found");
-
-    eprintln!("{count} formatter tests passed");
 }
 
-/// Loads configuration from a `.cmakefmt.toml` file in the same directory as the fixture,
-/// falling back to default configuration when no config file is present.
+// ---------------------------------------------------------------------------
+// Orphan detection — catches .out.cmake files without a matching .in.cmake
+// ---------------------------------------------------------------------------
+
+#[test]
+fn no_orphan_out_files() {
+    let formatter_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/formatter");
+    let out_files = walk_cmake_files(&formatter_dir, ".out.cmake");
+
+    let mut orphans = Vec::new();
+    for out_path in &out_files {
+        let stem = out_path
+            .to_str()
+            .unwrap()
+            .strip_suffix(".out.cmake")
+            .unwrap();
+        let in_path = PathBuf::from(format!("{stem}.in.cmake"));
+        if !in_path.exists() {
+            orphans.push(out_path.display().to_string());
+        }
+    }
+
+    assert!(
+        orphans.is_empty(),
+        "Found .out.cmake files without matching .in.cmake:\n{}",
+        orphans.join("\n")
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
 fn load_fixture_config(in_path: &Path) -> Configuration {
     let result = load_from_toml_path(in_path);
     result.config
+}
+
+/// Panics with a colored diff when `expected` and `actual` differ.
+fn assert_eq_with_diff(expected: &str, actual: &str, path: &Path) {
+    if expected != actual {
+        panic!(
+            "MISMATCH: {}\n--- expected\n+++ actual\n{}",
+            path.display(),
+            simple_diff(expected, actual)
+        );
+    }
+}
+
+/// Formats `text` a second time and panics if the output changes (non-idempotent).
+fn check_idempotency(path: &Path, text: &str, config: &Configuration) {
+    match format_text(path, text, config) {
+        Ok(None) => { /* Already formatted — pass */ }
+        Ok(Some(reformatted)) => {
+            if reformatted != text {
+                panic!(
+                    "IDEMPOTENCY: {}\nSecond format produced different output\n{}",
+                    path.display(),
+                    simple_diff(text, &reformatted)
+                );
+            }
+        }
+        Err(e) => {
+            panic!(
+                "IDEMPOTENCY ERROR: {}\nSecond format failed: {e}",
+                path.display()
+            );
+        }
+    }
 }
 
 fn walk_cmake_files(dir: &Path, suffix: &str) -> Vec<PathBuf> {
