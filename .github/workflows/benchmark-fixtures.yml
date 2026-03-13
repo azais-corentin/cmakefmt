@@ -13,15 +13,16 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        run: rustup default stable
 
       - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
 
       - name: Capture rust version
         run: |
@@ -43,7 +44,6 @@ jobs:
         env:
           HISTORY_BRANCH: benchmark-history
           HISTORY_FILE: benchmarks/cmakefmt-fixtures-history.json
-          GIST_PAT: ${{ secrets.GIST_PAT }}
         run: |
           set -euo pipefail
 
@@ -85,14 +85,3 @@ jobs:
 
           git -C "$history_worktree" commit -m "bench: append fixture benchmark history for ${GITHUB_SHA}"
           git -C "$history_worktree" push origin "HEAD:$HISTORY_BRANCH"
-
-          # Update GitHub Gist with latest benchmark history
-          jq -Rs --arg fn "benchmarks.json" \
-            '{files: {($fn): {content: .}}}' \
-            "$history_worktree/$HISTORY_FILE" \
-          | curl -sf -X PATCH \
-              -H "Authorization: token $GIST_PAT" \
-              -H "Accept: application/vnd.github+json" \
-              -d @- \
-              "https://api.github.com/gists/2b47692801ddaa693fb60a9138748b3c" \
-              -o /dev/null
