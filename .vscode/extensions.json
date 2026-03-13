@@ -1,6 +1,7 @@
 {
   "recommendations": [
     "dprint.dprint",
+    "github.vscode-github-actions",
     "hverlin.mise-vscode"
   ]
 }
