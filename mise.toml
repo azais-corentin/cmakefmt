@@ -48,3 +48,17 @@ else
   printf "%s: %.2f KiB (%d bytes)\n" "$file" "$(echo "scale=2; $bytes/1024" | bc)" "$bytes"
 fi
 '''
+
+[tasks.pre-commit]
+description = "Run pre-commit hooks"
+run = "hk run pre-commit"
+
+[tools]
+actionlint = "latest"
+cocogitto = "latest"
+dprint = "latest"
+hk = "latest"
+java = "latest"
+pinact = "latest"
+pkl = "latest"
+zizmor = "latest"
