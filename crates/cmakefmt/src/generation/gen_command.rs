@@ -1235,7 +1235,7 @@ fn try_single_line(
     let has_unbreakable_long_token = cmd_name.len() > line_width
         || args_text
             .iter()
-            .any(|text| text.len() > line_width && !text.contains("$<"));
+            .any(|text| text.len() > line_width && memchr::memmem::find(text.as_bytes(), b"$<").is_none());
     let indentation_overflow = base_indent > line_width;
     let deep_indentation = base_indent.saturating_mul(2) >= line_width;
     if !keep_condition_header_inline
@@ -2537,7 +2537,7 @@ fn emit_keyword_group(
             .all(|v| v.trailing_comment.is_none() || v.trailing_is_bracket)
         && (keyword.trailing_comment.is_none() || keyword.trailing_is_bracket)
         && !values.iter().any(|v| v.text.starts_with('#'))
-        && !values.iter().any(|v| v.text.contains("$<"));
+        && !values.iter().any(|v| memchr::memmem::find(v.text.as_bytes(), b"$<").is_some());
     if !force_one_per_line
         && allow_keyword_inline
         && !preserve_inline_keyword_layout
@@ -5055,7 +5055,7 @@ fn group_args_by_genex<'a>(args: &[&'a FormattedArg]) -> Vec<GenexArgGroup<'a>> 
         if depth == 0 && delta == 0 {
             // Standalone arg, not genex.
             // But it might contain a self-contained genex (like LOG_LEVEL=$<IF:...>).
-            if arg.text.contains("$<") {
+            if memchr::memmem::find(arg.text.as_bytes(), b"$<").is_some() {
                 groups.push(GenexArgGroup::Genex(vec![arg]));
             } else {
                 groups.push(GenexArgGroup::Single(arg));

@@ -4,6 +4,7 @@ mod generation;
 mod instrumentation;
 mod parser;
 mod post_process;
+mod util;
 pub mod printer;
 
 pub use configuration::{

@@ -202,6 +202,7 @@ dependencies = [
  "glob",
  "imara-diff",
  "logos",
+ "memchr",
  "rstest",
  "serde",
  "serde_json",

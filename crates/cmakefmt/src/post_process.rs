@@ -19,7 +19,7 @@ use crate::instrumentation::{
 /// - `alignTrailingComments`: column-align trailing `#` comments on consecutive lines.
 pub fn post_process_alignments(text: &str, base_config: &Configuration) -> String {
     let _stage = info_span!(EVENT_POST_PROCESS, input_bytes = text.len()).entered();
-    let newline = detect_newline(text);
+    let newline = crate::util::detect_dominant_line_ending(text);
     let mut lines: Vec<String> = split_lines(text, newline);
 
     // Build per-line config snapshot used by the reflow pass.
@@ -52,31 +52,6 @@ pub fn post_process_alignments(text: &str, base_config: &Configuration) -> Strin
     join_lines(&lines, newline)
 }
 
-// ---------------------------------------------------------------------------
-// Utility: line splitting that preserves the final newline convention
-// ---------------------------------------------------------------------------
-
-fn detect_newline(text: &str) -> &'static str {
-    // Count dominant line ending: CRLF vs standalone LF. Bare \r is not counted.
-    let bytes = text.as_bytes();
-    let len = bytes.len();
-    let mut lf: u32 = 0;
-    let mut crlf: u32 = 0;
-    let mut i = 0;
-    while i < len {
-        if bytes[i] == b'\r' {
-            if i + 1 < len && bytes[i + 1] == b'\n' {
-                crlf += 1;
-                i += 2;
-                continue;
-            }
-        } else if bytes[i] == b'\n' {
-            lf += 1;
-        }
-        i += 1;
-    }
-    if crlf > lf { "\r\n" } else { "\n" }
-}
 
 fn split_lines(text: &str, newline: &str) -> Vec<String> {
     // Split but keep the final empty element if the text ends with a newline.

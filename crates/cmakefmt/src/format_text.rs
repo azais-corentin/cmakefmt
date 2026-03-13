@@ -1,4 +1,5 @@
 use std::path::Path;
+use memchr::{memchr, memchr_iter};
 
 use crate::printer::{PrintOptions, format as printer_format};
 use anyhow::Result;
@@ -206,35 +207,12 @@ fn format_inner(text: &str, config: &Configuration) -> Result<String> {
 // Line-ending detection
 // ---------------------------------------------------------------------------
 
-/// Count dominant line-ending style. CRLF is counted as one unit; bare `\r`
-/// (not followed by `\n`) is not counted per §7.1. On tie or no endings, LF wins.
-fn detect_dominant_line_ending(text: &str) -> &'static str {
-    let bytes = text.as_bytes();
-    let len = bytes.len();
-    let mut lf: u32 = 0;
-    let mut crlf: u32 = 0;
-    let mut i = 0;
-    while i < len {
-        if bytes[i] == b'\r' {
-            if i + 1 < len && bytes[i + 1] == b'\n' {
-                crlf += 1;
-                i += 2;
-                continue;
-            }
-            // Bare CR — not counted as a line ending.
-        } else if bytes[i] == b'\n' {
-            lf += 1;
-        }
-        i += 1;
-    }
-    if crlf > lf { "\r\n" } else { "\n" }
-}
 
 fn resolve_new_line_kind(text: &str, kind: NewLineKind) -> &'static str {
     match kind {
         NewLineKind::Lf => "\n",
         NewLineKind::CrLf => "\r\n",
-        NewLineKind::Auto => detect_dominant_line_ending(text),
+        NewLineKind::Auto => crate::util::detect_dominant_line_ending(text),
     }
 }
 
@@ -253,17 +231,10 @@ fn strip_bom(text: &str) -> &str {
 /// Returns `true` if `text` contains any bare `\r` (not part of `\r\n`).
 fn has_bare_cr(text: &str) -> bool {
     let bytes = text.as_bytes();
-    let len = bytes.len();
-    let mut i = 0;
-    while i < len {
-        if bytes[i] == b'\r' {
-            if i + 1 < len && bytes[i + 1] == b'\n' {
-                i += 2;
-                continue;
-            }
+    for pos in memchr_iter(b'\r', bytes) {
+        if bytes.get(pos + 1) != Some(&b'\n') {
             return true;
         }
-        i += 1;
     }
     false
 }
@@ -271,24 +242,22 @@ fn has_bare_cr(text: &str) -> bool {
 /// Replace bare `\r` with `\n` so the parser sees them as line separators.
 fn normalize_bare_crs(text: &str) -> String {
     let bytes = text.as_bytes();
-    let len = bytes.len();
-    let mut out = Vec::with_capacity(len);
-    let mut i = 0;
-    while i < len {
-        if bytes[i] == b'\r' {
-            if i + 1 < len && bytes[i + 1] == b'\n' {
-                out.push(b'\r');
-                out.push(b'\n');
-                i += 2;
-                continue;
-            }
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut last = 0;
+    while let Some(rel) = memchr(b'\r', &bytes[last..]) {
+        let pos = last + rel;
+        out.extend_from_slice(&bytes[last..pos]);
+        if bytes.get(pos + 1) == Some(&b'\n') {
+            out.push(b'\r');
+            out.push(b'\n');
+            last = pos + 2;
+        } else {
             // Bare CR → LF for parsing.
             out.push(b'\n');
-        } else {
-            out.push(bytes[i]);
+            last = pos + 1;
         }
-        i += 1;
     }
+    out.extend_from_slice(&bytes[last..]);
     // Safety: we only replaced \r with \n; the rest is preserved byte-for-byte.
     // If the input was valid UTF-8, the output is too.
     String::from_utf8(out).expect("bare CR normalization preserved UTF-8")
@@ -338,20 +307,9 @@ fn restore_bare_crs(formatted: &str, original: &str) -> String {
 
 fn count_bare_crs_in(segment: &str) -> usize {
     let bytes = segment.as_bytes();
-    let len = bytes.len();
-    let mut count = 0;
-    let mut i = 0;
-    while i < len {
-        if bytes[i] == b'\r' {
-            if i + 1 < len && bytes[i + 1] == b'\n' {
-                i += 2;
-                continue;
-            }
-            count += 1;
-        }
-        i += 1;
-    }
-    count
+    memchr_iter(b'\r', bytes)
+        .filter(|&pos| bytes.get(pos + 1) != Some(&b'\n'))
+        .count()
 }
 
 // ---------------------------------------------------------------------------
@@ -450,7 +408,7 @@ fn finalize_whitespace(
     // could override them, skip the pass entirely.
     if config.trim_trailing_whitespace
         && config.collapse_spaces
-        && !formatted.contains(PRAGMA_PREFIX)
+        && memchr::memmem::find(formatted.as_bytes(), PRAGMA_PREFIX.as_bytes()).is_none()
     {
         return formatted.to_string();
     }

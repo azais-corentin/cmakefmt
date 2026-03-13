@@ -57,7 +57,7 @@ fn bracket_arg_callback(lex: &mut Lexer<Token>) -> bool {
     closer.push(']');
 
     let remainder = lex.remainder();
-    if let Some(end) = remainder.find(&closer) {
+    if let Some(end) = memchr::memmem::find(remainder.as_bytes(), closer.as_bytes()) {
         lex.bump(end + closer.len());
         true
     } else {
@@ -76,7 +76,7 @@ fn bracket_comment_callback(lex: &mut Lexer<Token>) -> bool {
     closer.push(']');
 
     let remainder = lex.remainder();
-    if let Some(end) = remainder.find(&closer) {
+    if let Some(end) = memchr::memmem::find(remainder.as_bytes(), closer.as_bytes()) {
         lex.bump(end + closer.len());
         true
     } else {
@@ -100,7 +100,7 @@ fn line_comment_callback(lex: &mut Lexer<Token>) -> bool {
         }
     }
     // Consume to end of line
-    if let Some(nl) = remainder.find('\n') {
+    if let Some(nl) = memchr::memchr(b'\n', remainder.as_bytes()) {
         lex.bump(nl);
     } else {
         lex.bump(remainder.len());
@@ -110,20 +110,21 @@ fn line_comment_callback(lex: &mut Lexer<Token>) -> bool {
 
 fn quoted_arg_callback(lex: &mut Lexer<Token>) -> bool {
     let bytes = lex.remainder().as_bytes();
-    let len = bytes.len();
     let mut i = 0;
 
-    while i < len {
-        match bytes[i] {
+    while let Some(offset) = memchr::memchr2(b'"', b'\\', &bytes[i..]) {
+        let pos = i + offset;
+        match bytes[pos] {
             b'"' => {
-                lex.bump(i + 1);
+                lex.bump(pos + 1);
                 return true;
             }
-            b'\\' if i + 1 < len => {
-                i += 2;
+            b'\\' if pos + 1 < bytes.len() => {
+                i = pos + 2;
             }
             _ => {
-                i += 1;
+                // Backslash at end of input — no char to escape
+                break;
             }
         }
     }
