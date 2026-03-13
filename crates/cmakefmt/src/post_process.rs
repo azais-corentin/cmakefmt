@@ -23,14 +23,19 @@ pub fn post_process_alignments(text: &str, base_config: &Configuration) -> Strin
     let mut lines: Vec<String> = split_lines(text, newline);
 
     // Build per-line config snapshot used by the reflow pass.
-    let initial_configs = resolve_per_line_config(&lines, base_config);
+    let (initial_configs, has_pragmas) = resolve_per_line_config(&lines, base_config);
     lines = {
         let _reflow_stage = info_span!(EVENT_POST_PROCESS_REFLOW_COMMENT).entered();
         reflow_standalone_comment_blocks(&lines, &initial_configs)
     };
 
     // Re-resolve config after reflow because line counts may have changed.
-    let configs = resolve_per_line_config(&lines, base_config);
+    // Skip if no pragmas were found — all lines share the base config.
+    let configs = if has_pragmas {
+        resolve_per_line_config(&lines, base_config).0
+    } else {
+        vec![LineConfig::from_config(base_config); lines.len()]
+    };
 
     {
         let _set_stage = info_span!(EVENT_POST_PROCESS_ALIGN_BLOCK, block = "set").entered();
@@ -108,10 +113,11 @@ impl LineConfig {
 
 const PRAGMA_PREFIX: &str = "cmakefmt:";
 
-fn resolve_per_line_config(lines: &[String], base: &Configuration) -> Vec<LineConfig> {
+fn resolve_per_line_config(lines: &[String], base: &Configuration) -> (Vec<LineConfig>, bool) {
     let mut current = base.clone();
     let mut stack: Vec<Configuration> = Vec::new();
     let mut result = Vec::with_capacity(lines.len());
+    let mut has_pragmas = false;
 
     for line in lines {
         let trimmed = line.trim();
@@ -119,11 +125,13 @@ fn resolve_per_line_config(lines: &[String], base: &Configuration) -> Vec<LineCo
         // Check for push/pop pragma directives.
         if trimmed.starts_with('#') {
             if let Some(body) = parse_push_body(trimmed) {
+                has_pragmas = true;
                 stack.push(current.clone());
                 current = apply_inline_overrides(&current, body);
             } else if is_pop_directive(trimmed)
                 && let Some(prev) = stack.pop()
             {
+                has_pragmas = true;
                 current = prev;
             }
         }
@@ -131,7 +139,7 @@ fn resolve_per_line_config(lines: &[String], base: &Configuration) -> Vec<LineCo
         result.push(LineConfig::from_config(&current));
     }
 
-    result
+    (result, has_pragmas)
 }
 
 fn parse_push_body(comment_line: &str) -> Option<&str> {
@@ -257,7 +265,7 @@ impl ParsedCommentLine {
     }
 
     fn leading_ws_len(&self) -> usize {
-        self.leading_ws.chars().count()
+        self.leading_ws.len()
     }
 }
 

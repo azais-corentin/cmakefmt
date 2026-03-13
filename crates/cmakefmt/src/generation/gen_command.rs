@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use tracing::info_span;
 
 use crate::configuration::{
@@ -79,8 +81,20 @@ fn apply_case_owned(mut text: String, style: CaseStyle) -> String {
 
 /// Apply literal casing per §4.4. Only applies to unquoted arguments that match
 /// the literal token list and are NOT classified as keywords for the current command.
-fn apply_literal_case(text: &str, style: CaseStyle) -> String {
-    apply_case_owned(text.to_string(), style)
+fn apply_literal_case<'a>(text: &'a str, style: CaseStyle) -> Cow<'a, str> {
+    match style {
+        CaseStyle::Preserve => Cow::Borrowed(text),
+        CaseStyle::Lower => {
+            let mut s = text.to_string();
+            s.make_ascii_lowercase();
+            Cow::Owned(s)
+        }
+        CaseStyle::Upper => {
+            let mut s = text.to_string();
+            s.make_ascii_uppercase();
+            Cow::Owned(s)
+        }
+    }
 }
 
 fn apply_literal_case_owned(text: String, style: CaseStyle) -> String {
@@ -218,8 +232,15 @@ const SORT_GROUP_KEYWORDS: &[&str] = &[
 /// Canonical section ordering for sortKeywordSections per Appendix F.
 /// Commands not listed here get no reordering even when sortKeywordSections=true.
 fn canonical_section_order(cmd_name: &str) -> Option<&'static [&'static str]> {
-    let lower = cmd_name.to_ascii_lowercase();
-    match lower.as_str() {
+    let mut buf = [0u8; 64];
+    let len = cmd_name.len();
+    if len > buf.len() {
+        return None;
+    }
+    buf[..len].copy_from_slice(cmd_name.as_bytes());
+    buf[..len].make_ascii_lowercase();
+    let lower = std::str::from_utf8(&buf[..len]).unwrap();
+    match lower {
         "target_link_libraries" => Some(&[
             "PUBLIC",
             "INTERFACE",
@@ -248,8 +269,15 @@ fn canonical_section_order(cmd_name: &str) -> Option<&'static [&'static str]> {
 
 /// Commands with section-like keywords but no canonical order in Appendix F.
 fn non_canonical_section_keywords(cmd_name: &str) -> Option<&'static [&'static str]> {
-    let lower = cmd_name.to_ascii_lowercase();
-    match lower.as_str() {
+    let mut buf = [0u8; 64];
+    let len = cmd_name.len();
+    if len > buf.len() {
+        return None;
+    }
+    buf[..len].copy_from_slice(cmd_name.as_bytes());
+    buf[..len].make_ascii_lowercase();
+    let lower = std::str::from_utf8(&buf[..len]).unwrap();
+    match lower {
         "target_compile_definitions"
         | "target_compile_options"
         | "target_compile_features"
@@ -300,14 +328,38 @@ fn is_sort_group_keyword(text: &str) -> bool {
         .any(|&k| k.eq_ignore_ascii_case(text))
 }
 
-fn apply_command_case(name: &str, style: CaseStyle) -> String {
-    apply_case_owned(name.to_string(), style)
+fn apply_command_case<'a>(name: &'a str, style: CaseStyle) -> Cow<'a, str> {
+    match style {
+        CaseStyle::Preserve => Cow::Borrowed(name),
+        CaseStyle::Lower => {
+            let mut s = name.to_string();
+            s.make_ascii_lowercase();
+            Cow::Owned(s)
+        }
+        CaseStyle::Upper => {
+            let mut s = name.to_string();
+            s.make_ascii_uppercase();
+            Cow::Owned(s)
+        }
+    }
 }
 
 /// Apply keyword casing. Unlike the old version, this does NOT normalize booleans —
 /// boolean/literal casing is now handled separately via literalCase.
-fn apply_keyword_case(text: &str, style: CaseStyle) -> String {
-    apply_case_owned(text.to_string(), style)
+fn apply_keyword_case<'a>(text: &'a str, style: CaseStyle) -> Cow<'a, str> {
+    match style {
+        CaseStyle::Preserve => Cow::Borrowed(text),
+        CaseStyle::Lower => {
+            let mut s = text.to_string();
+            s.make_ascii_lowercase();
+            Cow::Owned(s)
+        }
+        CaseStyle::Upper => {
+            let mut s = text.to_string();
+            s.make_ascii_uppercase();
+            Cow::Owned(s)
+        }
+    }
 }
 
 fn apply_keyword_case_owned(text: String, style: CaseStyle) -> String {
@@ -438,9 +490,9 @@ pub fn gen_command(
     let _command_entered = command_stage.enter();
 
     let effective = config.effective_config_for_command(raw_name);
-    let config = &effective;
+    let config = effective.as_ref();
 
-    let mut items = PrintItems::new();
+    let mut items = PrintItems::with_capacity(cmd.arguments.len() * 4 + 10);
 
     // Command name with casing
     let formatted_name = apply_command_case(raw_name, config.command_case);
@@ -458,7 +510,7 @@ pub fn gen_command(
         return gen_unknown_command(cmd, source, config, &formatted_name);
     }
 
-    items.push_string(formatted_name.clone());
+    items.push_string(formatted_name.clone().into_owned());
 
     // Space before paren
     if config.has_space_before_paren(raw_name) {
@@ -513,6 +565,7 @@ pub fn gen_command(
             config,
             indent_depth,
             allow_single_line,
+            cmd_kind.as_ref(),
         );
         if let Some(single) = single_line {
             if single_line_paren_spacing.after_open {
@@ -808,7 +861,7 @@ fn build_argument_list_from_args(
     config: &Configuration,
     cmd_kind: Option<&CommandKind>,
 ) -> Vec<FormattedArg> {
-    let mut result = Vec::new();
+    let mut result = Vec::with_capacity(args.len());
     let arg_ranges: Vec<(usize, usize)> = args.iter().map(arg_source_range).collect();
     let mut i = 0;
 
@@ -1040,6 +1093,7 @@ fn try_single_line(
     config: &Configuration,
     indent_depth: u32,
     allow_single_line: bool,
+    cmd_kind: Option<&CommandKind>,
 ) -> Option<PrintItems> {
     if !allow_single_line {
         return None;
@@ -1079,8 +1133,7 @@ fn try_single_line(
     // 1. Keyword tokens get keywordCase
     // 2. Literal tokens (not keywords) get literalCase
     // 3. Other tokens preserved as-is
-    let cmd_kind = lookup_command(cmd_name);
-    let args_text: Vec<String> = if let Some(ref ck) = cmd_kind {
+    let args_text: Vec<String> = if let Some(ck) = cmd_kind {
         match ck {
             CommandKind::Known(spec) => {
                 let mut is_keyword_position = vec![false; args.len()];
@@ -1143,9 +1196,7 @@ fn try_single_line(
             .collect()
     } else {
         // Unknown command: preserve original casing
-        args.iter()
-            .map(arg_inline_text)
-            .collect()
+        args.iter().map(arg_inline_text).collect()
     };
     let args_width: usize = args_text.iter().map(|s| s.len()).sum::<usize>()
         + if args_text.len() > 1 {
@@ -2397,12 +2448,12 @@ fn emit_keyword_group(
             if keyword.is_keyword {
                 apply_keyword_case(&keyword.text, config.keyword_case)
             } else {
-                keyword.text.clone()
+                Cow::Borrowed(keyword.text.as_str())
             },
             if first_val.is_keyword || get_keyword_type(first_val, spec).is_some() {
                 apply_keyword_case(&first_val.text, config.keyword_case)
             } else {
-                first_val.text.clone()
+                Cow::Borrowed(first_val.text.as_str())
             },
         );
         let compound_arg = FormattedArg {
@@ -2478,9 +2529,9 @@ fn emit_keyword_group(
         let kw_text = if keyword.is_keyword {
             apply_keyword_case(&keyword.text, config.keyword_case)
         } else {
-            keyword.text.clone()
+            Cow::Borrowed(keyword.text.as_str())
         };
-        items.push_string(kw_text);
+        items.push_string(kw_text.into_owned());
         for val in values {
             items.push_space();
             let val_text = arg_inline_text(val);
@@ -2520,9 +2571,9 @@ fn emit_keyword_group(
             let kw_text = if keyword.is_keyword {
                 apply_keyword_case(&keyword.text, config.keyword_case)
             } else {
-                keyword.text.clone()
+                Cow::Borrowed(keyword.text.as_str())
             };
-            items.push_string(kw_text);
+            items.push_string(kw_text.into_owned());
             for val in values {
                 items.push_space();
                 items.extend(ir_helpers::gen_from_raw_string(&arg_inline_text(val)));
@@ -2555,9 +2606,9 @@ fn emit_keyword_group(
                 let kw_text = if keyword.is_keyword {
                     apply_keyword_case(&keyword.text, config.keyword_case)
                 } else {
-                    keyword.text.clone()
+                    Cow::Borrowed(keyword.text.as_str())
                 };
-                items.push_string(kw_text);
+                items.push_string(kw_text.into_owned());
                 for val in &values[..leading_count] {
                     items.push_space();
                     items.extend(ir_helpers::gen_from_raw_string(&arg_inline_text(val)));
@@ -3244,10 +3295,10 @@ fn emit_section_values_inner(
                                 continuation_indent,
                                 config,
                             );
-                            val_items.push_string(apply_keyword_case(
-                                &values[i].text,
-                                config.keyword_case,
-                            ));
+                            val_items.push_string(
+                                apply_keyword_case(&values[i].text, config.keyword_case)
+                                    .into_owned(),
+                            );
                             val_items.push_space();
                             let sv_text = arg_inline_text(sv);
                             val_items.extend(ir_helpers::gen_from_raw_string(&sv_text));
@@ -3305,7 +3356,7 @@ fn emit_section_values_inner(
                             config,
                         );
                         let sub_kw_text = apply_keyword_case(&kw.text, config.keyword_case);
-                        val_items.push_string(sub_kw_text);
+                        val_items.push_string(sub_kw_text.into_owned());
                         for sv in &sub_values {
                             val_items.push_space();
                             val_items.extend(ir_helpers::gen_from_raw_string(&arg_inline_text(sv)));
@@ -3381,7 +3432,9 @@ fn emit_section_values_inner(
                             continuation_indent,
                             config,
                         );
-                        val_items.push_string(apply_keyword_case(&kw.text, config.keyword_case));
+                        val_items.push_string(
+                            apply_keyword_case(&kw.text, config.keyword_case).into_owned(),
+                        );
                         for v in all_group_values {
                             val_items.push_space();
                             let raw = arg_inline_text(v);
@@ -3420,8 +3473,9 @@ fn emit_section_values_inner(
                                 continuation_indent,
                                 config,
                             );
-                            val_items
-                                .push_string(apply_keyword_case(&kw.text, config.keyword_case));
+                            val_items.push_string(
+                                apply_keyword_case(&kw.text, config.keyword_case).into_owned(),
+                            );
                             for v in front_positionals {
                                 val_items.push_space();
                                 val_items
@@ -3895,9 +3949,9 @@ fn emit_cond_logical_op(
         let op_text = if op.is_keyword {
             apply_keyword_case(&op.text, config.keyword_case)
         } else {
-            op.text.clone()
+            Cow::Borrowed(op.text.as_str())
         };
-        items.push_string(op_text);
+        items.push_string(op_text.into_owned());
         if let Some(comment) = &op.trailing_comment {
             items.push_space();
             items.extend(ir_helpers::gen_from_raw_string(comment));
@@ -3911,9 +3965,9 @@ fn emit_cond_logical_op(
     let op_text = if op.is_keyword {
         apply_keyword_case(&op.text, config.keyword_case)
     } else {
-        op.text.clone()
+        Cow::Borrowed(op.text.as_str())
     };
-    items.push_string(op_text);
+    items.push_string(op_text.into_owned());
     if let Some(comment) = &op.trailing_comment {
         items.push_space();
         items.extend(ir_helpers::gen_from_raw_string(comment));
@@ -4014,11 +4068,14 @@ fn emit_cond_expr(
                 && !op_has_comment;
 
             if can_inline {
-                items.push_string(if op.is_keyword {
-                    apply_keyword_case(&op.text, config.keyword_case)
-                } else {
-                    op.text.clone()
-                });
+                items.push_string(
+                    if op.is_keyword {
+                        apply_keyword_case(&op.text, config.keyword_case)
+                    } else {
+                        Cow::Borrowed(op.text.as_str())
+                    }
+                    .into_owned(),
+                );
                 if let Some(comment) = &op.trailing_comment {
                     items.push_space();
                     items.extend(ir_helpers::gen_from_raw_string(comment));
@@ -4029,11 +4086,14 @@ fn emit_cond_expr(
             }
 
             // Expanded
-            items.push_string(if op.is_keyword {
-                apply_keyword_case(&op.text, config.keyword_case)
-            } else {
-                op.text.clone()
-            });
+            items.push_string(
+                if op.is_keyword {
+                    apply_keyword_case(&op.text, config.keyword_case)
+                } else {
+                    Cow::Borrowed(op.text.as_str())
+                }
+                .into_owned(),
+            );
             if let Some(comment) = &op.trailing_comment {
                 items.push_space();
                 items.extend(ir_helpers::gen_from_raw_string(comment));
@@ -4068,11 +4128,14 @@ fn emit_cond_expr(
             if can_inline {
                 emit_cond_expr_inline(items, lhs, config);
                 items.push_space();
-                items.push_string(if op.is_keyword {
-                    apply_keyword_case(&op.text, config.keyword_case)
-                } else {
-                    op.text.clone()
-                });
+                items.push_string(
+                    if op.is_keyword {
+                        apply_keyword_case(&op.text, config.keyword_case)
+                    } else {
+                        Cow::Borrowed(op.text.as_str())
+                    }
+                    .into_owned(),
+                );
                 if let Some(comment) = &op.trailing_comment {
                     items.push_space();
                     items.extend(ir_helpers::gen_from_raw_string(comment));
@@ -4086,11 +4149,14 @@ fn emit_cond_expr(
             emit_cond_expr(items, lhs, config, base_indent);
             let mut sub = PrintItems::new();
             sub.push_signal(Signal::NewLine);
-            sub.push_string(if op.is_keyword {
-                apply_keyword_case(&op.text, config.keyword_case)
-            } else {
-                op.text.clone()
-            });
+            sub.push_string(
+                if op.is_keyword {
+                    apply_keyword_case(&op.text, config.keyword_case)
+                } else {
+                    Cow::Borrowed(op.text.as_str())
+                }
+                .into_owned(),
+            );
             if let Some(comment) = &op.trailing_comment {
                 sub.push_space();
                 sub.extend(ir_helpers::gen_from_raw_string(comment));
@@ -4134,9 +4200,9 @@ fn emit_cond_expr_inline(items: &mut PrintItems, expr: &CondExpr<'_>, config: &C
             let op_text = if op.is_keyword {
                 apply_keyword_case(&op.text, config.keyword_case)
             } else {
-                op.text.clone()
+                Cow::Borrowed(op.text.as_str())
             };
-            items.push_string(op_text);
+            items.push_string(op_text.into_owned());
             if let Some(comment) = &op.trailing_comment {
                 items.push_space();
                 items.extend(ir_helpers::gen_from_raw_string(comment));
@@ -4150,9 +4216,9 @@ fn emit_cond_expr_inline(items: &mut PrintItems, expr: &CondExpr<'_>, config: &C
             let op_text = if op.is_keyword {
                 apply_keyword_case(&op.text, config.keyword_case)
             } else {
-                op.text.clone()
+                Cow::Borrowed(op.text.as_str())
             };
-            items.push_string(op_text);
+            items.push_string(op_text.into_owned());
             if let Some(comment) = &op.trailing_comment {
                 items.push_space();
                 items.extend(ir_helpers::gen_from_raw_string(comment));
@@ -4228,7 +4294,7 @@ fn emit_arg_with_case(
             } else if !arg.text.starts_with('"') && is_literal_token(&arg.text) {
                 apply_literal_case(&arg.text, literal_case)
             } else {
-                arg.text.clone()
+                Cow::Borrowed(arg.text.as_str())
             }
         } else if !arg.text.starts_with('"')
             && !arg.text.starts_with('#')
@@ -4236,7 +4302,7 @@ fn emit_arg_with_case(
         {
             apply_literal_case(&arg.text, literal_case)
         } else {
-            arg.text.clone()
+            Cow::Borrowed(arg.text.as_str())
         };
         if text.contains('\n') {
             // Multi-line quoted strings: emit first line normally (gets indent

@@ -27,12 +27,33 @@ fn is_block_opener(name: &str) -> bool {
     BLOCK_OPENERS.iter().any(|&s| s.eq_ignore_ascii_case(name))
 }
 
+#[allow(dead_code)]
 fn is_block_middle(name: &str) -> bool {
     BLOCK_MIDDLES.iter().any(|&s| s.eq_ignore_ascii_case(name))
 }
 
 fn is_block_closer(name: &str) -> bool {
     BLOCK_CLOSERS.iter().any(|&s| s.eq_ignore_ascii_case(name))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BlockRole {
+    Opener,
+    Middle,
+    Closer,
+    None,
+}
+
+fn classify_block_role(name: &str) -> BlockRole {
+    if BLOCK_OPENERS.iter().any(|&s| s.eq_ignore_ascii_case(name)) {
+        BlockRole::Opener
+    } else if BLOCK_MIDDLES.iter().any(|&s| s.eq_ignore_ascii_case(name)) {
+        BlockRole::Middle
+    } else if BLOCK_CLOSERS.iter().any(|&s| s.eq_ignore_ascii_case(name)) {
+        BlockRole::Closer
+    } else {
+        BlockRole::None
+    }
 }
 
 const PRAGMA_PREFIX: &str = "cmakefmt:";
@@ -328,7 +349,7 @@ fn emit_comment_with_opening_indent(
 
 pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems {
     let _file_stage = info_span!(EVENT_GEN_FILE, element_count = file.elements.len()).entered();
-    let mut items = PrintItems::new();
+    let mut items = PrintItems::with_capacity(file.elements.len() * 6);
     let mut pending_blanks: u8 = 0;
     let mut indent_level: u32 = 0;
     let mut first = true;
@@ -415,12 +436,14 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
             pending_blanks = pending_blanks.max(current_config.min_blank_lines_between_blocks);
         }
 
+        // Classify block role once per element
+        let role = match element {
+            FileElement::Command(cmd) => classify_block_role(cmd.name.text(source)),
+            _ => BlockRole::None,
+        };
+
         // Suppress blank lines before block closers/middles
-        let is_closer_or_middle = matches!(element, FileElement::Command(cmd) if {
-            let name = cmd.name.text(source);
-            is_block_closer(name) || is_block_middle(name)
-        });
-        if is_closer_or_middle {
+        if matches!(role, BlockRole::Closer | BlockRole::Middle) {
             pending_blanks = 0;
         }
         // Emit pending blank lines
@@ -443,12 +466,12 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
 
                 // Adjust indent BEFORE emitting the command for middles/closers
                 let was_in_block = indent_level > 0;
-                if (is_block_closer(cmd_name) || is_block_middle(cmd_name)) && indent_level > 0 {
+                if matches!(role, BlockRole::Closer | BlockRole::Middle) && indent_level > 0 {
                     indent_level -= 1;
                 }
 
                 // Track block opener args for endCommandArgs="match"
-                if is_block_opener(cmd_name) {
+                if role == BlockRole::Opener {
                     block_stack.push_opener(cmd_name, non_comment_args(&cmd.arguments));
                 }
 
@@ -496,12 +519,12 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
                 }
 
                 // Adjust indent AFTER emitting for openers/middles
-                if is_block_opener(cmd_name) {
+                if role == BlockRole::Opener {
                     if current_config.indent_block_body {
                         indent_level += 1;
                     }
                     just_opened_block = true;
-                } else if is_block_middle(cmd_name) && was_in_block {
+                } else if role == BlockRole::Middle && was_in_block {
                     // Only re-indent after a middle if we were actually inside a block
                     if current_config.indent_block_body {
                         indent_level += 1;
@@ -510,7 +533,7 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
                 }
 
                 // Pop block stack for closers
-                if is_block_closer(cmd_name) {
+                if role == BlockRole::Closer {
                     block_stack.pop_opener();
                 }
             }

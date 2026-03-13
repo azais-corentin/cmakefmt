@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::str::FromStr;
@@ -289,11 +290,14 @@ impl Configuration {
     ///
     /// Per-command entries override the global config field-by-field: any `Some` value
     /// in the `CommandConfiguration` replaces the corresponding global value.
-    pub fn effective_config_for_command(&self, command_name: &str) -> Configuration {
+    pub fn effective_config_for_command(&self, command_name: &str) -> Cow<'_, Configuration> {
+        if self.per_command_config.is_empty() {
+            return Cow::Borrowed(self);
+        }
         let key = command_name.to_ascii_lowercase();
         let overrides = match self.per_command_config.get(&key) {
             Some(cmd_cfg) => cmd_cfg,
-            None => return self.clone(),
+            None => return Cow::Borrowed(self),
         };
 
         let mut cfg = self.clone();
@@ -382,7 +386,7 @@ impl Configuration {
             cfg.sort_keyword_sections = v;
             cfg.sort_keyword_sections_explicit = true;
         }
-        cfg
+        Cow::Owned(cfg)
     }
 }
 

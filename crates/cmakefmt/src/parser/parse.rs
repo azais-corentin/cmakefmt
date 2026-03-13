@@ -29,7 +29,8 @@ struct Parser<'a> {
 
 impl<'a> Parser<'a> {
     fn new(source: &'a str) -> Self {
-        let mut tokens = Vec::new();
+        let estimated_tokens = source.len() / 7;
+        let mut tokens = Vec::with_capacity(estimated_tokens);
         let mut lex = Token::lexer(source);
         while let Some(result) = lex.next() {
             let span = lex.span();
@@ -89,7 +90,8 @@ pub fn parse(source: &str) -> Result<File> {
 }
 
 fn parse_file_elements(p: &mut Parser) -> Result<Vec<FileElement>> {
-    let mut elements = Vec::new();
+    let estimated_elements = p.tokens.len() / 10;
+    let mut elements = Vec::with_capacity(estimated_elements);
 
     while !p.at_end() {
         match p.peek() {
@@ -204,7 +206,7 @@ fn parse_command_invocation(p: &mut Parser) -> Result<CommandInvocation> {
 }
 
 fn parse_arguments(p: &mut Parser) -> Result<Vec<Argument>> {
-    let mut args = Vec::new();
+    let mut args = Vec::with_capacity(8);
 
     loop {
         // Skip separators (spaces, newlines)

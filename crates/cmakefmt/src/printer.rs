@@ -55,6 +55,13 @@ impl PrintItems {
         Self { items: Vec::new() }
     }
 
+    /// Create an item list pre-allocated for `cap` items.
+    pub fn with_capacity(cap: usize) -> Self {
+        Self {
+            items: Vec::with_capacity(cap),
+        }
+    }
+
     /// Append a signal.
     pub fn push_signal(&mut self, signal: Signal) {
         self.items.push(PrintItem::Signal(signal));
@@ -161,6 +168,12 @@ pub mod ir_helpers {
 
     /// Append IR for a single line, splitting on `\t` to emit `Signal::Tab`.
     fn gen_line_into(items: &mut PrintItems, line: &str) {
+        if !line.contains('\t') {
+            if !line.is_empty() {
+                items.items.push(PrintItem::String(line.to_string()));
+            }
+            return;
+        }
         for (i, part) in line.split('\t').enumerate() {
             if i > 0 {
                 items.push_signal(Signal::Tab);

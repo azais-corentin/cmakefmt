@@ -2120,8 +2120,17 @@ pub static EMPTY_SPEC: CommandSpec = CommandSpec {
 // ---------------------------------------------------------------------------
 
 pub fn lookup_command(name: &str) -> Option<CommandKind> {
-    let lower = name.to_ascii_lowercase();
-    match lower.as_str() {
+    // Stack-allocated lowercase buffer for short names (covers all CMake commands)
+    let mut buf = [0u8; 64];
+    let len = name.len();
+    if len > buf.len() {
+        return None; // No CMake command is this long
+    }
+    buf[..len].copy_from_slice(name.as_bytes());
+    buf[..len].make_ascii_lowercase();
+    // SAFETY: input was valid UTF-8 and make_ascii_lowercase preserves UTF-8
+    let lower = std::str::from_utf8(&buf[..len]).unwrap();
+    match lower {
         // Condition syntax
         "if" | "while" | "elseif" | "else" | "endif" | "endwhile" => {
             Some(CommandKind::ConditionSyntax)
