@@ -1,9 +1,13 @@
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/azais-corentin/cmakefmt"
+homepage = "https://github.com/azais-corentin/cmakefmt"
+authors = ["Corentin AZAIS <azaiscorentin@gmail.com>"]
+
 [workspace]
-members = [
-    "crates/cmakefmt",
-    "crates/cmakefmt-cli",
-    "crates/cmakefmt-dprint",
-]
+members = ["crates/cmakefmt", "crates/cmakefmt-cli", "crates/cmakefmt-dprint"]
 resolver = "3"
 
 [profile.bench]

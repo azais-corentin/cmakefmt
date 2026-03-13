@@ -1,16 +1,20 @@
 [package]
 name = "cmakefmt-dprint"
-version = "0.1.0"
-edition = "2024"
-license = "MIT"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
 description = "dprint plugin for CMake formatting"
+publish = false
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
 anyhow = "1.0.102"
-cmakefmt = { path = "../cmakefmt" }
+cmakefmt = { version = "0.1.0", path = "../cmakefmt" }
 dprint-core = { version = "0.67.4", features = ["formatting", "wasm"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = { version = "1.0.149", features = ["preserve_order"] }
