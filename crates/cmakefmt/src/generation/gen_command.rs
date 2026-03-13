@@ -18,54 +18,66 @@ use super::signatures::{CommandKind, CommandSpec, EMPTY_SPEC, KwType, lookup_com
 // literalCase applies when the token matches this list (§4.4).
 // ---------------------------------------------------------------------------
 const LITERAL_TOKENS: &[&str] = &[
-    // Boolean values
-    "ON",
-    "OFF",
-    "TRUE",
-    "FALSE",
-    "YES",
-    "NO",
-    // Logical/condition operators
     "AND",
-    "OR",
+    "COMMAND",
+    "DEFINED",
+    "EQUAL",
+    "EXISTS",
+    "FALSE",
+    "GREATER_EQUAL",
+    "GREATER",
+    "IN_LIST",
+    "IS_ABSOLUTE",
+    "IS_DIRECTORY",
+    "IS_NEWER_THAN",
+    "IS_SYMLINK",
+    "LESS_EQUAL",
+    "LESS",
+    "MATCHES",
+    "NO",
     "NOT",
-    // Comparison operators
+    "OFF",
+    "ON",
+    "OR",
+    "PATH_EQUAL",
+    "POLICY",
     "STREQUAL",
-    "STRLESS",
+    "STRGREATER_EQUAL",
     "STRGREATER",
     "STRLESS_EQUAL",
-    "STRGREATER_EQUAL",
-    "VERSION_EQUAL",
-    "VERSION_LESS",
-    "VERSION_GREATER",
-    "VERSION_LESS_EQUAL",
-    "VERSION_GREATER_EQUAL",
-    "EQUAL",
-    "LESS",
-    "GREATER",
-    "LESS_EQUAL",
-    "GREATER_EQUAL",
-    "MATCHES",
-    "IN_LIST",
-    // Unary test keywords used as literals when not in keyword position
-    "DEFINED",
-    "COMMAND",
-    "POLICY",
+    "STRLESS",
     "TARGET",
     "TEST",
-    "EXISTS",
-    "IS_DIRECTORY",
-    "IS_SYMLINK",
-    "IS_ABSOLUTE",
-    "IS_NEWER_THAN",
-    "PATH_EQUAL",
+    "TRUE",
+    "VERSION_EQUAL",
+    "VERSION_GREATER_EQUAL",
+    "VERSION_GREATER",
+    "VERSION_LESS_EQUAL",
+    "VERSION_LESS",
+    "YES",
 ];
 
-/// Check if a token is in the literal list (case-insensitive).
+/// Check if a token is in the literal list (case-insensitive binary search).
 fn is_literal_token(text: &str) -> bool {
     LITERAL_TOKENS
-        .iter()
-        .any(|&lit| lit.eq_ignore_ascii_case(text))
+        .binary_search_by(|probe| {
+            let mut probe_bytes = probe.as_bytes().iter();
+            let mut text_bytes = text.as_bytes().iter();
+            loop {
+                match (probe_bytes.next(), text_bytes.next()) {
+                    (Some(&a), Some(&b)) => {
+                        let ord = a.cmp(&b.to_ascii_uppercase());
+                        if ord != std::cmp::Ordering::Equal {
+                            return ord;
+                        }
+                    }
+                    (None, None) => return std::cmp::Ordering::Equal,
+                    (None, Some(_)) => return std::cmp::Ordering::Less,
+                    (Some(_), None) => return std::cmp::Ordering::Greater,
+                }
+            }
+        })
+        .is_ok()
 }
 
 /// Apply case style in-place on an owned string to avoid extra allocations when
@@ -438,7 +450,14 @@ fn visual_indent_prefix(width: usize, config: &Configuration) -> String {
             let tab_width = config.indent_width as usize;
             let tabs = width / tab_width;
             let spaces = width % tab_width;
-            format!("{}{}", "\t".repeat(tabs), " ".repeat(spaces))
+            let mut s = String::with_capacity(tabs + spaces);
+            for _ in 0..tabs {
+                s.push('\t');
+            }
+            for _ in 0..spaces {
+                s.push(' ');
+            }
+            s
         }
     }
 }
@@ -1027,11 +1046,11 @@ fn format_paren_group_inline(args: &[FormattedArg]) -> String {
     s
 }
 
-fn arg_inline_text(arg: &FormattedArg) -> String {
+fn arg_inline_text(arg: &FormattedArg) -> Cow<'_, str> {
     if arg.is_paren_group {
-        format_paren_group_inline(&arg.paren_inner)
+        Cow::Owned(format_paren_group_inline(&arg.paren_inner))
     } else {
-        arg.text.clone()
+        Cow::Borrowed(&arg.text)
     }
 }
 
@@ -1145,15 +1164,15 @@ fn try_single_line(
                     .map(|(i, a)| {
                         let t = arg_inline_text(a);
                         if is_keyword_position[i] {
-                            apply_keyword_case_owned(t, config.keyword_case)
+                            apply_keyword_case_owned(t.into_owned(), config.keyword_case)
                         } else if !a.is_bracket
                             && !t.starts_with('"')
                             && !t.starts_with('#')
                             && is_literal_token(&t)
                         {
-                            apply_literal_case_owned(t, config.literal_case)
+                            apply_literal_case_owned(t.into_owned(), config.literal_case)
                         } else {
-                            t
+                            t.into_owned()
                         }
                     })
                     .collect()
@@ -1163,15 +1182,15 @@ fn try_single_line(
                 .map(|a| {
                     let t = arg_inline_text(a);
                     if a.is_keyword {
-                        apply_keyword_case_owned(t, config.keyword_case)
+                        apply_keyword_case_owned(t.into_owned(), config.keyword_case)
                     } else if !a.is_bracket
                         && !t.starts_with('"')
                         && !t.starts_with('#')
                         && is_literal_token(&t)
                     {
-                        apply_literal_case_owned(t, config.literal_case)
+                        apply_literal_case_owned(t.into_owned(), config.literal_case)
                     } else {
-                        t
+                        t.into_owned()
                     }
                 })
                 .collect(),
@@ -1182,21 +1201,23 @@ fn try_single_line(
             .map(|a| {
                 let t = arg_inline_text(a);
                 if a.is_keyword {
-                    apply_keyword_case_owned(t, config.keyword_case)
+                    apply_keyword_case_owned(t.into_owned(), config.keyword_case)
                 } else if !a.is_bracket
                     && !t.starts_with('"')
                     && !t.starts_with('#')
                     && is_literal_token(&t)
                 {
-                    apply_literal_case_owned(t, config.literal_case)
+                    apply_literal_case_owned(t.into_owned(), config.literal_case)
                 } else {
-                    t
+                    t.into_owned()
                 }
             })
             .collect()
     } else {
         // Unknown command: preserve original casing
-        args.iter().map(arg_inline_text).collect()
+        args.iter()
+            .map(|a| arg_inline_text(a).into_owned())
+            .collect()
     };
     let args_width: usize = args_text.iter().map(|s| s.len()).sum::<usize>()
         + if args_text.len() > 1 {
@@ -3088,7 +3109,7 @@ fn emit_aligned_property_pairs(
         values
             .iter()
             .filter(|arg| looks_like_property_key(arg))
-            .map(|arg| arg_inline_text(arg).len())
+            .map(|arg| arg_width(arg))
             .max()
             .unwrap_or(0)
     });
@@ -3186,7 +3207,7 @@ fn compute_pair_alignment_width(values: &[&FormattedArg]) -> Option<usize> {
         }
 
         if val_idx < values.len() {
-            max_width = max_width.max(arg_inline_text(key).len());
+            max_width = max_width.max(arg_width(key));
             i = val_idx + 1;
         } else {
             i = val_idx;
@@ -3439,9 +3460,9 @@ fn emit_section_values_inner(
                             val_items.push_space();
                             let raw = arg_inline_text(v);
                             let vt = if v.is_keyword {
-                                apply_keyword_case_owned(raw, config.keyword_case)
+                                apply_keyword_case_owned(raw.into_owned(), config.keyword_case)
                             } else {
-                                raw
+                                raw.into_owned()
                             };
                             val_items.extend(ir_helpers::gen_from_raw_string(&vt));
                         }
@@ -3580,15 +3601,15 @@ fn gen_condition_closer_multi_line(
     for arg in args {
         let raw = arg_inline_text(arg);
         let token = if arg.is_keyword {
-            apply_keyword_case_owned(raw, config.keyword_case)
+            apply_keyword_case_owned(raw.into_owned(), config.keyword_case)
         } else if !arg.is_bracket
             && !raw.starts_with('"')
             && !raw.starts_with('#')
             && is_literal_token(&raw)
         {
-            apply_literal_case_owned(raw, config.literal_case)
+            apply_literal_case_owned(raw.into_owned(), config.literal_case)
         } else {
-            raw
+            raw.into_owned()
         };
         tokens.push(token);
     }
@@ -4179,9 +4200,9 @@ fn emit_cond_expr_inline(items: &mut PrintItems, expr: &CondExpr<'_>, config: &C
         CondExpr::Atom(arg) => {
             let t = arg_inline_text(arg);
             let t = if arg.is_keyword {
-                apply_keyword_case_owned(t, config.keyword_case)
+                apply_keyword_case_owned(t.into_owned(), config.keyword_case)
             } else {
-                t
+                t.into_owned()
             };
             items.extend(ir_helpers::gen_from_raw_string(&t));
             if let Some(comment) = &arg.trailing_comment {
@@ -5097,7 +5118,7 @@ fn is_keyword_like_value(arg: &FormattedArg) -> bool {
 }
 
 fn token_visual_width(arg: &FormattedArg) -> usize {
-    arg_inline_text(arg).len()
+    arg_width(arg)
 }
 
 fn aligned_token_line_width(

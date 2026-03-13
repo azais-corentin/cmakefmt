@@ -7,35 +7,6 @@ use crate::printer::ir_helpers;
 use crate::printer::{PrintItems, Signal};
 
 use super::gen_command::gen_command;
-/// Flow-control commands that increase indentation for the block following them.
-const BLOCK_OPENERS: &[&str] = &["if", "foreach", "while", "function", "macro", "block"];
-
-/// Commands that sit at the same indentation level as their opener.
-const BLOCK_MIDDLES: &[&str] = &["elseif", "else"];
-
-/// Commands that decrease indentation (closing the block).
-const BLOCK_CLOSERS: &[&str] = &[
-    "endif",
-    "endforeach",
-    "endwhile",
-    "endfunction",
-    "endmacro",
-    "endblock",
-];
-
-fn is_block_opener(name: &str) -> bool {
-    BLOCK_OPENERS.iter().any(|&s| s.eq_ignore_ascii_case(name))
-}
-
-#[allow(dead_code)]
-fn is_block_middle(name: &str) -> bool {
-    BLOCK_MIDDLES.iter().any(|&s| s.eq_ignore_ascii_case(name))
-}
-
-fn is_block_closer(name: &str) -> bool {
-    BLOCK_CLOSERS.iter().any(|&s| s.eq_ignore_ascii_case(name))
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BlockRole {
     Opener,
@@ -45,15 +16,89 @@ enum BlockRole {
 }
 
 fn classify_block_role(name: &str) -> BlockRole {
-    if BLOCK_OPENERS.iter().any(|&s| s.eq_ignore_ascii_case(name)) {
-        BlockRole::Opener
-    } else if BLOCK_MIDDLES.iter().any(|&s| s.eq_ignore_ascii_case(name)) {
-        BlockRole::Middle
-    } else if BLOCK_CLOSERS.iter().any(|&s| s.eq_ignore_ascii_case(name)) {
-        BlockRole::Closer
-    } else {
-        BlockRole::None
+    // Case-insensitive match without heap allocation; dispatch on length first.
+    match name.len() {
+        2 => {
+            if name.eq_ignore_ascii_case("if") {
+                BlockRole::Opener
+            } else {
+                BlockRole::None
+            }
+        }
+        4 => {
+            if name.eq_ignore_ascii_case("else") {
+                BlockRole::Middle
+            } else {
+                BlockRole::None
+            }
+        }
+        5 => {
+            if name.eq_ignore_ascii_case("endif") {
+                BlockRole::Closer
+            } else if name.eq_ignore_ascii_case("while")
+                || name.eq_ignore_ascii_case("macro")
+                || name.eq_ignore_ascii_case("block")
+            {
+                BlockRole::Opener
+            } else {
+                BlockRole::None
+            }
+        }
+        6 => {
+            if name.eq_ignore_ascii_case("elseif") {
+                BlockRole::Middle
+            } else {
+                BlockRole::None
+            }
+        }
+        7 => {
+            if name.eq_ignore_ascii_case("foreach") {
+                BlockRole::Opener
+            } else {
+                BlockRole::None
+            }
+        }
+        8 => {
+            if name.eq_ignore_ascii_case("endwhile")
+                || name.eq_ignore_ascii_case("endmacro")
+                || name.eq_ignore_ascii_case("endblock")
+            {
+                BlockRole::Closer
+            } else if name.eq_ignore_ascii_case("function") {
+                BlockRole::Opener
+            } else {
+                BlockRole::None
+            }
+        }
+        10 => {
+            if name.eq_ignore_ascii_case("endforeach") {
+                BlockRole::Closer
+            } else {
+                BlockRole::None
+            }
+        }
+        11 => {
+            if name.eq_ignore_ascii_case("endfunction") {
+                BlockRole::Closer
+            } else {
+                BlockRole::None
+            }
+        }
+        _ => BlockRole::None,
     }
+}
+
+fn is_block_opener(name: &str) -> bool {
+    classify_block_role(name) == BlockRole::Opener
+}
+
+#[allow(dead_code)]
+fn is_block_middle(name: &str) -> bool {
+    classify_block_role(name) == BlockRole::Middle
+}
+
+fn is_block_closer(name: &str) -> bool {
+    classify_block_role(name) == BlockRole::Closer
 }
 
 const PRAGMA_PREFIX: &str = "cmakefmt:";
@@ -122,14 +167,13 @@ fn command_source_slice<'a>(cmd: &CommandInvocation, source: &'a str) -> &'a str
 
 /// Returns the corresponding opener name for a block closer.
 fn closer_to_opener(name: &str) -> Option<&'static str> {
-    let lower = name.to_ascii_lowercase();
-    match lower.as_str() {
-        "endif" => Some("if"),
-        "endforeach" => Some("foreach"),
-        "endwhile" => Some("while"),
-        "endfunction" => Some("function"),
-        "endmacro" => Some("macro"),
-        "endblock" => Some("block"),
+    match name.len() {
+        5 if name.eq_ignore_ascii_case("endif") => Some("if"),
+        8 if name.eq_ignore_ascii_case("endwhile") => Some("while"),
+        8 if name.eq_ignore_ascii_case("endmacro") => Some("macro"),
+        8 if name.eq_ignore_ascii_case("endblock") => Some("block"),
+        10 if name.eq_ignore_ascii_case("endforeach") => Some("foreach"),
+        11 if name.eq_ignore_ascii_case("endfunction") => Some("function"),
         _ => None,
     }
 }
@@ -162,9 +206,7 @@ impl BlockStack {
     /// For block closers (endif, endforeach, etc.), returns the nearest matching opener's args.
     /// For else(), returns the nearest unmatched if()'s args.
     fn get_opener_args(&self, closer_name: &str) -> Option<&[Argument]> {
-        let lower = closer_name.to_ascii_lowercase();
-
-        if lower == "else" {
+        if closer_name.eq_ignore_ascii_case("else") {
             // else() matches the nearest unmatched if()
             for entry in self.entries.iter().rev() {
                 if entry.0 == "if" {
@@ -172,7 +214,7 @@ impl BlockStack {
                 }
             }
             None
-        } else if let Some(opener) = closer_to_opener(&lower) {
+        } else if let Some(opener) = closer_to_opener(closer_name) {
             for entry in self.entries.iter().rev() {
                 if entry.0 == opener {
                     return Some(&entry.1);
@@ -194,15 +236,15 @@ fn apply_end_command_args(
     block_stack: &BlockStack,
 ) -> Option<Vec<Argument>> {
     let cmd_name = cmd.name.text(source);
-    let lower = cmd_name.to_ascii_lowercase();
 
     // elseif is never affected by endCommandArgs — its condition is definitional
-    if lower == "elseif" {
+    if cmd_name.eq_ignore_ascii_case("elseif") {
         return None;
     }
 
     // Only closers and else() are affected
-    if !is_block_closer(cmd_name) && lower != "else" {
+    let is_else = cmd_name.eq_ignore_ascii_case("else");
+    if !is_block_closer(cmd_name) && !is_else {
         return None;
     }
 
@@ -219,7 +261,7 @@ fn apply_end_command_args(
         EndCommandArgs::Match => {
             // block()/endblock(): block() has keyword clauses, not a positional name.
             // endblock() is always empty per §14.2.
-            if lower == "endblock" {
+            if cmd_name.eq_ignore_ascii_case("endblock") {
                 if cmd.arguments.is_empty() {
                     return None;
                 }
@@ -512,7 +554,13 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
                     let cmd_items =
                         gen_command(effective_cmd, source, &current_config, indent_level);
                     if indent_level > 0 {
-                        items.extend(ir_helpers::with_indent_times(cmd_items, indent_level));
+                        for _ in 0..indent_level {
+                            items.push_signal(Signal::StartIndent);
+                        }
+                        items.extend(cmd_items);
+                        for _ in 0..indent_level {
+                            items.push_signal(Signal::FinishIndent);
+                        }
                     } else {
                         items.extend(cmd_items);
                     }

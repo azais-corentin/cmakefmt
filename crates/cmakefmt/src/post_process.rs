@@ -24,9 +24,11 @@ pub fn post_process_alignments(text: &str, base_config: &Configuration) -> Strin
 
     // Build per-line config snapshot used by the reflow pass.
     let (initial_configs, has_pragmas) = resolve_per_line_config(&lines, base_config);
-    lines = {
+    lines = if initial_configs.iter().any(|c| c.comment_preservation == CommentPreservation::Reflow) {
         let _reflow_stage = info_span!(EVENT_POST_PROCESS_REFLOW_COMMENT).entered();
         reflow_standalone_comment_blocks(&lines, &initial_configs)
+    } else {
+        lines
     };
 
     // Re-resolve config after reflow because line counts may have changed.
@@ -227,21 +229,21 @@ fn is_pragma_comment_line(line: &str) -> bool {
 }
 
 #[derive(Clone)]
-struct ParsedCommentLine {
-    outer_prefix: String,
-    leading_ws: String,
-    content: String,
-    raw: String,
+struct ParsedCommentLine<'a> {
+    outer_prefix: &'a str,
+    leading_ws: &'a str,
+    content: &'a str,
+    raw: &'a str,
 }
 
-impl ParsedCommentLine {
-    fn parse(line: &str) -> Option<Self> {
+impl<'a> ParsedCommentLine<'a> {
+    fn parse(line: &'a str) -> Option<Self> {
         let hash_idx = line.find('#')?;
         if !line[..hash_idx].chars().all(char::is_whitespace) {
             return None;
         }
 
-        let outer_prefix = line[..hash_idx].to_string();
+        let outer_prefix = &line[..hash_idx];
         let after_hash = line[hash_idx + 1..].trim_end_matches([' ', '\t']);
         let ws_end = after_hash
             .char_indices()
@@ -250,9 +252,9 @@ impl ParsedCommentLine {
 
         Some(Self {
             outer_prefix,
-            leading_ws: after_hash[..ws_end].to_string(),
-            content: after_hash[ws_end..].to_string(),
-            raw: line.to_string(),
+            leading_ws: &after_hash[..ws_end],
+            content: &after_hash[ws_end..],
+            raw: line,
         })
     }
 
@@ -314,7 +316,7 @@ fn parse_list_marker(content: &str) -> Option<ListMarker> {
 }
 
 fn wrap_comment_words(
-    words: &[String],
+    words: &[&str],
     width: usize,
     first_prefix: &str,
     continuation_prefix: &str,
@@ -380,7 +382,7 @@ fn reflow_comment_block(lines: &[String], width: usize) -> Vec<String> {
         let line = &parsed[i];
 
         if in_fence {
-            result.push(line.raw.clone());
+            result.push(line.raw.to_string());
             if line.is_fence_marker() {
                 in_fence = false;
             }
@@ -389,7 +391,7 @@ fn reflow_comment_block(lines: &[String], width: usize) -> Vec<String> {
         }
 
         if line.is_fence_marker() {
-            result.push(line.raw.clone());
+            result.push(line.raw.to_string());
             in_fence = true;
             i += 1;
             continue;
@@ -402,19 +404,19 @@ fn reflow_comment_block(lines: &[String], width: usize) -> Vec<String> {
         }
 
         if line.leading_ws_len() >= baseline + 4 {
-            result.push(line.raw.clone());
+            result.push(line.raw.to_string());
             i += 1;
             continue;
         }
 
-        if let Some(marker) = parse_list_marker(&line.content) {
-            let base_outer = line.outer_prefix.clone();
+        if let Some(marker) = parse_list_marker(line.content) {
+            let base_outer = line.outer_prefix;
             let base_indent = line.leading_ws_len();
             let continuation_indent = base_indent + marker.prefix.chars().count();
             let first_prefix = format!("{}#{}{}", base_outer, line.leading_ws, marker.prefix);
             let continuation_prefix = format!("{}#{}", base_outer, " ".repeat(continuation_indent));
 
-            let words: Vec<String> = marker.text.split_whitespace().map(str::to_string).collect();
+            let words: Vec<&str> = marker.text.split_whitespace().collect();
             let mut continuation_lines: Vec<String> = Vec::new();
 
             i += 1;
@@ -428,17 +430,17 @@ fn reflow_comment_block(lines: &[String], width: usize) -> Vec<String> {
                     break;
                 }
 
-                if parse_list_marker(&next.content).is_some() {
+                if parse_list_marker(next.content).is_some() {
                     if next.leading_ws_len() <= base_indent {
                         break;
                     }
-                    continuation_lines.push(next.raw.clone());
+                    continuation_lines.push(next.raw.to_string());
                     i += 1;
                     continue;
                 }
 
                 if next.leading_ws_len() > base_indent {
-                    continuation_lines.push(next.raw.clone());
+                    continuation_lines.push(next.raw.to_string());
                     i += 1;
                     continue;
                 }
@@ -456,13 +458,12 @@ fn reflow_comment_block(lines: &[String], width: usize) -> Vec<String> {
             continue;
         }
 
-        let base_outer = line.outer_prefix.clone();
-        let base_ws = line.leading_ws.clone();
+        let base_outer = line.outer_prefix;
+        let base_ws = line.leading_ws;
         let prefix = format!("{}#{}", base_outer, base_ws);
-        let mut words: Vec<String> = line
+        let mut words: Vec<&str> = line
             .content
             .split_whitespace()
-            .map(str::to_string)
             .collect();
 
         i += 1;
@@ -475,14 +476,14 @@ fn reflow_comment_block(lines: &[String], width: usize) -> Vec<String> {
             {
                 break;
             }
-            if parse_list_marker(&next.content).is_some() {
+            if parse_list_marker(next.content).is_some() {
                 break;
             }
             if next.leading_ws != base_ws {
                 break;
             }
 
-            words.extend(next.content.split_whitespace().map(str::to_string));
+            words.extend(next.content.split_whitespace());
             i += 1;
         }
 
