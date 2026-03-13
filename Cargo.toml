@@ -13,4 +13,9 @@ strip = "none"
 
 [profile.release]
 lto = true
+opt-level = 2
+
+# Size-optimized profile for the dprint WASM plugin.
+[profile.release-wasm]
+inherits = "release"
 opt-level = "s"
