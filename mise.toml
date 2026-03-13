@@ -1,14 +1,35 @@
-[tasks.build]
+[tasks."build:debug:cli"]
+description = "Build the CLI binary (debug)"
+run = "cargo build -p cmakefmt-cli"
+
+[tasks."build:debug:wasm"]
 description = "Build the WASM plugin (debug)"
 run = "cargo build -p cmakefmt-dprint --target wasm32-unknown-unknown"
 
-[tasks.release]
+[tasks."build:debug"]
+alias = "build"
+description = "Build all crates (debug)"
+run = [
+  "cargo build -p cmakefmt -p cmakefmt-cli",
+  "cargo build -p cmakefmt-dprint --target wasm32-unknown-unknown",
+]
+
+[tasks."build:release"]
 description = "Build optimized WASM plugin"
 run = "cargo build --profile release-wasm -p cmakefmt-dprint --target wasm32-unknown-unknown"
+
+[tasks.bench]
+description = "Run Criterion benchmarks"
+run = "cargo bench --bench formatter_fixtures_bench"
 
 [tasks.test]
 description = "Run all tests on host target"
 run = "cargo test"
+
+[tasks."test:filter"]
+description = "Run formatter tests matching a fixture path pattern"
+usage = 'arg "<pattern>" help="Substring match on fixture path (e.g. 04_casing, 06_comments)"'
+run = 'cargo test --test formatter_tests -- "$usage_pattern"'
 
 [tasks.check]
 description = "Clippy + rustfmt check"
@@ -16,16 +37,14 @@ run = ["cargo clippy -- -D warnings", "cargo fmt --check"]
 
 [tasks.size]
 description = "Report WASM binary size"
-run = "ls -lh target/wasm32-unknown-unknown/release-wasm/*.wasm"
-
-[tasks.test-diff]
-run = """
-find tests -name '*.in.cmake' -print0 \
-     | sed -z 's/\\.in\\.cmake$//' \
-     | sort -z \
-     | fzf --read0 \
-           --preview 'diff --color=always -u {}.in.cmake {}.out.cmake || true' \
-           --preview-window 'right,70%,wrap' \
-           --header 'ENTER: open full side-by-side diff  |  ESC: quit' \
-           --bind 'enter:execute(diff -y --color=always {}.in.cmake {}.out.cmake | less -R)'
-"""
+depends = ["build:release"]
+run = '''
+#!/usr/bin/env bash
+file="target/wasm32-unknown-unknown/release-wasm/cmakefmt_dprint.wasm"
+bytes=$(stat -c %s "$file")
+if [ "$bytes" -ge 1048576 ]; then
+  printf "%s: %.2f MiB (%d bytes)\n" "$file" "$(echo "scale=2; $bytes/1048576" | bc)" "$bytes"
+else
+  printf "%s: %.2f KiB (%d bytes)\n" "$file" "$(echo "scale=2; $bytes/1024" | bc)" "$bytes"
+fi
+'''
