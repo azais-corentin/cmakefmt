@@ -8,8 +8,16 @@ local linters = new Mapping<String, Step> {
     ["cargo-check"] = (Builtins.cargo_check) { check = "cargo check --quiet" }
     // -- formatters --
     ["dprint"] = Builtins.dprint
-    ["nix-fmt"] = (Builtins.nix_fmt) {
-        condition = "command -v nixfmt"
+    ["nix-fmt"] = new Step {
+        glob = "**/*.nix"
+        check = new Script {
+            windows = ""
+            other = "nixfmt --check {{ files }}"
+        }
+        fix = new Script {
+            windows = ""
+            other = "nixfmt {{ files }}"
+        }
     }
     ["pkl"] = Builtins.pkl
     // -- CI linting --
