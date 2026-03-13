@@ -1,5 +1,5 @@
 [package]
-name = "cmakefmt"
+name = "cmakefmt-rs"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,6 +12,7 @@ keywords = ["cmake", "formatter", "linter"]
 categories = ["command-line-utilities", "development-tools"]
 
 [lib]
+name = "cmakefmt"
 
 [dependencies]
 anyhow = "1.0.102"
