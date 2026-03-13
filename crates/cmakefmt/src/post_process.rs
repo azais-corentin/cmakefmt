@@ -4,6 +4,8 @@
 //! (consecutive set alignment, trailing comment alignment at file scope) which
 //! cannot be expressed within the per-command IR generation.
 
+use std::borrow::Cow;
+
 use tracing::info_span;
 
 use crate::configuration::{CommentPreservation, Configuration, apply_inline_overrides};
@@ -17,14 +19,29 @@ use crate::instrumentation::{
 /// - `commentPreservation = reflow`: reflow standalone `# ...` comment blocks.
 /// - `alignConsecutiveSet`: column-align values in consecutive `set()` calls.
 /// - `alignTrailingComments`: column-align trailing `#` comments on consecutive lines.
-pub fn post_process_alignments(text: &str, base_config: &Configuration) -> String {
+pub fn post_process_alignments<'a>(text: &'a str, base_config: &Configuration) -> Cow<'a, str> {
     let _stage = info_span!(EVENT_POST_PROCESS, input_bytes = text.len()).entered();
+
+    // Fast path: when no post-processing features are enabled and no pragmas
+    // could change that, return the input unchanged.
+    let needs_reflow = base_config.comment_preservation == CommentPreservation::Reflow;
+    let needs_set_align = base_config.align_consecutive_set;
+    let needs_comment_align = base_config.align_trailing_comments;
+    let has_pragma_marker =
+        memchr::memmem::find(text.as_bytes(), PRAGMA_PREFIX.as_bytes()).is_some();
+    if !needs_reflow && !needs_set_align && !needs_comment_align && !has_pragma_marker {
+        return Cow::Borrowed(text);
+    }
+
     let newline = crate::util::detect_dominant_line_ending(text);
     let mut lines: Vec<String> = split_lines(text, newline);
 
     // Build per-line config snapshot used by the reflow pass.
     let (initial_configs, has_pragmas) = resolve_per_line_config(&lines, base_config);
-    lines = if initial_configs.iter().any(|c| c.comment_preservation == CommentPreservation::Reflow) {
+    lines = if initial_configs
+        .iter()
+        .any(|c| c.comment_preservation == CommentPreservation::Reflow)
+    {
         let _reflow_stage = info_span!(EVENT_POST_PROCESS_REFLOW_COMMENT).entered();
         reflow_standalone_comment_blocks(&lines, &initial_configs)
     } else {
@@ -49,9 +66,8 @@ pub fn post_process_alignments(text: &str, base_config: &Configuration) -> Strin
         align_trailing_comment_lines(&mut lines, &configs, newline);
     }
 
-    join_lines(&lines, newline)
+    Cow::Owned(join_lines(&lines, newline))
 }
-
 
 fn split_lines(text: &str, newline: &str) -> Vec<String> {
     // Split but keep the final empty element if the text ends with a newline.
@@ -436,10 +452,7 @@ fn reflow_comment_block(lines: &[String], width: usize) -> Vec<String> {
         let base_outer = line.outer_prefix;
         let base_ws = line.leading_ws;
         let prefix = format!("{}#{}", base_outer, base_ws);
-        let mut words: Vec<&str> = line
-            .content
-            .split_whitespace()
-            .collect();
+        let mut words: Vec<&str> = line.content.split_whitespace().collect();
 
         i += 1;
         while i < parsed.len() {

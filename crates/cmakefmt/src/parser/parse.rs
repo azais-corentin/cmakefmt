@@ -21,62 +21,63 @@ fn describe_token(tok: Option<&Token>) -> String {
         None => "end of input".to_string(),
     }
 }
+
+/// Streaming parser that pulls tokens from the logos lexer on demand.
+///
+/// Uses a single-element lookahead (`peeked`) instead of collecting all tokens
+/// into a Vec. This eliminates a ~50K-element intermediate allocation for large
+/// files and improves cache locality.
 struct Parser<'a> {
     source: &'a str,
-    tokens: Vec<(Token, std::ops::Range<usize>)>,
-    pos: usize,
+    lexer: logos::Lexer<'a, Token>,
+    /// One-element lookahead: `Some((token, span))` if peeked, `None` if exhausted.
+    peeked: Option<(Token, std::ops::Range<usize>)>,
 }
 
 impl<'a> Parser<'a> {
     fn new(source: &'a str) -> Self {
-        let estimated_tokens = source.len() / 7;
-        let mut tokens = Vec::with_capacity(estimated_tokens);
-        let mut lex = Token::lexer(source);
-        while let Some(result) = lex.next() {
-            let span = lex.span();
-            match result {
-                Ok(tok) => tokens.push((tok, span)),
-                Err(()) => {
-                    // Unknown byte — treat as unquoted text so we don't lose content
-                    tokens.push((Token::UnquotedText, span));
-                }
-            }
-        }
+        let mut lexer = Token::lexer(source);
+        let peeked = Self::next_token(&mut lexer);
         Parser {
             source,
-            tokens,
-            pos: 0,
+            lexer,
+            peeked,
         }
+    }
+
+    /// Pull the next token from the lexer, converting errors to UnquotedText.
+    fn next_token(lexer: &mut logos::Lexer<'a, Token>) -> Option<(Token, std::ops::Range<usize>)> {
+        lexer.next().map(|result| {
+            let span = lexer.span();
+            match result {
+                Ok(tok) => (tok, span),
+                // Unknown byte — treat as unquoted text so we don't lose content
+                Err(()) => (Token::UnquotedText, span),
+            }
+        })
     }
 
     fn peek(&self) -> Option<&Token> {
-        self.tokens.get(self.pos).map(|(t, _)| t)
+        self.peeked.as_ref().map(|(t, _)| t)
     }
 
     fn peek_span(&self) -> Option<Span> {
-        self.tokens
-            .get(self.pos)
-            .map(|(_, r)| Span::new(r.start, r.end))
+        self.peeked.as_ref().map(|(_, r)| Span::new(r.start, r.end))
     }
 
     fn advance(&mut self) -> Option<(Token, Span)> {
-        if self.pos < self.tokens.len() {
-            let (tok, range) = &self.tokens[self.pos];
-            let result = (tok.clone(), Span::new(range.start, range.end));
-            self.pos += 1;
-            Some(result)
-        } else {
-            None
-        }
+        let current = self.peeked.take()?;
+        self.peeked = Self::next_token(&mut self.lexer);
+        Some((current.0, Span::new(current.1.start, current.1.end)))
     }
 
     fn at_end(&self) -> bool {
-        self.pos >= self.tokens.len()
+        self.peeked.is_none()
     }
 
     fn skip_spaces(&mut self) {
         while let Some(Token::Space) = self.peek() {
-            self.pos += 1;
+            self.advance();
         }
     }
 }
@@ -90,7 +91,7 @@ pub fn parse(source: &str) -> Result<File> {
 }
 
 fn parse_file_elements(p: &mut Parser) -> Result<Vec<FileElement>> {
-    let estimated_elements = p.tokens.len() / 10;
+    let estimated_elements = p.source.len() / 70;
     let mut elements = Vec::with_capacity(estimated_elements);
 
     while !p.at_end() {

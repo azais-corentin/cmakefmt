@@ -4,8 +4,8 @@ mod generation;
 mod instrumentation;
 mod parser;
 mod post_process;
-mod util;
 pub mod printer;
+mod util;
 
 pub use configuration::{
     CaseStyle, CommandConfiguration, CommentPreservation, ConfigDiagnostic,

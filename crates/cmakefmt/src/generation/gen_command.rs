@@ -1145,9 +1145,42 @@ fn try_single_line(
         return None;
     }
 
-    // Calculate total width including file-level indentation
+    // Calculate total width including file-level indentation.
+    // Width is computed BEFORE building cased strings — ASCII casing preserves length,
+    // so arg_inline_text().len() is the final width regardless of casing.
     let base_indent = indent_depth as usize * config.indent_width as usize;
     let close_overhead = 1; // ")"
+    let line_width = config.line_width as usize;
+
+    // Pre-compute per-arg widths to enable early rejection without allocating cased strings.
+    let arg_widths: Vec<usize> = args.iter().map(|a| arg_inline_text(a).len()).collect();
+    let args_width: usize =
+        arg_widths.iter().sum::<usize>() + if args.len() > 1 { args.len() - 1 } else { 0 };
+    let total = base_indent + cmd_name.len() + 1 + args_width + close_overhead;
+
+    let keep_condition_header_inline = cmd_name.eq_ignore_ascii_case("if")
+        || cmd_name.eq_ignore_ascii_case("while")
+        || cmd_name.eq_ignore_ascii_case("elseif");
+    let has_keyword_args = args.iter().any(|arg| arg.is_keyword);
+    let has_unbreakable_long_token = cmd_name.len() > line_width
+        || arg_widths.iter().zip(args.iter()).any(|(&w, a)| {
+            w > line_width && {
+                let t = arg_inline_text(a);
+                memchr::memmem::find(t.as_bytes(), b"$<").is_none()
+            }
+        });
+    let indentation_overflow = base_indent > line_width;
+    let deep_indentation = base_indent.saturating_mul(2) >= line_width;
+    if !keep_condition_header_inline
+        && ((total > line_width && !has_unbreakable_long_token)
+            || (!has_keyword_args && total == line_width))
+        && !indentation_overflow
+        && !deep_indentation
+    {
+        return None;
+    }
+
+    // Width check passed — build cased strings for the output.
     // Apply keyword/literal casing per §4.4:
     // 1. Keyword tokens get keywordCase
     // 2. Literal tokens (not keywords) get literalCase
@@ -1196,7 +1229,6 @@ fn try_single_line(
                 .collect(),
         }
     } else if !config.custom_keywords.is_empty() {
-        // Unknown command with customKeywords: apply keyword/literal casing
         args.iter()
             .map(|a| {
                 let t = arg_inline_text(a);
@@ -1214,38 +1246,10 @@ fn try_single_line(
             })
             .collect()
     } else {
-        // Unknown command: preserve original casing
         args.iter()
             .map(|a| arg_inline_text(a).into_owned())
             .collect()
     };
-    let args_width: usize = args_text.iter().map(|s| s.len()).sum::<usize>()
-        + if args_text.len() > 1 {
-            args_text.len() - 1
-        } else {
-            0
-        };
-    let total = base_indent + cmd_name.len() + 1 + args_width + close_overhead;
-
-    let keep_condition_header_inline = cmd_name.eq_ignore_ascii_case("if")
-        || cmd_name.eq_ignore_ascii_case("while")
-        || cmd_name.eq_ignore_ascii_case("elseif");
-    let line_width = config.line_width as usize;
-    let has_keyword_args = args.iter().any(|arg| arg.is_keyword);
-    let has_unbreakable_long_token = cmd_name.len() > line_width
-        || args_text
-            .iter()
-            .any(|text| text.len() > line_width && memchr::memmem::find(text.as_bytes(), b"$<").is_none());
-    let indentation_overflow = base_indent > line_width;
-    let deep_indentation = base_indent.saturating_mul(2) >= line_width;
-    if !keep_condition_header_inline
-        && ((total > line_width && !has_unbreakable_long_token)
-            || (!has_keyword_args && total == line_width))
-        && !indentation_overflow
-        && !deep_indentation
-    {
-        return None;
-    }
 
     let mut items = PrintItems::new();
     for (i, text) in args_text.iter().enumerate() {
@@ -2537,7 +2541,9 @@ fn emit_keyword_group(
             .all(|v| v.trailing_comment.is_none() || v.trailing_is_bracket)
         && (keyword.trailing_comment.is_none() || keyword.trailing_is_bracket)
         && !values.iter().any(|v| v.text.starts_with('#'))
-        && !values.iter().any(|v| memchr::memmem::find(v.text.as_bytes(), b"$<").is_some());
+        && !values
+            .iter()
+            .any(|v| memchr::memmem::find(v.text.as_bytes(), b"$<").is_some());
     if !force_one_per_line
         && allow_keyword_inline
         && !preserve_inline_keyword_layout
@@ -2793,7 +2799,7 @@ fn emit_property_values(
                         val_items.extend(ir_helpers::gen_from_raw_string(&pv.text));
                     }
                 }
-                items.extend(ir_helpers::with_indent(val_items));
+                items.push_indented(val_items);
                 return;
             }
         } else if real_value_count == 0 {
@@ -2808,7 +2814,7 @@ fn emit_property_values(
                     val_items.extend(ir_helpers::gen_from_raw_string(&pv.text));
                 }
             }
-            items.extend(ir_helpers::with_indent(val_items));
+            items.push_indented(val_items);
             return;
         }
     }
@@ -2823,9 +2829,9 @@ fn emit_property_values(
         sub.push_signal(Signal::NewLine);
         emit_arg(&mut sub, pv, config);
     }
-    val_items.extend(ir_helpers::with_indent(sub));
+    val_items.push_indented(sub);
 
-    items.extend(ir_helpers::with_indent(val_items));
+    items.push_indented(val_items);
 }
 
 /// Check if a keyword followed by a value forms a compound keyword.
@@ -2941,7 +2947,7 @@ fn emit_flow_values(
     }
 
     if indent {
-        items.extend(ir_helpers::with_indent(val_items));
+        items.push_indented(val_items);
     } else {
         items.extend(val_items);
     }
@@ -3058,7 +3064,7 @@ fn emit_pair_values(
                 ));
                 sub.push_signal(Signal::NewLine);
                 sub.extend(ir_helpers::gen_from_raw_string(&arg_inline_text(val)));
-                val_items.extend(ir_helpers::with_indent(sub));
+                val_items.push_indented(sub);
                 // Value's trailing comment at L2
                 val_items.push_signal(Signal::NewLine);
                 val_items.extend(ir_helpers::gen_from_raw_string(
@@ -3076,7 +3082,7 @@ fn emit_pair_values(
                 }
                 sub.push_signal(Signal::NewLine);
                 emit_arg(&mut sub, val, config);
-                val_items.extend(ir_helpers::with_indent(sub));
+                val_items.push_indented(sub);
             }
             i = val_idx + 1;
         } else {
@@ -3093,7 +3099,7 @@ fn emit_pair_values(
     }
 
     if nest_under_keyword {
-        items.extend(ir_helpers::with_indent(val_items));
+        items.push_indented(val_items);
     } else {
         items.extend(val_items);
     }
@@ -3164,7 +3170,7 @@ fn emit_aligned_property_pairs(
     }
 
     if nest_under_keyword {
-        items.extend(ir_helpers::with_indent(val_items));
+        items.push_indented(val_items);
     } else {
         items.extend(val_items);
     }
@@ -3250,7 +3256,7 @@ fn emit_cmd_line_keyword(
         let mut val_items = PrintItems::new();
         val_items.push_signal(Signal::NewLine);
         emit_arg(&mut val_items, val, config);
-        items.extend(ir_helpers::with_indent(val_items));
+        items.push_indented(val_items);
     } else {
         items.push_signal(Signal::NewLine);
         items.extend(ir_helpers::gen_from_raw_string(&keyword.text));
@@ -3338,7 +3344,7 @@ fn emit_section_values_inner(
                         let mut sub_items = PrintItems::new();
                         sub_items.push_signal(Signal::NewLine);
                         emit_arg(&mut sub_items, sv, config);
-                        val_items.extend(ir_helpers::with_indent(sub_items));
+                        val_items.push_indented(sub_items);
                         i += 2;
                     } else {
                         i += 1;
@@ -3407,8 +3413,7 @@ fn emit_section_values_inner(
                             sub_items.push_signal(Signal::NewLine);
                             emit_arg(&mut sub_items, sv, config);
                         }
-                        val_items
-                            .extend(ir_helpers::with_indent(ir_helpers::with_indent(sub_items)));
+                        val_items.push_indented_times(sub_items, 2);
                     }
                 }
                 KwType::Group(front_count, group_sub_kws) => {
@@ -3515,7 +3520,7 @@ fn emit_section_values_inner(
                                 sub_indent,
                                 true,
                             );
-                            val_items.extend(ir_helpers::with_indent(nested_items));
+                            val_items.push_indented(nested_items);
                         } else {
                             // Keyword alone on its line, everything else indented
                             push_wrapped_newline(
@@ -3534,7 +3539,7 @@ fn emit_section_values_inner(
                                 sub_indent,
                                 true,
                             );
-                            val_items.extend(ir_helpers::with_indent(nested_items));
+                            val_items.push_indented(nested_items);
                         }
                     }
                 }
@@ -4010,7 +4015,7 @@ fn emit_cond_logical_op(
             config,
             base_indent + config.indent_width as usize,
         );
-        items.extend(ir_helpers::with_indent(sub));
+        items.push_indented(sub);
     } else {
         // Try to put expression on same line (for short operators like AND/OR)
         items.push_space();
@@ -4073,7 +4078,7 @@ fn emit_cond_expr(
                     }
                 }
                 paren_inner.push_signal(Signal::NewLine);
-                items.extend(ir_helpers::with_indent(paren_inner));
+                items.push_indented(paren_inner);
                 items.push_str_runtime_width_computed(")");
                 if let Some(comment) = &arg.trailing_comment {
                     items.push_space();
@@ -4134,7 +4139,7 @@ fn emit_cond_expr(
                     config,
                     base_indent + config.indent_width as usize,
                 );
-                items.extend(ir_helpers::with_indent(sub));
+                items.push_indented(sub);
             }
         }
         CondExpr::Binary { lhs, op, rhs } => {
@@ -4189,7 +4194,7 @@ fn emit_cond_expr(
                 config,
                 base_indent + config.indent_width as usize,
             );
-            items.extend(ir_helpers::with_indent(sub));
+            items.push_indented(sub);
         }
     }
 }

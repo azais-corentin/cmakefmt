@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::{self, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -622,11 +623,24 @@ fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
             return Ok(ExitCode::SUCCESS);
         }
 
+        // Cache config by parent directory to avoid re-discovering and re-parsing
+        // the same .cmakefmt.toml for every file in the same directory tree.
+        let mut config_cache: HashMap<PathBuf, ConfigLoadResult> = HashMap::new();
+
         for path in &paths {
             output.info(format!("formatting {}", path.display()));
 
             let input = std::fs::read_to_string(path)?;
-            let config_result = load_effective_config(&cli, &overrides, path);
+
+            // Use explicit config path as cache key, or the source file's parent dir.
+            let cache_key = cli.config.clone().unwrap_or_else(|| {
+                path.parent()
+                    .map(|p| p.to_path_buf())
+                    .unwrap_or_else(|| PathBuf::from("."))
+            });
+            let config_result = config_cache
+                .entry(cache_key)
+                .or_insert_with(|| load_effective_config(&cli, &overrides, path));
             emit_config_diagnostics(&output, path, &config_result.diagnostics);
 
             format_single_input(

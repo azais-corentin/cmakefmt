@@ -4,7 +4,7 @@ run = "cargo build -p cmakefmt-dprint --target wasm32-unknown-unknown"
 
 [tasks.release]
 description = "Build optimized WASM plugin"
-run = "cargo build --release -p cmakefmt-dprint --target wasm32-unknown-unknown"
+run = "cargo build --profile release-wasm -p cmakefmt-dprint --target wasm32-unknown-unknown"
 
 [tasks.test]
 description = "Run all tests on host target"
@@ -16,7 +16,7 @@ run = ["cargo clippy -- -D warnings", "cargo fmt --check"]
 
 [tasks.size]
 description = "Report WASM binary size"
-run = "ls -lh target/wasm32-unknown-unknown/release/*.wasm"
+run = "ls -lh target/wasm32-unknown-unknown/release-wasm/*.wasm"
 
 [tasks.test-diff]
 run = """

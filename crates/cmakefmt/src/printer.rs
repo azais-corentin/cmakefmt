@@ -94,6 +94,34 @@ impl PrintItems {
         self.items.extend(other.items);
     }
 
+    /// Append `other`'s items wrapped in one indent level, consuming `other`.
+    /// Avoids the intermediate Vec allocation of `extend(with_indent(other))`.
+    pub fn push_indented(&mut self, other: PrintItems) {
+        if other.is_empty() {
+            return;
+        }
+        self.items.reserve(other.items.len() + 2);
+        self.items.push(PrintItem::Signal(Signal::StartIndent));
+        self.items.extend(other.items);
+        self.items.push(PrintItem::Signal(Signal::FinishIndent));
+    }
+
+    /// Append `other`'s items wrapped in `times` indent levels, consuming `other`.
+    pub fn push_indented_times(&mut self, other: PrintItems, times: u32) {
+        if other.is_empty() || times == 0 {
+            self.items.extend(other.items);
+            return;
+        }
+        self.items.reserve(other.items.len() + (times as usize) * 2);
+        for _ in 0..times {
+            self.items.push(PrintItem::Signal(Signal::StartIndent));
+        }
+        self.items.extend(other.items);
+        for _ in 0..times {
+            self.items.push(PrintItem::Signal(Signal::FinishIndent));
+        }
+    }
+
     /// Returns `true` if no items have been pushed.
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()

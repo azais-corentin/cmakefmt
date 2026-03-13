@@ -1,5 +1,6 @@
-use std::path::Path;
 use memchr::{memchr, memchr_iter};
+use std::borrow::Cow;
+use std::path::Path;
 
 use crate::printer::{PrintOptions, format as printer_format};
 use anyhow::Result;
@@ -197,7 +198,7 @@ fn format_inner(text: &str, config: &Configuration) -> Result<String> {
         let _stage = info_span!(EVENT_FORMAT_RESTORE_BARE_CR).entered();
         restore_bare_crs(&result, text)
     } else {
-        result
+        result.into_owned()
     };
 
     Ok(result)
@@ -206,7 +207,6 @@ fn format_inner(text: &str, config: &Configuration) -> Result<String> {
 // ---------------------------------------------------------------------------
 // Line-ending detection
 // ---------------------------------------------------------------------------
-
 
 fn resolve_new_line_kind(text: &str, kind: NewLineKind) -> &'static str {
     match kind {
@@ -324,18 +324,18 @@ fn count_bare_crs_in(segment: &str) -> usize {
 /// When `false`: strip the forced trailing newline if the original input had
 /// none. Preserve existing trailing newlines from the original up to
 /// `maxBlankLines`.
-fn apply_final_newline(
-    formatted: &str,
+fn apply_final_newline<'a>(
+    formatted: &'a str,
     original: &str,
     config: &Configuration,
     newline: &str,
-) -> String {
+) -> Cow<'a, str> {
     if config.final_newline {
         // finalNewline=true: ensure exactly one trailing newline.
         // gen_file strips trailing blanks and adds one Signal::NewLine,
         // so this is already correct for non-empty content.
         // For empty/whitespace-only input, gen_file produces just "\n".
-        return formatted.to_string();
+        return Cow::Borrowed(formatted);
     }
 
     // --- finalNewline = false ---
@@ -347,7 +347,7 @@ fn apply_final_newline(
         .bytes()
         .any(|b| !matches!(b, b' ' | b'\t' | b'\r' | b'\n'));
     if !has_content {
-        return String::new();
+        return Cow::Owned(String::new());
     }
 
     // Strip the trailing newline that gen_file always appends.
@@ -361,7 +361,7 @@ fn apply_final_newline(
     let orig_trailing = count_trailing_newlines(original, newline);
     if orig_trailing == 0 {
         // Original had no trailing newline → don't add one.
-        return base.to_string();
+        return Cow::Owned(base.to_string());
     }
 
     // Preserve trailing newlines from the original, capped by maxBlankLines.
@@ -373,7 +373,7 @@ fn apply_final_newline(
     for _ in 0..trailing {
         result.push_str(newline);
     }
-    result
+    Cow::Owned(result)
 }
 
 /// Count how many consecutive `newline` sequences appear at the end of `text`.
@@ -398,19 +398,19 @@ fn count_trailing_newlines(text: &str, newline: &str) -> usize {
 /// trailing whitespace). When these options are `false`, we compare the
 /// formatted output line-by-line with the original input and restore the
 /// original line's whitespace where the non-whitespace content matches.
-fn finalize_whitespace(
-    formatted: &str,
+fn finalize_whitespace<'a>(
+    formatted: &'a str,
     original: &str,
     config: &Configuration,
     newline: &str,
-) -> String {
+) -> Cow<'a, str> {
     // Quick exit: if both options are true at the base level and no pragmas
     // could override them, skip the pass entirely.
     if config.trim_trailing_whitespace
         && config.collapse_spaces
         && memchr::memmem::find(formatted.as_bytes(), PRAGMA_PREFIX.as_bytes()).is_none()
     {
-        return formatted.to_string();
+        return Cow::Borrowed(formatted);
     }
 
     let out_lines: Vec<&str> = formatted.split(newline).collect();
@@ -468,7 +468,7 @@ fn finalize_whitespace(
         result_lines.push(line);
     }
 
-    result_lines.join(newline)
+    Cow::Owned(result_lines.join(newline))
 }
 
 /// Collapse runs of multiple spaces to a single space, preserving leading
