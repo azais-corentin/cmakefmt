@@ -413,7 +413,7 @@ async function main() {
   const chartsEl = document.getElementById('charts');
 
   try {
-    const resp = await fetch(DATA_URL);
+    const resp = await fetch(DATA_URL + '?_=' + Date.now());
     if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
     const json = await resp.json();
 
