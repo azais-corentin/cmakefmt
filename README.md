@@ -42,13 +42,17 @@ formatter returns it unchanged -- it never silently corrupts your code.
 ## Features
 
 - **Command casing** -- normalizes `PROJECT`, `Set`, `IF` to lowercase (or uppercase)
-- **Keyword casing** -- normalizes `public`, `Private` to `PUBLIC`, `PRIVATE` (or lowercase)
-- **Argument wrapping** -- breaks long argument lists across lines with consistent indentation
+- **Keyword & literal casing** -- normalizes `public`, `Private` to `PUBLIC`, `PRIVATE`; `on`/`Off` to `ON`/`OFF`
+- **Argument wrapping** -- multiple strategies (cascade, vertical) with `firstArgSameLine`, `wrapArgThreshold`, and per-command overrides
 - **Alignment** -- aligns property values, condition arguments, and keyword groups
 - **Comment formatting** -- reflowing, indentation, and trailing comment alignment
 - **Sorting** -- alphabetical sorting of file lists under configurable keywords
+- **Blank line control** -- `maxBlankLines`, `minBlankLinesBetweenBlocks`, `blankLineBetweenSections` for structural spacing
+- **Generator expressions** -- dedicated wrapping and indentation for `$<...>` expressions
+- **Line endings & final newline** -- LF/CRLF/auto normalization, trailing whitespace removal
 - **Per-command overrides** -- fine-grained control over individual commands (e.g. `spaceBeforeParen` for `if`)
-- **Inline pragmas** -- `# cmakefmt: off`, `on`, `skip` to suppress formatting locally
+- **Inline pragmas** -- `# cmakefmt: off/on/skip` to suppress formatting, `push { ... }`/`pop` for scoped config overrides
+- **Config inheritance** -- `extends` key for sharing base configs across projects
 - **Safe by default** -- unparseable input is returned unchanged; never silently corrupts
 
 ## Installation
@@ -91,7 +95,7 @@ cmakefmt CMakeLists.txt
 Format in place:
 
 ```bash
-cmakefmt --write CMakeLists.txt
+cmakefmt --write CMakeLists.txt  # also: --inplace
 ```
 
 Check formatting without modifying files (exits with code 1 if changes are needed):
