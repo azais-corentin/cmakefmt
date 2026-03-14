@@ -2,58 +2,66 @@ amends "package://github.com/jdx/hk/releases/download/v1.38.0/hk@1.38.0#/Config.
 import "package://github.com/jdx/hk/releases/download/v1.38.0/hk@1.38.0#/Builtins.pkl"
 
 local linters = new Mapping<String, Step> {
-    // -- existing --
-    ["cargo-fmt"] = Builtins.cargo_fmt
-    ["cargo-clippy"] = Builtins.cargo_clippy
-    ["cargo-check"] = (Builtins.cargo_check) { check = "cargo check --quiet" }
-    // -- formatters --
-    ["dprint"] = Builtins.dprint
-    ["nix-fmt"] = new Step {
-        glob = "**/*.nix"
-        check = new Script {
-            windows = ""
-            other = "nixfmt --check {{ files }}"
-        }
-        fix = new Script {
-            windows = ""
-            other = "nixfmt {{ files }}"
-        }
+  // -- existing --
+  ["cargo-fmt"] = Builtins.cargo_fmt
+  ["cargo-clippy"] = Builtins.cargo_clippy
+  ["cargo-check"] = (Builtins.cargo_check) { check = "cargo check --quiet" }
+  // -- formatters --
+  ["dprint"] = Builtins.dprint
+  ["nix-fmt"] = new Step {
+    glob = "**/*.nix"
+    check = new Script {
+      windows = ""
+      other = "nixfmt --check {{ files }}"
     }
-    ["pkl"] = Builtins.pkl
-    // -- CI linting --
-    ["actionlint"] = Builtins.actionlint
-    ["zizmor"] = Builtins.zizmor
-    ["pinact"] = Builtins.pinact
-    // -- hygiene --
-    ["trailing-whitespace"] = Builtins.trailing_whitespace
-    ["newlines"] = Builtins.newlines
-    ["check-merge-conflict"] = Builtins.check_merge_conflict
-    ["detect-private-key"] = Builtins.detect_private_key
-    ["check-added-large-files"] = Builtins.check_added_large_files
-    ["byte-order-marker"] = Builtins.byte_order_marker
-    ["mixed-line-ending"] = Builtins.mixed_line_ending
+    fix = new Script {
+      windows = ""
+      other = "nixfmt {{ files }}"
+    }
+  }
+  ["pkl"] = Builtins.pkl
+  // -- CI linting --
+  ["actionlint"] = Builtins.actionlint
+  ["zizmor"] = Builtins.zizmor
+  ["pinact"] = Builtins.pinact
+  // -- hygiene --
+  ["trailing-whitespace"] = (Builtins.trailing_whitespace) {
+    exclude = List("crates/cmakefmt/tests/formatter/**", "*.lock")
+  }
+  ["newlines"] = (Builtins.newlines) {
+    exclude = List("crates/cmakefmt/tests/formatter/**", "*.lock")
+  }
+  ["check-merge-conflict"] = Builtins.check_merge_conflict
+  ["detect-private-key"] = Builtins.detect_private_key
+  ["check-added-large-files"] = Builtins.check_added_large_files
+  ["byte-order-marker"] = (Builtins.byte_order_marker) {
+    exclude = List("crates/cmakefmt/tests/formatter/**")
+  }
+  ["mixed-line-ending"] = (Builtins.mixed_line_ending) {
+    exclude = List("crates/cmakefmt/tests/formatter/**", "*.lock")
+  }
 }
 
 hooks {
-    ["pre-commit"] {
-        fix = false
-        stash = "git"
-        steps = linters
+  ["pre-commit"] {
+    fix = false
+    stash = "git"
+    steps = linters
+  }
+  ["commit-msg"] {
+    fix = false
+    steps {
+      ["cog-verify"] {
+        check = "cog verify --file {{commit_msg_file}}"
+      }
     }
-    ["commit-msg"] {
-        fix = false
-        steps {
-            ["cog-verify"] {
-                check = "cog verify --file {{commit_msg_file}}"
-            }
-        }
-    }
-    ["fix"] {
-        fix = true
-        steps = linters
-    }
-    ["check"] {
-        fix = false
-        steps = linters
-    }
+  }
+  ["fix"] {
+    fix = true
+    steps = linters
+  }
+  ["check"] {
+    fix = false
+    steps = linters
+  }
 }

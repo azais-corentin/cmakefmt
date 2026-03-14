@@ -53,6 +53,14 @@ fi
 description = "Run pre-commit hooks"
 run = "hk run pre-commit"
 
+[tasks."pkl:format"]
+description = "Format Pkl files"
+run = '''
+#!/usr/bin/env bash
+pkl format -
+code=$?
+([ $code -eq 0 ] || [ $code -eq 11 ]) && exit 0 || exit $code
+'''
 [tools]
 actionlint = "latest"
 bun = "latest"
