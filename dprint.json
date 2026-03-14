@@ -10,6 +10,12 @@
     "commands": [{
       "command": "mise pkl:format",
       "exts": ["pkl"]
+    }, {
+      "command": "rustfmt --edition 2024",
+      "exts": ["rs"],
+      "cacheKeyFiles": [
+        "Cargo.toml"
+      ]
     }]
   },
   "excludes": ["**/*-lock.json", "docs/screenshots/*.svg"],
