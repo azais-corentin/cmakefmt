@@ -266,7 +266,7 @@ watch(isDark, (dark) => createCharts(dark));
 
 onMounted(async () => {
   try {
-    const res = await fetch(DATA_URL);
+    const res = await fetch(`${DATA_URL}?_t=${Date.now()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
 
