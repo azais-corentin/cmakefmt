@@ -1,6 +1,5 @@
 ## 3 · Blank Lines
 
-
 A **blank line** is a line containing no characters, or only whitespace characters, before the line ending.
 
 ### 3.1 `maxBlankLines`

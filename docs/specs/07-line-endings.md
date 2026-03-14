@@ -51,7 +51,6 @@ set(FOO "bar")
 
 # Output: maxBlankLines collapses 3 blank lines to 1; no trailing newline added
 set(FOO "bar")
-
 ```
 
 POSIX convention and most editors expect a trailing newline, so the default is `true`.

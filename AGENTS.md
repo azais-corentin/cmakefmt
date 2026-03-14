@@ -5,11 +5,13 @@
 `cmakefmt` is a Rust (edition 2024) formatter for CMake source files.
 
 Workspace crates:
+
 - `crates/cmakefmt` — core formatter library
 - `crates/cmakefmt-cli` — CLI binary (`cmakefmt`)
 - `crates/cmakefmt-dprint` — dprint WASM plugin (`cdylib`, `wasm32-unknown-unknown`)
 
 Primary API contract:
+
 - `format_text(path, input, config) -> anyhow::Result<Option<String>>`
 - `Ok(None)` means “already formatted” (no write needed)
 
@@ -39,6 +41,7 @@ finalize                crates/cmakefmt/src/format_text.rs
 ```
 
 Design constraints you must preserve:
+
 - AST carries byte `Span`s; source text is sliced on demand.
 - Printer is custom linear rendering (`PrintItems`/`Signal`) and does not perform wrapping strategy.
 - Cross-command alignment/comment reflow happen in text post-processing.
@@ -100,27 +103,32 @@ mise run bench
 ## Code Conventions & Common Patterns
 
 ### Error handling and API behavior
+
 - Use `anyhow::Result` in core/CLI flows.
 - Parse failures should report truthful position (`line:col`) context.
 - Do not use `unwrap()` outside tests.
 - Preserve `format_text` idempotency signal semantics (`Option<String>`).
 
 ### Module boundaries
+
 - Keep modules private by default; expose public API via `crates/cmakefmt/src/lib.rs`.
 - Prefer `pub(crate)` for internal cross-module access.
 
 ### Configuration patterns
+
 - Canonical config type lives in `configuration/types.rs`.
 - Config loading/merge logic lives in `configuration/load.rs` (including `extends`, aliases, precedence).
 - Both `camelCase` and `snake_case` keys are accepted.
 - Config discovery walks upward from target file path.
 
 ### Formatting engine patterns
+
 - `generation/gen_command.rs` is the complexity hotspot for wrapping, casing, sorting, and argument layout.
 - `generation/signatures.rs` encodes built-in command signatures (`spec!` macro, keyword typing).
 - Preserve verbatim behavior for bracket args/comments and multiline quoted strings.
 
 ### CLI/plugin integration
+
 - CLI (`crates/cmakefmt-cli/src/main.rs`) should remain a thin orchestration layer around core formatting.
 - dprint plugin (`crates/cmakefmt-dprint/src/lib.rs`) maps dprint config/settings to core `Configuration` and delegates to `format_text`.
 
@@ -152,6 +160,7 @@ mise run bench
 ## Testing & QA
 
 ### Test model
+
 - Fixture-based integration tests using `rstest`:
   - Input: `tests/formatter/**/*.in.cmake`
   - Expected: sibling `*.out.cmake`
@@ -162,17 +171,20 @@ mise run bench
 - Failure output includes readable unified diffs (including invisible-char highlighting).
 
 ### Benchmark model
+
 - Criterion benchmark in `crates/cmakefmt/benches/formatter_fixtures_bench.rs`.
 - Benchmark history helpers in `scripts/` are used by `.github/workflows/benchmark-fixtures.yml`.
 
 ## Specs and Documentation Authority
 
 When behavior is unclear, follow this order:
+
 1. `docs/specs/` (normative source of truth)
 2. Fixtures under `crates/cmakefmt/tests/formatter/`
 3. Current implementation
 
 High-value spec docs:
+
 - `docs/specs/README.md` — full index
 - `docs/specs/appendix-d-cli.md` — CLI contract + exit codes
 - `docs/specs/appendix-e-interactions.md` — global ordering/precedence
@@ -182,6 +194,7 @@ High-value spec docs:
 ## Practical Assistant Workflow
 
 Before non-trivial changes:
+
 1. Read relevant spec section(s).
 2. Locate existing implementation pattern in same subsystem.
 3. Update all affected call sites/types in one cutover.
@@ -189,6 +202,7 @@ Before non-trivial changes:
 5. For performance-sensitive changes, run fixture benchmark.
 
 Avoid:
+
 - Editing fixture expected files unless explicitly requested.
 - Introducing alternate parallel conventions when existing patterns already solve the problem.
 - Treating passing compile as sufficient without fixture/idempotency validation.

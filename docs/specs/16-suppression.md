@@ -38,7 +38,7 @@ any sequence including `/`, `?` matches a single character, `[...]` matches char
 ignorePatterns = [
   "third_party/**",
   "generated/*.cmake",
-  "build/**"
+  "build/**",
 ]
 ```
 

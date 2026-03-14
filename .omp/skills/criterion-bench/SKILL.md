@@ -54,7 +54,7 @@ Each file contains `mean` and `median` objects with identical structure:
     },
     "standard_error": 0.0025
   },
-  "median": { }
+  "median": {}
 }
 ```
 
@@ -80,26 +80,26 @@ find target/criterion -path '*/change/estimates.json' -exec sh -c '
 
 ## Regression Threshold Guidance
 
-| Condition | Meaning | When to use |
-|---|---|---|
-| `mean.point_estimate > 0.05` | Point estimate exceeds 5% regression | General-purpose gate |
-| `mean.confidence_interval.lower_bound > 0` | Statistically significant slowdown | Strict gate: even small regressions flagged if confident |
-| `mean.point_estimate > 0.10` | Point estimate exceeds 10% regression | Lenient gate for noisy environments |
+| Condition                                  | Meaning                               | When to use                                              |
+| ------------------------------------------ | ------------------------------------- | -------------------------------------------------------- |
+| `mean.point_estimate > 0.05`               | Point estimate exceeds 5% regression  | General-purpose gate                                     |
+| `mean.confidence_interval.lower_bound > 0` | Statistically significant slowdown    | Strict gate: even small regressions flagged if confident |
+| `mean.point_estimate > 0.10`               | Point estimate exceeds 10% regression | Lenient gate for noisy environments                      |
 
 Choose based on environment stability. CI with dedicated hardware can use the strict gate. Local laptops with variable load should use a wider threshold.
 
 ## Useful Flags
 
-| Flag | Default | Purpose |
-|---|---|---|
-| `--save-baseline <name>` | `base` | Save results under a named baseline |
-| `--baseline <name>` | `base` | Compare against a named baseline (fails if missing) |
-| `--baseline-lenient <name>` | — | Compare against baseline, skip benchmarks that lack it |
-| `--sample-size <N>` | 100 | Number of samples per benchmark |
-| `--warm-up-time <secs>` | 3 | Warm-up duration before sampling |
-| `--measurement-time <secs>` | 5 | Measurement duration per sample |
-| `--noise-threshold <f>` | 0.01 | Changes below this fraction are considered noise |
-| `--confidence-level <f>` | 0.95 | Confidence level for intervals |
-| `--significance-level <f>` | 0.05 | Threshold for significance tests |
+| Flag                        | Default | Purpose                                                |
+| --------------------------- | ------- | ------------------------------------------------------ |
+| `--save-baseline <name>`    | `base`  | Save results under a named baseline                    |
+| `--baseline <name>`         | `base`  | Compare against a named baseline (fails if missing)    |
+| `--baseline-lenient <name>` | —       | Compare against baseline, skip benchmarks that lack it |
+| `--sample-size <N>`         | 100     | Number of samples per benchmark                        |
+| `--warm-up-time <secs>`     | 3       | Warm-up duration before sampling                       |
+| `--measurement-time <secs>` | 5       | Measurement duration per sample                        |
+| `--noise-threshold <f>`     | 0.01    | Changes below this fraction are considered noise       |
+| `--confidence-level <f>`    | 0.95    | Confidence level for intervals                         |
+| `--significance-level <f>`  | 0.05    | Threshold for significance tests                       |
 
 Increase `--sample-size` or `--measurement-time` when results are noisy. Use `--baseline-lenient` when benchmarks have been added or removed between runs.

@@ -1,13 +1,13 @@
 [package]
 name = "cmakefmt-dprint"
 version.workspace = true
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
-homepage.workspace = true
 authors.workspace = true
-description = "dprint plugin for CMake formatting"
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
 publish = false
+repository.workspace = true
+description = "dprint plugin for CMake formatting"
 
 [lib]
 crate-type = ["cdylib"]

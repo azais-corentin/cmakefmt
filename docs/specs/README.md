@@ -22,30 +22,30 @@ exits with a non-zero status code. The formatter never silently corrupts unparse
 
 ## Table of Contents
 
-| # | Section | File |
-|---|---------|------|
-| 1 | Line Width & Wrapping | [01-line-width-wrapping.md](01-line-width-wrapping.md) |
-| 2 | Indentation | [02-indentation.md](02-indentation.md) |
-| 3 | Blank Lines | [03-blank-lines.md](03-blank-lines.md) |
-| 4 | Casing | [04-casing.md](04-casing.md) |
-| 5 | Parentheses & Spacing | [05-parens-spacing.md](05-parens-spacing.md) |
-| 6 | Comments | [06-comments.md](06-comments.md) |
-| 7 | Line Endings & Final Newline | [07-line-endings.md](07-line-endings.md) |
-| 8 | Whitespace Normalization | [08-whitespace.md](08-whitespace.md) |
-| 9 | Alignment | [09-alignment.md](09-alignment.md) |
-| 10 | Generator Expressions | [10-generator-expressions.md](10-generator-expressions.md) |
-| 11 | Command-Specific Overrides | [11-per-command-config.md](11-per-command-config.md) |
-| 12 | Sorting | [12-sorting.md](12-sorting.md) |
-| 13 | Inline Pragmas | [13-inline-pragmas.md](13-inline-pragmas.md) |
-| 14 | Conditional & Flow Control Formatting | [14-flow-control.md](14-flow-control.md) |
-| 15 | Configuration Meta | [15-config-meta.md](15-config-meta.md) |
-| 16 | Suppression & Ignore Options | [16-suppression.md](16-suppression.md) |
-| A | Default Configuration | [appendix-a-defaults.md](appendix-a-defaults.md) |
-| B | Example Config File | [appendix-b-example-config.md](appendix-b-example-config.md) |
-| C | Cascading Wrap Algorithm Detail | [appendix-c-cascade-algorithm.md](appendix-c-cascade-algorithm.md) |
-| D | CLI Reference | [appendix-d-cli.md](appendix-d-cli.md) |
-| E | Option Interaction Rules | [appendix-e-interactions.md](appendix-e-interactions.md) |
-| F | Keyword Dictionary | [appendix-f-keyword-dictionary.md](appendix-f-keyword-dictionary.md) |
+| #  | Section                               | File                                                                 |
+| -- | ------------------------------------- | -------------------------------------------------------------------- |
+| 1  | Line Width & Wrapping                 | [01-line-width-wrapping.md](01-line-width-wrapping.md)               |
+| 2  | Indentation                           | [02-indentation.md](02-indentation.md)                               |
+| 3  | Blank Lines                           | [03-blank-lines.md](03-blank-lines.md)                               |
+| 4  | Casing                                | [04-casing.md](04-casing.md)                                         |
+| 5  | Parentheses & Spacing                 | [05-parens-spacing.md](05-parens-spacing.md)                         |
+| 6  | Comments                              | [06-comments.md](06-comments.md)                                     |
+| 7  | Line Endings & Final Newline          | [07-line-endings.md](07-line-endings.md)                             |
+| 8  | Whitespace Normalization              | [08-whitespace.md](08-whitespace.md)                                 |
+| 9  | Alignment                             | [09-alignment.md](09-alignment.md)                                   |
+| 10 | Generator Expressions                 | [10-generator-expressions.md](10-generator-expressions.md)           |
+| 11 | Command-Specific Overrides            | [11-per-command-config.md](11-per-command-config.md)                 |
+| 12 | Sorting                               | [12-sorting.md](12-sorting.md)                                       |
+| 13 | Inline Pragmas                        | [13-inline-pragmas.md](13-inline-pragmas.md)                         |
+| 14 | Conditional & Flow Control Formatting | [14-flow-control.md](14-flow-control.md)                             |
+| 15 | Configuration Meta                    | [15-config-meta.md](15-config-meta.md)                               |
+| 16 | Suppression & Ignore Options          | [16-suppression.md](16-suppression.md)                               |
+| A  | Default Configuration                 | [appendix-a-defaults.md](appendix-a-defaults.md)                     |
+| B  | Example Config File                   | [appendix-b-example-config.md](appendix-b-example-config.md)         |
+| C  | Cascading Wrap Algorithm Detail       | [appendix-c-cascade-algorithm.md](appendix-c-cascade-algorithm.md)   |
+| D  | CLI Reference                         | [appendix-d-cli.md](appendix-d-cli.md)                               |
+| E  | Option Interaction Rules              | [appendix-e-interactions.md](appendix-e-interactions.md)             |
+| F  | Keyword Dictionary                    | [appendix-f-keyword-dictionary.md](appendix-f-keyword-dictionary.md) |
 
 ## Summary Table
 

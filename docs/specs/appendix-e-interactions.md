@@ -27,6 +27,7 @@ applies transformations in this total order:
 17. Enforce final newline policy (`finalNewline`).
 
 Rows in §E.2 describe pairwise consequences of this order.
+
 ### E.2 Pairwise interaction rules
 
 | Options                                               | Interaction                                                                                                                                                                                                                                                                                                        |

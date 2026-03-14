@@ -77,6 +77,7 @@ enabled. If omitted, the default filter is `cmakefmt=info,cmakefmt_cli=info`.
 
 Print the resolved configuration (after merging defaults, config file, and CLI overrides)
 as TOML to stdout. Useful for debugging.
+
 ### Flag Interactions
 
 | Combination                                       | Behavior                                                                                                                                             |
