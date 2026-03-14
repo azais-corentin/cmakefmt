@@ -1,0 +1,15 @@
+{
+  "scripts": {
+    "docs:dev": "vitepress dev .",
+    "docs:build": "vitepress build .",
+    "docs:preview": "vitepress preview ."
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.4"
+  },
+  "dependencies": {
+    "@iconify-json/lucide": "^1.2.97",
+    "@iconify/vue": "^5.0.0",
+    "uplot": "^1.6.32"
+  }
+}

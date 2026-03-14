@@ -2,6 +2,9 @@
   "[html]": {
     "editor.defaultFormatter": "dprint.dprint"
   },
+  "[javascript]": {
+    "editor.defaultFormatter": "dprint.dprint"
+  },
   "[json]": {
     "editor.defaultFormatter": "dprint.dprint"
   },
@@ -15,6 +18,12 @@
     "editor.defaultFormatter": "dprint.dprint"
   },
   "[toml]": {
+    "editor.defaultFormatter": "dprint.dprint"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "dprint.dprint"
+  },
+  "[vue]": {
     "editor.defaultFormatter": "dprint.dprint"
   },
   "[yaml]": {

@@ -55,6 +55,7 @@ run = "hk run pre-commit"
 
 [tools]
 actionlint = "latest"
+bun = "latest"
 cocogitto = "latest"
 dprint = "latest"
 hk = "latest"
