@@ -4,6 +4,10 @@ hero:
   name: cmakefmt
   text: An opinionated CMake formatter
   tagline: Consistent CMake formatting, zero effort.
+  image:
+    light: /cmakefmt-logo-light.svg
+    dark: /cmakefmt-logo-dark.svg
+    alt: cmakefmt logo
   actions:
     - theme: brand
       text: Get Started

@@ -2,6 +2,7 @@ import { Icon } from "@iconify/vue";
 import DefaultTheme from "vitepress/theme";
 import BenchmarkCharts from "./BenchmarkCharts.vue";
 import HomeFeatures from "./HomeFeatures.vue";
+import "./custom.css";
 
 export default {
   extends: DefaultTheme,

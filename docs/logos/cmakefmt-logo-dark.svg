@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 504 404">
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 504 404"
+  height="404px"
+  width="504px"
+>
   <defs>
     <linearGradient
       id="chevGrad"
@@ -7,23 +12,10 @@
       y1="0"
       x2="0.8"
       y2="1"
-      spreadMethod="pad"
-      gradientTransform="matrix(1.016882, -0.018516, 0.274808, 1.014813, -0.085714, 0)"
+      gradientTransform="matrix(1.016135, -0.018379, 0.271745, 1.014703, -0.085714, 0)"
     >
-      <stop offset="0" stop-color="#2D2580" />
-      <stop offset="1" stop-color="#5548C9" />
-    </linearGradient>
-    <linearGradient
-      gradientUnits="userSpaceOnUse"
-      x1="422"
-      y1="12"
-      x2="422"
-      y2="392"
-      id="gradient-0"
-      gradientTransform="matrix(0.933454, -0.358699, 0.387897, 1, -45.973137, 151.370925)"
-    >
-      <stop offset="0" style="stop-color: rgb(45, 37, 128)" />
-      <stop offset="1" style="stop-color: rgb(6.826% 7.5939% 41.738%)" />
+      <stop offset="0" stop-color="#7B6FE0" />
+      <stop offset="1" stop-color="#9D93F0" />
     </linearGradient>
   </defs>
   <path
@@ -31,14 +23,16 @@
     fill="none"
     stroke="url(#chevGrad)"
     stroke-width="24"
-    style="stroke-linecap: round; stroke-linejoin: round"
+    stroke-linecap="round"
+    stroke-linejoin="round"
   />
   <path
     d="M 352 12 L 492 202 L 352 392"
     fill="none"
+    stroke="url(#chevGrad)"
     stroke-width="24"
     stroke-linecap="round"
-    style="transform-origin: 422px 202px 0px; stroke-linejoin: round; stroke: url(&quot;#gradient-0&quot;)"
+    stroke-linejoin="round"
   />
   <g stroke-linecap="round" transform="matrix(1, 0, 0, 1, -142, -93)">
     <line
@@ -46,7 +40,7 @@
       y1="200"
       x2="460"
       y2="200"
-      stroke="#5548C9"
+      stroke="#A99DF0"
       stroke-width="12"
     />
     <line
@@ -54,7 +48,7 @@
       y1="252"
       x2="510"
       y2="252"
-      stroke="#6C5FD0"
+      stroke="#B8AEF3"
       stroke-width="12"
     />
     <line
@@ -62,7 +56,7 @@
       y1="304"
       x2="490"
       y2="304"
-      stroke="#8378DB"
+      stroke="#C5BCF7"
       stroke-width="12"
     />
     <line
@@ -70,7 +64,7 @@
       y1="356"
       x2="430"
       y2="356"
-      stroke="#9A91E3"
+      stroke="#D2CDF9"
       stroke-width="12"
     />
     <line
@@ -78,7 +72,7 @@
       y1="408"
       x2="475"
       y2="408"
-      stroke="#B1AAEB"
+      stroke="#E0DCFB"
       stroke-width="12"
     />
   </g>

@@ -8,6 +8,10 @@ export default defineConfig({
     ["link", { rel: "icon", href: "/cmakefmt/favicon.svg", type: "image/svg+xml" }],
   ],
   themeConfig: {
+    logo: {
+      light: "/cmakefmt-logo-light.svg",
+      dark: "/cmakefmt-logo-dark.svg",
+    },
     nav: [
       { text: "Guide", link: "/guide/getting-started" },
       { text: "Configuration", link: "/guide/configuration" },
