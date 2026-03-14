@@ -3,6 +3,7 @@
     "dprint.dprint",
     "github.vscode-github-actions",
     "hverlin.mise-vscode",
-    "vue.volar"
+    "vue.volar",
+    "pkl.pkl-vscode"
   ]
 }
