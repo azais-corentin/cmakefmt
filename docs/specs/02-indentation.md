@@ -87,7 +87,7 @@ target_link_libraries(MyTarget
 In this example, `PRIVATE` is indented by `indentWidth` (2) relative to the command,
 and the library names are indented by `continuationIndentWidth` (4) relative to `PRIVATE`.
 
-For commands without recognized keywords, arguments are indented by `indentWidth` (not `continuationIndentWidth`). `continuationIndentWidth` only applies to value arguments appearing under a recognized keyword.
+For commands without recognized keywords (including the universal keyword set — see Appendix F §F.1.3), arguments are indented by `indentWidth` (not `continuationIndentWidth`). `continuationIndentWidth` only applies to value arguments appearing under a recognized keyword.
 
 ### 2.4 `genexIndentWidth`
 

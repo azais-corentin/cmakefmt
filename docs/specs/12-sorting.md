@@ -57,6 +57,26 @@ target_sources(MyApp
 
 Commands without recognized keyword sections are not affected by `sortArguments`. For example, `set(VAR c a b)` retains its original argument order regardless of this setting.
 
+For `add_library` and `add_executable`, the trailing source-file arguments (after the target name and any type/option keywords) form an implicit sortable section. When `sortArguments` is enabled, these source arguments are sorted alphabetically. The target name and type/option keywords (`STATIC`, `SHARED`, `MODULE`, `OBJECT`, `WIN32`, etc.) are never reordered.
+
+```cmake
+# Input:
+add_library(mylib
+  zebra.cpp
+  alpha.cpp
+  middle.cpp
+)
+
+# Output (sortArguments = true):
+add_library(mylib
+  alpha.cpp
+  middle.cpp
+  zebra.cpp
+)
+```
+
+Imported (`add_library(<name> <type> IMPORTED [GLOBAL])`) and alias (`add_library(<name> ALIAS <target>)`) forms have no source files and are unaffected.
+
 ### 12.2 `sortKeywordSections`
 
 |             |           |

@@ -131,7 +131,9 @@ fn is_keyword_for_command(
     }
 
     match cmd_kind {
-        Some(CommandKind::Known(spec)) => is_in_command_spec(text, spec),
+        Some(CommandKind::Known(spec)) => {
+            is_in_command_spec(text, spec) || is_sort_group_keyword(text)
+        }
         Some(CommandKind::ConditionSyntax) => {
             // In condition-syntax commands, unary test ops, logical ops, and NOT
             // are keywords. Comparison operators and booleans are NOT keywords
@@ -216,7 +218,7 @@ fn is_condition_keyword(text: &str) -> bool {
         || is_not_op(text)
 }
 
-/// Commands where arguments after keywords can be sorted.
+/// Commands where arguments after keywords (or trailing positional args) can be sorted.
 const SORTABLE_COMMANDS: &[&str] = &[
     "target_link_libraries",
     "target_include_directories",
@@ -227,6 +229,8 @@ const SORTABLE_COMMANDS: &[&str] = &[
     "target_sources",
     "find_package",
     "add_custom_command",
+    "add_library",
+    "add_executable",
 ];
 
 /// Default keywords that start a sortable group (used when sortArguments=true).
@@ -961,7 +965,7 @@ fn build_argument_list_from_args(
                 });
             }
             Argument::LineComment(span) => {
-                let comment_text = span.text(source).to_string();
+                let comment_text = span.text(source).trim_end().to_string();
                 // Only attach to previous arg if on the same source line
                 let same_line = if i > 0 {
                     let prev_end = arg_ranges[i - 1].1;
@@ -1576,7 +1580,6 @@ fn split_arguments<'a>(
             && kw_type.is_none()
             && !is_section
             && !is_custom
-            && spec.keywords.is_empty()
             && spec.sections.is_empty();
         // Skip once_keywords that have already been consumed
         let is_once = kw_type.is_some() && is_once_keyword_text(&main_args[i].text, spec);
@@ -1676,7 +1679,6 @@ fn split_arguments<'a>(
                             && inner_kw.is_none()
                             && !inner_is_section
                             && !inner_is_custom
-                            && spec.keywords.is_empty()
                             && spec.sections.is_empty();
 
                         // Already-seen once_keywords are not treated as keywords
@@ -1738,7 +1740,6 @@ fn split_arguments<'a>(
                             && inner_kw.is_none()
                             && !inner_is_section
                             && !inner_is_custom
-                            && spec.keywords.is_empty()
                             && spec.sections.is_empty();
                         if inner_kw.is_some()
                             || inner_is_section
@@ -4418,17 +4419,38 @@ fn should_sort_for_command(
     }
 }
 
+/// Look up the `KwType` for a keyword text from the command spec.
+/// Returns `None` when the keyword is unrecognized or no spec is available.
+fn lookup_kw_type(kw_text: &str, cmd_kind: Option<&CommandKind>) -> Option<KwType> {
+    let spec = match cmd_kind {
+        Some(CommandKind::Known(spec)) => spec,
+        _ => return None,
+    };
+    spec.keywords
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case(kw_text))
+        .map(|(_, kt)| *kt)
+}
+
 fn sort_argument_groups(
     args: &mut [FormattedArg],
     config: &Configuration,
-    _cmd_kind: Option<&CommandKind>,
+    cmd_kind: Option<&CommandKind>,
 ) {
     let selective_keywords: Option<&[String]> = match &config.sort_arguments {
         SortArguments::CommandList(kws) => Some(kws),
         _ => None,
     };
 
+    // Number of leading non-keyword positional args to skip (e.g. target name).
+    let front = match cmd_kind {
+        Some(CommandKind::Known(spec)) => spec.front_positional,
+        _ => 0,
+    };
+
     let mut i = 0;
+    let mut positional_seen = 0usize;
+
     while i < args.len() {
         if args[i].is_keyword {
             let kw_text = &args[i].text;
@@ -4450,8 +4472,6 @@ fn sort_argument_groups(
                 let start = i + 1;
                 let mut end = start;
                 // Find end of this section (next keyword or end of args)
-                // Respect sub-keyword structures: if a sub-keyword is encountered,
-                // don't sort past it
                 while end < args.len() && !args[end].is_keyword {
                     end += 1;
                 }
@@ -4460,10 +4480,55 @@ fn sort_argument_groups(
                 }
                 i = end;
             } else {
-                i += 1;
+                // Not sortable: skip past the keyword and the args it consumes.
+                // Option keywords (flags) consume no args — remaining args may still
+                // be sortable as trailing positionals. Multi-value / section keywords
+                // consume all following non-keyword args (those belong to the section).
+                let kw_consumes = lookup_kw_type(kw_text, cmd_kind);
+                match kw_consumes {
+                    Some(KwType::Option) => {
+                        // Flag keyword: skip only the keyword itself
+                        i += 1;
+                    }
+                    Some(KwType::OneValue) => {
+                        // Skip keyword + 1 value arg
+                        i += 1;
+                        if i < args.len() && !args[i].is_keyword {
+                            i += 1;
+                        }
+                    }
+                    _ => {
+                        // MultiValue, Group, or unknown: skip entire section
+                        let mut end = i + 1;
+                        while end < args.len() && !args[end].is_keyword {
+                            end += 1;
+                        }
+                        i = end;
+                    }
+                }
             }
         } else {
-            i += 1;
+            // Non-keyword arg: track front positional count
+            positional_seen += 1;
+            if positional_seen <= front {
+                // Still in the front positional region (e.g. target name) — skip
+                i += 1;
+            } else {
+                // Past the front positionals: collect contiguous non-keyword run
+                // and sort it (these are trailing source/value args).
+                let start = i;
+                let mut end = i + 1;
+                while end < args.len() && !args[end].is_keyword {
+                    end += 1;
+                }
+                if end - start > 1 {
+                    sort_section_with_groups(&mut args[start..end]);
+                }
+                // Advance positional_seen for all args in the sorted run
+                // (the first was already counted above)
+                positional_seen += end - start - 1;
+                i = end;
+            }
         }
     }
 }
