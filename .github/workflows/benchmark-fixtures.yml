@@ -2,9 +2,14 @@ name: benchmark-fixtures
 
 on:
   push:
+  workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: benchmark-fixtures
+  cancel-in-progress: false
 
 jobs:
   benchmark:
@@ -28,34 +33,110 @@ jobs:
         run: |
           echo "RUST_VERSION=$(rustc --version)" >> "$GITHUB_ENV"
 
-      - name: Run formatter fixture benchmarks
-        run: cargo bench --bench formatter_fixtures_bench
-
-      - name: Collect normalized benchmark result
+      - name: Save scripts from HEAD
         run: |
-          python scripts/collect_benchmark_results.py \
-            --criterion-dir "target/criterion" \
-            --output "$RUNNER_TEMP/latest-benchmark.json" \
-            --commit-sha "${GITHUB_SHA}" \
-            --runner "${RUNNER_OS}" \
-            --rust-version "${RUST_VERSION}"
+          mkdir -p "$RUNNER_TEMP/scripts"
+          cp scripts/collect_benchmark_results.py "$RUNNER_TEMP/scripts/"
+          cp scripts/append_benchmark_history.py "$RUNNER_TEMP/scripts/"
 
-      - name: Append and publish benchmark history
+      - name: Plan commits to benchmark
+        id: plan
         env:
           HISTORY_BRANCH: benchmark-history
           HISTORY_FILE: benchmarks/cmakefmt-fixtures-history.json
+          SKIP_FILE: benchmarks/skipped-commits.json
+          BACKFILL_START: 4b0fd05
+          BATCH_SIZE: "20"
         run: |
           set -euo pipefail
 
-          history_worktree="$(mktemp -d)"
-          cleanup() {
-            git worktree remove "$history_worktree" --force || true
-          }
-          trap cleanup EXIT
+          default_branch_sha="$(git rev-parse HEAD)"
+          echo "DEFAULT_BRANCH_SHA=$default_branch_sha" >> "$GITHUB_ENV"
 
-          if git ls-remote --exit-code --heads origin "$HISTORY_BRANCH" >/dev/null; then
+          # Enumerate all commits in backfill range (oldest first)
+          all_commits="$(git rev-list --reverse "${BACKFILL_START}^..HEAD")"
+
+          # Collect already-processed and already-skipped SHAs
+          done_shas=""
+          skipped_shas=""
+
+          if git ls-remote --exit-code --heads origin "$HISTORY_BRANCH" >/dev/null 2>&1; then
             git fetch origin "$HISTORY_BRANCH"
-            # Abort if the branch shares history with the default branch
+
+            # Extract commit SHAs from history file
+            if git cat-file -e "origin/$HISTORY_BRANCH:$HISTORY_FILE" 2>/dev/null; then
+              done_shas="$(git show "origin/$HISTORY_BRANCH:$HISTORY_FILE" \
+                | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          entries = data.get('entries', data) if isinstance(data, dict) else data
+          for e in entries:
+              print(e.get('commit_sha', ''))
+          " | sort -u)"
+            fi
+
+            # Extract skipped SHAs
+            if git cat-file -e "origin/$HISTORY_BRANCH:$SKIP_FILE" 2>/dev/null; then
+              skipped_shas="$(git show "origin/$HISTORY_BRANCH:$SKIP_FILE" \
+                | python3 -c "
+          import json, sys
+          for sha in json.load(sys.stdin):
+              print(sha)
+          " | sort -u)"
+            fi
+          fi
+
+          # Merge done + skipped into a single exclusion set
+          exclude_set="$(printf '%s\n%s' "$done_shas" "$skipped_shas" | sort -u)"
+
+          # Build TODO list: HEAD first (if not yet processed), then oldest-first
+          todo_file="$RUNNER_TEMP/commits-to-bench.txt"
+          : > "$todo_file"
+          count=0
+
+          # Check if HEAD needs benchmarking
+          head_sha="$default_branch_sha"
+          if ! echo "$exclude_set" | grep -qxF "$head_sha"; then
+            echo "$head_sha" >> "$todo_file"
+            count=$((count + 1))
+          fi
+
+          # Fill remaining slots with oldest-first chronological commits
+          while IFS= read -r sha; do
+            if [ "$count" -ge "$BATCH_SIZE" ]; then
+              break
+            fi
+            # Skip HEAD (already handled) and excluded commits
+            if [ "$sha" = "$head_sha" ]; then
+              continue
+            fi
+            if echo "$exclude_set" | grep -qxF "$sha"; then
+              continue
+            fi
+            echo "$sha" >> "$todo_file"
+            count=$((count + 1))
+          done <<< "$all_commits"
+
+          echo "Commits to benchmark: $count"
+          if [ "$count" -eq 0 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            cat "$todo_file"
+          fi
+
+      - name: Set up history worktree
+        if: steps.plan.outputs.skip != 'true'
+        env:
+          HISTORY_BRANCH: benchmark-history
+          SKIP_FILE: benchmarks/skipped-commits.json
+        run: |
+          set -euo pipefail
+
+          history_worktree="$RUNNER_TEMP/history-worktree"
+
+          if git ls-remote --exit-code --heads origin "$HISTORY_BRANCH" >/dev/null 2>&1; then
+            # Already fetched in plan step
             if git merge-base "origin/$HISTORY_BRANCH" HEAD >/dev/null 2>&1; then
               echo "::error::$HISTORY_BRANCH shares history with the default branch. Delete it and re-run." >&2
               exit 1
@@ -65,23 +146,93 @@ jobs:
             git worktree add --orphan -b "$HISTORY_BRANCH" "$history_worktree"
           fi
 
-          cp "$RUNNER_TEMP/latest-benchmark.json" "$history_worktree/latest-benchmark.json"
+          # Initialize skipped-commits.json if it doesn't exist
+          if [ ! -f "$history_worktree/$SKIP_FILE" ]; then
+            mkdir -p "$(dirname "$history_worktree/$SKIP_FILE")"
+            echo '[]' > "$history_worktree/$SKIP_FILE"
+          fi
 
-          python scripts/append_benchmark_history.py \
-            --entry-file "$history_worktree/latest-benchmark.json" \
-            --history-file "$history_worktree/$HISTORY_FILE"
+          echo "HISTORY_WORKTREE=$history_worktree" >> "$GITHUB_ENV"
 
-          rm "$history_worktree/latest-benchmark.json"
+      - name: Run benchmark loop
+        if: steps.plan.outputs.skip != 'true'
+        env:
+          HISTORY_FILE: benchmarks/cmakefmt-fixtures-history.json
+          SKIP_FILE: benchmarks/skipped-commits.json
+        run: |
+          set -euo pipefail
 
-          git -C "$history_worktree" config user.name "github-actions[bot]"
-          git -C "$history_worktree" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          todo_file="$RUNNER_TEMP/commits-to-bench.txt"
+          entry_file="$RUNNER_TEMP/bench-entry.json"
 
-          git -C "$history_worktree" add "$HISTORY_FILE"
+          while IFS= read -r sha; do
+            echo "::group::Benchmarking $sha"
 
-          if git -C "$history_worktree" diff --cached --quiet; then
+            commit_ts="$(git show -s --format=%aI "$sha")"
+
+            git checkout "$sha" --
+
+            # Attempt benchmark; on failure, record skip and continue
+            if ! cargo bench --bench formatter_fixtures_bench; then
+              echo "::warning::Benchmark failed for $sha — recording as skipped"
+              python3 -c "
+          import json, sys
+          path = sys.argv[1]
+          with open(path, 'r') as f:
+              skipped = json.load(f)
+          if sys.argv[2] not in skipped:
+              skipped.append(sys.argv[2])
+          with open(path, 'w') as f:
+              json.dump(skipped, f, indent=2)
+              f.write('\n')
+          " "$HISTORY_WORKTREE/$SKIP_FILE" "$sha"
+              echo "::endgroup::"
+              continue
+            fi
+
+            python3 "$RUNNER_TEMP/scripts/collect_benchmark_results.py" \
+              --criterion-dir "target/criterion" \
+              --output "$entry_file" \
+              --commit-sha "$sha" \
+              --commit-timestamp "$commit_ts" \
+              --runner "${RUNNER_OS}" \
+              --rust-version "${RUST_VERSION}"
+
+            python3 "$RUNNER_TEMP/scripts/append_benchmark_history.py" \
+              --entry-file "$entry_file" \
+              --history-file "$HISTORY_WORKTREE/$HISTORY_FILE"
+
+            rm -f "$entry_file"
+
+            echo "::endgroup::"
+          done < "$todo_file"
+
+          # Restore working tree to default branch
+          git checkout "$DEFAULT_BRANCH_SHA" --
+
+      - name: Publish benchmark history
+        if: steps.plan.outputs.skip != 'true'
+        env:
+          HISTORY_BRANCH: benchmark-history
+          HISTORY_FILE: benchmarks/cmakefmt-fixtures-history.json
+          SKIP_FILE: benchmarks/skipped-commits.json
+        run: |
+          set -euo pipefail
+
+          git -C "$HISTORY_WORKTREE" config user.name "github-actions[bot]"
+          git -C "$HISTORY_WORKTREE" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git -C "$HISTORY_WORKTREE" add "$HISTORY_FILE" "$SKIP_FILE"
+
+          if git -C "$HISTORY_WORKTREE" diff --cached --quiet; then
             echo "No benchmark history changes to commit"
             exit 0
           fi
 
-          git -C "$history_worktree" commit -m "bench: append fixture benchmark history for ${GITHUB_SHA}"
-          git -C "$history_worktree" push origin "HEAD:$HISTORY_BRANCH"
+          git -C "$HISTORY_WORKTREE" commit -m "bench: update fixture benchmark history"
+          git -C "$HISTORY_WORKTREE" push origin "HEAD:$HISTORY_BRANCH"
+
+      - name: Clean up history worktree
+        if: always() && steps.plan.outputs.skip != 'true'
+        run: |
+          git worktree remove "$HISTORY_WORKTREE" --force || true
