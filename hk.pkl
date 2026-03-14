@@ -26,10 +26,16 @@ local linters = new Mapping<String, Step> {
   ["pinact"] = Builtins.pinact
   // -- hygiene --
   ["trailing-whitespace"] = (Builtins.trailing_whitespace) {
-    exclude = List("crates/cmakefmt/tests/formatter/**", "*.lock")
+    exclude =
+      List(
+        "crates/cmakefmt/tests/formatter/**",
+        "*.lock",
+        "docs/screenshots/input.cmake",
+        "docs/screenshots/input.svg",
+      )
   }
   ["newlines"] = (Builtins.newlines) {
-    exclude = List("crates/cmakefmt/tests/formatter/**", "*.lock")
+    exclude = List("crates/cmakefmt/tests/formatter/**", "*.lock", "docs/screenshots/input.cmake")
   }
   ["check-merge-conflict"] = Builtins.check_merge_conflict
   ["detect-private-key"] = Builtins.detect_private_key
