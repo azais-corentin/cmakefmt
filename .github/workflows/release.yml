@@ -6,7 +6,7 @@ on:
       - "v*"
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -18,9 +18,10 @@ jobs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Extract version from tag
         id: version
@@ -39,10 +40,13 @@ jobs:
           fi
 
       - name: Set up Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        run: rustup toolchain install stable --profile minimal
 
       - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          save-if: false
+          lookup-only: true
 
       - name: Run tests
         run: cargo test
@@ -75,17 +79,19 @@ jobs:
       ARTIFACT_NAME: cmakefmt-${{ needs.validate.outputs.version }}-${{ matrix.target }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Set up Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
+        run: rustup toolchain install stable --profile minimal --target ${{ matrix.target }}
 
       - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           key: ${{ matrix.target }}
+          save-if: false
+          lookup-only: true
 
       - name: Build CLI
         run: cargo build --release -p cmakefmt-cli --target ${{ matrix.target }}
@@ -106,7 +112,7 @@ jobs:
         shell: bash
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: ${{ env.ARTIFACT_NAME }}
           path: cmakefmt-*.${{ matrix.archive }}
@@ -119,15 +125,18 @@ jobs:
       WASM_NAME: cmakefmt-dprint-${{ needs.validate.outputs.version }}.wasm
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Set up Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
+        run: rustup toolchain install stable --profile minimal --target wasm32-unknown-unknown
 
       - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          save-if: false
+          lookup-only: true
 
       - name: Build WASM plugin
         run: cargo build --profile release-wasm -p cmakefmt-dprint --target wasm32-unknown-unknown
@@ -136,7 +145,7 @@ jobs:
         run: cp target/wasm32-unknown-unknown/release-wasm/cmakefmt_dprint.wasm "$WASM_NAME"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: cmakefmt-dprint-wasm
           path: ${{ env.WASM_NAME }}
@@ -148,13 +157,18 @@ jobs:
     environment: crates-io
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Set up Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        run: rustup toolchain install stable --profile minimal
 
       - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          save-if: false
+          lookup-only: true
 
       - name: Publish cmakefmt (core)
         run: cargo publish -p cmakefmt-rs
@@ -172,26 +186,29 @@ jobs:
   release:
     needs: [build-cli, build-wasm, publish-crate]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install git-cliff
-        uses: orhun/git-cliff-action@v4
+        uses: orhun/git-cliff-action@c93ef52f3d0ddcdcc9bd5447d98d458a11cd4f72 # v4.7.1
         with:
           args: --version
 
       - name: Generate changelog
         id: changelog
-        uses: orhun/git-cliff-action@v4
+        uses: orhun/git-cliff-action@c93ef52f3d0ddcdcc9bd5447d98d458a11cd4f72 # v4.7.1
         with:
           config: cliff.toml
           args: --latest --strip header
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: artifacts
           merge-multiple: true
@@ -200,8 +217,12 @@ jobs:
         run: find artifacts -type f | sort
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          body: ${{ steps.changelog.outputs.content }}
-          files: artifacts/*
-          fail_on_unmatched_files: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+          CHANGELOG: ${{ steps.changelog.outputs.content }}
+        run: >-
+          gh release create "$TAG_NAME"
+          --title "$TAG_NAME"
+          --notes "$CHANGELOG"
+          artifacts/*

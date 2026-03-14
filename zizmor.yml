@@ -1,0 +1,5 @@
+rules:
+  use-trusted-publishing:
+    ignore:
+      # crates.io does not support trusted publishing via `cargo publish`
+      - release.yml
