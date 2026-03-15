@@ -40,6 +40,7 @@ jobs:
           cp scripts/append_benchmark_history.py "$RUNNER_TEMP/scripts/"
           cp scripts/collect_baseline_results.py "$RUNNER_TEMP/scripts/"
           cp scripts/bench_cmake_format_baseline.py "$RUNNER_TEMP/scripts/"
+          cp scripts/bench_gersemi_baseline.py "$RUNNER_TEMP/scripts/"
 
       - name: Plan commits to benchmark
         id: plan
@@ -180,7 +181,6 @@ jobs:
         run: |
           set -euo pipefail
           pip install cmakelang gersemi pytest pytest-benchmark
-          sudo apt-get install -y hyperfine
 
       - name: Run cmake_format baseline
         if: steps.plan.outputs.skip != 'true' && steps.check_baselines.outputs.skip != 'true'
@@ -190,11 +190,9 @@ jobs:
 
       - name: Run gersemi baseline
         if: steps.plan.outputs.skip != 'true' && steps.check_baselines.outputs.skip != 'true'
-        env:
-          FIXTURE: crates/cmakefmt/tests/formatter/respositories/XNNPACK/CMakeLists.in.cmake
         run: |
-          hyperfine --warmup 3 --runs 10 --export-json "$RUNNER_TEMP/gersemi-bench.json" \
-            "gersemi --no-cache - < $FIXTURE"
+          pytest "$RUNNER_TEMP/scripts/bench_gersemi_baseline.py" \
+            --benchmark-json="$RUNNER_TEMP/gersemi-bench.json"
 
       - name: Collect baseline results
         if: steps.plan.outputs.skip != 'true' && steps.check_baselines.outputs.skip != 'true'
