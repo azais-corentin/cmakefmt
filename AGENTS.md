@@ -265,6 +265,7 @@ Before non-trivial changes:
 4. Run targeted test command(s) for touched behavior.
 5. For performance-sensitive changes, run fixture benchmark.
 6. For changes to the documentation website (`docs/website/`), use Puppeteer to visually verify the rendered result in a browser.
+7. After all modifications are complete, run `dprint fmt` to ensure consistent formatting across all touched files.
 
 Avoid:
 
