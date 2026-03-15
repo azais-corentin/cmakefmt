@@ -28,16 +28,8 @@ formatter returns it unchanged -- it never silently corrupts your code.
 
 ## Before / After
 
-<div style="display: flex; justify-content: center; align-items: flex-start; gap: 2rem; width: 100%;">
-  <div style="flex: 1; text-align: center;">
-    <img src="docs/screenshots/input.svg" alt="Before formatting" style="max-width: 100%; height: auto;">
-    <div><b>Before</b></div>
-  </div>
-  <div style="flex: 1; text-align: center;">
-    <img src="docs/screenshots/output.svg" alt="After formatting" style="max-width: 100%; height: auto;">
-    <div><b>After</b></div>
-  </div>
-</div>
+<img src="docs/screenshots/input.svg" alt="Before formatting" style="max-width: 100%; height: auto;">
+<img src="docs/screenshots/output.svg" alt="After formatting" style="max-width: 100%; height: auto;">
 
 ## Features
 
