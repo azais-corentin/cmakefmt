@@ -74,22 +74,6 @@ function textColor(dark: boolean) {
   return dark ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.78)";
 }
 
-// -- Tooltip formatter for line charts --
-
-function tooltipValueFormatter(suffix: "ms" | "MB/s") {
-  return (
-    _self: uPlot,
-    rawValue: number,
-    _seriesIdx: number,
-    idx: number | null,
-  ) => {
-    if (idx == null || !data) return "--";
-    const sha = data.commitShas[idx]?.slice(0, 7) ?? "?";
-    const date = new Date(data.timestamps[idx] * 1000).toLocaleDateString();
-    return `${formatValue(rawValue, suffix)}  (${sha} — ${date})`;
-  };
-}
-
 // -- Data parsing --
 
 /** Compute aggregate CIs from fixture-level median CIs. */
@@ -213,14 +197,15 @@ function makeOpts(
   bandFill: string,
   width: number,
   dark: boolean,
+  timestamps: number[],
+  commitShas: string[],
 ): uPlot.Options {
   const series: uPlot.Series[] = [
     {
       value: (_u: uPlot, _v: number, _si: number, idx: number | null) => {
-        if (idx == null || !data) return "--";
-        const sha = data.commitShas[idx]?.slice(0, 7) ?? "?";
-        const date = new Date(data.timestamps[idx] * 1000)
-          .toLocaleDateString();
+        if (idx == null) return "--";
+        const sha = commitShas[idx]?.slice(0, 7) ?? "?";
+        const date = new Date(timestamps[idx] * 1000).toLocaleDateString();
         return `${sha} — ${date}`;
       },
     },
@@ -228,7 +213,17 @@ function makeOpts(
       label: yLabel,
       stroke: strokeColor,
       width: 2,
-      value: tooltipValueFormatter(suffix),
+      value: (
+        _self: uPlot,
+        rawValue: number,
+        _seriesIdx: number,
+        idx: number | null,
+      ) => {
+        if (idx == null) return "--";
+        const sha = commitShas[idx]?.slice(0, 7) ?? "?";
+        const date = new Date(timestamps[idx] * 1000).toLocaleDateString();
+        return `${formatValue(rawValue, suffix)}  (${sha} — ${date})`;
+      },
       paths: uPlot.paths.stepped!({ align: 1 }),
     },
     // CI lower bound — hidden line, used only as band edge.
@@ -270,8 +265,69 @@ function makeOpts(
         grid: { stroke: gridColor(dark) },
         ticks: { stroke: gridColor(dark) },
         space: 70,
-        values: (_u: uPlot, splits: number[]) =>
-          splits.map((i) => data?.commitShas[i]?.slice(0, 7) ?? ""),
+        // Generate ticks at regular time intervals, labeled by nearest commit SHA.
+        splits: (u: uPlot) => {
+          if (timestamps.length === 0) return [];
+          const [minTs, maxTs] = [u.scales.x.min!, u.scales.x.max!];
+          const rangeS = maxTs - minTs;
+          if (rangeS <= 0) return [timestamps[0]];
+
+          // Canonical intervals in seconds.
+          const intervals = [
+            86_400, // 1 day
+            3 * 86_400, // 3 days
+            7 * 86_400, // 1 week
+            14 * 86_400, // 2 weeks
+            30 * 86_400, // ~1 month
+            60 * 86_400, // ~2 months
+            91 * 86_400, // ~3 months
+            182 * 86_400, // ~6 months
+            365 * 86_400, // ~1 year
+          ];
+
+          const pxWidth = u.bbox.width / devicePixelRatio;
+          const maxTicks = Math.max(2, Math.floor(pxWidth / 70));
+          const idealStep = rangeS / maxTicks;
+
+          // Pick smallest interval >= idealStep.
+          let step = intervals[intervals.length - 1];
+          for (const iv of intervals) {
+            if (iv >= idealStep) {
+              step = iv;
+              break;
+            }
+          }
+
+          // Generate ticks from a rounded start.
+          const start = Math.floor(minTs / step) * step;
+          const result: number[] = [];
+          for (let t = start; t <= maxTs + step; t += step) {
+            if (t >= minTs && t <= maxTs) {
+              result.push(t);
+            }
+          }
+          return result;
+        },
+        values: (_u: uPlot, splits: number[]) => {
+          let lastSha = "";
+          return splits.map((t) => {
+            // Find nearest data-point timestamp via linear scan (sorted, small N).
+            let bestIdx = 0;
+            let bestDist = Infinity;
+            for (let i = 0; i < timestamps.length; i++) {
+              const d = Math.abs(timestamps[i] - t);
+              if (d < bestDist) {
+                bestDist = d;
+                bestIdx = i;
+              }
+            }
+            const sha = commitShas[bestIdx]?.slice(0, 7) ?? "";
+            // Deduplicate: don't repeat the same SHA on adjacent ticks.
+            if (sha === lastSha) return "";
+            lastSha = sha;
+            return sha;
+          });
+        },
       },
       {
         label: yLabel,
@@ -447,19 +503,19 @@ async function createCharts(dark: boolean) {
 
   if (!data || data.timestamps.length === 0) return;
 
-  const indices = data.timestamps.map((_: number, i: number) => i);
+  const xValues = data.timestamps;
   const tWidth = throughputContainer.value?.clientWidth ?? 600;
   const mWidth = timingContainer.value?.clientWidth ?? 600;
 
   const throughputData: uPlot.AlignedData = [
-    indices,
+    xValues,
     data.throughputs,
     data.throughputCILo,
     data.throughputCIHi,
   ];
 
   const timingData: uPlot.AlignedData = [
-    indices,
+    xValues,
     data.timings,
     data.timingCILo,
     data.timingCIHi,
@@ -475,6 +531,8 @@ async function createCharts(dark: boolean) {
         "rgba(34,197,94,0.12)",
         tWidth,
         dark,
+        data.timestamps,
+        data.commitShas,
       ),
       throughputData,
       throughputContainer.value,
@@ -491,6 +549,8 @@ async function createCharts(dark: boolean) {
         "rgba(99,102,241,0.12)",
         mWidth,
         dark,
+        data.timestamps,
+        data.commitShas,
       ),
       timingData,
       timingContainer.value,
@@ -728,5 +788,15 @@ onUnmounted(() => {
 
 .chart-container :deep(.u-legend .u-label) {
   font-weight: normal;
+}
+
+/* Reset VitePress table borders leaking into uPlot legends. */
+.chart-container :deep(.u-legend tr) {
+  border-top: none;
+}
+
+.chart-container :deep(.u-legend th),
+.chart-container :deep(.u-legend td) {
+  border: none;
 }
 </style>
