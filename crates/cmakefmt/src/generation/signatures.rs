@@ -854,7 +854,7 @@ static STRING_KW: &[(&str, KwType)] = &[
 
 static STRING_SPEC: CommandSpec = CommandSpec {
     front_positional: 0,
-    back_positional: 1,
+    back_positional: 0,
     keywords: STRING_KW,
     sections: &[],
     command_line_keywords: &[],
