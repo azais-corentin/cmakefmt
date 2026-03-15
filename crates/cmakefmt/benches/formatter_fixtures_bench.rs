@@ -29,6 +29,31 @@ fn formatter_xnnpack_in_bench(c: &mut Criterion) {
     group.finish();
 }
 
+fn formatter_synthetic_in_bench(c: &mut Criterion) {
+    let fixture_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/formatter/respositories/synthetic/CMakeLists.in.cmake");
+    let input = std::fs::read_to_string(&fixture_path)
+        .unwrap_or_else(|err| panic!("failed reading {}: {err}", fixture_path.display()));
+    let config = load_from_toml_path(&fixture_path).config;
+
+    let mut group = c.benchmark_group("formatter_fixtures");
+    group.throughput(Throughput::Bytes(input.len() as u64));
+    group.bench_function(
+        BenchmarkId::new("fixture", "respositories__synthetic__cmakelists__in"),
+        move |b| {
+            b.iter(|| {
+                format_text(
+                    fixture_path.as_path(),
+                    black_box(&input),
+                    black_box(&config),
+                )
+                .expect("benchmark formatter invocation must succeed");
+            });
+        },
+    );
+    group.finish();
+}
+
 fn configured_criterion() -> Criterion {
     Criterion::default().without_plots()
 }
@@ -36,6 +61,6 @@ fn configured_criterion() -> Criterion {
 criterion_group! {
     name = benches;
     config = configured_criterion();
-    targets = formatter_xnnpack_in_bench
+    targets = formatter_xnnpack_in_bench, formatter_synthetic_in_bench
 }
 criterion_main!(benches);

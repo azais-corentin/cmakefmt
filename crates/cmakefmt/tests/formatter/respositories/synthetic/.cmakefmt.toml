@@ -1,0 +1,46 @@
+# Non-default configuration to exercise maximum formatting code paths
+# during benchmarking.
+
+lineWidth = 80
+wrapStyle = "cascade"
+firstArgSameLine = true
+wrapArgThreshold = 0
+magicTrailingNewline = true
+
+indentWidth = 2
+indentBlockBody = true
+
+# Non-default: enforce blank lines between blocks
+maxBlankLines = 1
+minBlankLinesBetweenBlocks = 1
+blankLineBetweenSections = true
+
+commandCase = "lower"
+keywordCase = "upper"
+literalCase = "unchanged"
+
+closingParenNewline = true
+spaceInsideParen = "remove"
+
+# Non-default: enable comment reflow
+commentPreservation = "reflow"
+commentWidth = 80
+alignTrailingComments = true
+commentGap = 1
+
+# Non-default: enable alignment passes
+alignPropertyValues = true
+alignConsecutiveSet = true
+alignArgGroups = true
+
+genexWrap = "cascade"
+genexClosingAngleNewline = true
+
+# Non-default: enable sorting
+sortArguments = true
+sortKeywordSections = true
+
+endCommandArgs = "match"
+finalNewline = true
+trimTrailingWhitespace = true
+collapseSpaces = true
