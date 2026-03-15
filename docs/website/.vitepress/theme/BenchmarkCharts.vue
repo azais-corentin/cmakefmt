@@ -645,7 +645,7 @@ onUnmounted(() => {
         <div ref="throughputBarContainer" class="chart-container bar-chart" />
         <div ref="timingBarContainer" class="chart-container bar-chart" />
         <p class="comparison-description">
-          Each tool formats the same ~190 KB CMake file (<code
+          Each tool formats the same ~350 KB CMake file (<code
           >XNNPACK/CMakeLists.txt</code>) in memory using its public API.
           cmakefmt is measured with
           <a
