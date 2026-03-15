@@ -103,7 +103,7 @@ mise run build:release                 # optimized WASM plugin (release-wasm pro
 # Test
 mise run test                          # all tests
 cargo test --test formatter_tests      # fixture tests only
-mise run test:filter -- 04_casing      # fixture tests matching substring
+mise run test:filter 04_casing      # fixture tests matching substring
 
 # Lint/format
 mise run check                         # clippy -D warnings + cargo fmt --check
