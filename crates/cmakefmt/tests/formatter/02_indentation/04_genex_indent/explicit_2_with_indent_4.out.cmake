@@ -1,4 +1,4 @@
-# cmakefmt: push { indentWidth = 4, genexIndentWidth = 2, lineWidth = 50 }
+# cmakefmt: push { indentWidth = 4, genexIndentWidth = 2, lineWidth = 47 }
 target_compile_definitions(MyLib
     PRIVATE
         $<$<CONFIG:Debug>:

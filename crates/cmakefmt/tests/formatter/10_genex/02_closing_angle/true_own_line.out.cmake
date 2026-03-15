@@ -1,4 +1,4 @@
-# cmakefmt: push { lineWidth = 50 }
+# cmakefmt: push { lineWidth = 45 }
 target_compile_definitions(MyLib
   PRIVATE
     $<$<CONFIG:Debug>:

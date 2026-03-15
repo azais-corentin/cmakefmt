@@ -4973,7 +4973,7 @@ fn genex_inline_text(node: &GenexNode) -> String {
         GenexNode::ConditionGenex { condition, values } => {
             let cond_text = genex_inline_text(condition);
             let values_text: Vec<String> = values.iter().map(genex_inline_text).collect();
-            format!("$<{cond_text}:{}>", values_text.join(" "))
+            format!("$<{cond_text}:{}>", values_text.join(";"))
         }
     }
 }
@@ -4995,12 +4995,14 @@ fn genex_is_inline(node: &GenexNode) -> bool {
 }
 
 fn condition_genex_should_inline(
-    _condition: &GenexNode,
-    _values: &[GenexNode],
-    _depth: usize,
-    _close_suffix: &str,
+    node: &GenexNode,
+    extra_indent: usize,
+    close_suffix: &str,
+    config: &Configuration,
 ) -> bool {
-    false
+    let inline_text = genex_inline_text(node);
+    let total_width = extra_indent + inline_text.len() + close_suffix.len();
+    total_width <= config.line_width as usize
 }
 
 fn condition_genex_prefers_compact_close(condition: &GenexNode) -> bool {
@@ -5030,7 +5032,7 @@ fn format_genex_impl(
     items: &mut PrintItems,
     node: &GenexNode,
     close_suffix: &str,
-    depth: usize,
+    _depth: usize,
     config: &Configuration,
     extra_indent: usize,
 ) {
@@ -5061,7 +5063,7 @@ fn format_genex_impl(
                 let child_indent = extra_indent + genex_indent;
                 for (i, child) in children.iter().enumerate() {
                     push_newline_with_visual_indent(items, child_indent, config);
-                    format_genex_impl(items, child, "", depth + 1, config, child_indent);
+                    format_genex_impl(items, child, "", _depth + 1, config, child_indent);
                     if i + 1 < children.len() {
                         items.push_str_runtime_width_computed(",");
                     }
@@ -5081,7 +5083,7 @@ fn format_genex_impl(
             }
         }
         GenexNode::ConditionGenex { condition, values } => {
-            if condition_genex_should_inline(condition, values, depth, close_suffix) {
+            if condition_genex_should_inline(node, extra_indent, close_suffix, config) {
                 let text = format!("{}{close_suffix}", genex_inline_text(node));
                 items.extend(ir_helpers::gen_from_raw_string(&text));
                 return;
@@ -5093,7 +5095,7 @@ fn format_genex_impl(
             } else {
                 // Condition is multi-line: `$<` then condition with >: suffix.
                 items.extend(ir_helpers::gen_from_raw_string("$<"));
-                format_genex_impl(items, condition, ":", depth + 1, config, extra_indent);
+                format_genex_impl(items, condition, ":", _depth + 1, config, extra_indent);
             }
             // Values indented relative to the `$<` opener column.
             let genex_indent = config.effective_genex_indent_width() as usize;
@@ -5114,7 +5116,7 @@ fn format_genex_impl(
             } else {
                 for val in values {
                     push_newline_with_visual_indent(items, value_indent, config);
-                    format_genex_impl(items, val, "", depth + 1, config, value_indent);
+                    format_genex_impl(items, val, "", _depth + 1, config, value_indent);
                 }
             }
             if config.genex_closing_angle_newline {
