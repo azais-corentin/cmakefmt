@@ -180,6 +180,16 @@ function parseEntries(
     }
   }
 
+  // Ensure stable display order: cmake_format, gersemi.
+  const BASELINE_ORDER: Record<string, number> = {
+    cmake_format: 0,
+    gersemi: 1,
+  };
+  baselines.sort((a, b) =>
+    (BASELINE_ORDER[a.label.split(" ")[0]] ?? 99)
+    - (BASELINE_ORDER[b.label.split(" ")[0]] ?? 99)
+  );
+
   return {
     timestamps,
     commitShas,
@@ -458,7 +468,7 @@ async function createCharts(dark: boolean) {
   if (throughputContainer.value) {
     throughputChart = new uPlot(
       makeOpts(
-        "Aggregate Throughput",
+        "Aggregate Throughput (higher is better)",
         "MB/s",
         "MB/s",
         "#22c55e",
@@ -474,7 +484,7 @@ async function createCharts(dark: boolean) {
   if (timingContainer.value) {
     timingChart = new uPlot(
       makeOpts(
-        "Aggregate Timing",
+        "Aggregate Timing (lower is better)",
         "ms",
         "ms",
         "#6366f1",
@@ -497,21 +507,21 @@ async function createCharts(dark: boolean) {
     const cmakefmtThroughput = data.throughputs[lastIdx];
     const cmakefmtTiming = data.timings[lastIdx];
 
-    const toolNames = ["cmakefmt", ...data.baselines.map((b) => b.label)];
+    const toolNames = [...data.baselines.map((b) => b.label), "cmakefmt"];
     const throughputValues = [
-      cmakefmtThroughput,
       ...data.baselines.map((b) => b.throughputMBps),
+      cmakefmtThroughput,
     ];
     const timingValues = [
-      cmakefmtTiming,
       ...data.baselines.map((b) => b.timingMs),
+      cmakefmtTiming,
     ];
 
     const barWidth = throughputBarContainer.value?.clientWidth ?? 600;
 
     if (throughputBarContainer.value) {
       const { opts, chartData } = makeBarOpts(
-        "Throughput Comparison",
+        "Throughput Comparison (higher is better)",
         "MB/s",
         toolNames,
         throughputValues,
@@ -527,7 +537,7 @@ async function createCharts(dark: boolean) {
 
     if (timingBarContainer.value) {
       const { opts, chartData } = makeBarOpts(
-        "Timing Comparison",
+        "Timing Comparison (lower is better)",
         "ms",
         toolNames,
         timingValues,
@@ -630,13 +640,27 @@ onUnmounted(() => {
     <div v-if="loading" class="state-msg">Loading benchmark data…</div>
     <div v-else-if="error" class="state-msg error">Error: {{ error }}</div>
     <template v-else>
-      <div ref="throughputContainer" class="chart-container" />
-      <div ref="timingContainer" class="chart-container" />
       <template v-if="hasBaselines">
         <h3 class="comparison-heading">Tool Comparison</h3>
         <div ref="throughputBarContainer" class="chart-container bar-chart" />
         <div ref="timingBarContainer" class="chart-container bar-chart" />
+        <p class="comparison-description">
+          Each tool formats the same ~190 KB CMake file (<code
+          >XNNPACK/CMakeLists.txt</code>) in memory using its public API.
+          cmakefmt is measured with
+          <a
+            href="https://bheisler.github.io/criterion.rs/book/"
+            target="_blank"
+          >Criterion</a>; cmake_format and gersemi use
+          <a href="https://pytest-benchmark.readthedocs.io/" target="_blank"
+          >pytest-benchmark</a>. All three run on the same CI machine in a
+          single workflow.
+        </p>
       </template>
+      <h3 class="comparison-heading">Performance History</h3>
+      <p>Performance history from CI benchmark runs.</p>
+      <div ref="throughputContainer" class="chart-container" />
+      <div ref="timingContainer" class="chart-container" />
     </template>
   </div>
 </template>
@@ -661,6 +685,24 @@ onUnmounted(() => {
   font-size: 1.15rem;
   font-weight: 600;
   color: var(--vp-c-text-1);
+}
+
+.comparison-description {
+  margin-top: -0.5rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--vp-c-text-2);
+}
+
+.comparison-description code {
+  font-size: 0.85em;
+  color: var(--vp-c-text-1);
+}
+
+.comparison-description a {
+  color: var(--vp-c-brand-1);
+  text-decoration: underline;
 }
 
 .state-msg {
