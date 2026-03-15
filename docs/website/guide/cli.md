@@ -3,10 +3,10 @@
 ## Usage
 
 ```bash
-cmakefmt [OPTIONS] [FILE...]
+cmakefmt [OPTIONS] [FILE|GLOB...]
 ```
 
-`cmakefmt` formats CMake files (`CMakeLists.txt` and `*.cmake`). By default, it reads the given files and writes formatted output to stdout.
+`cmakefmt` formats CMake files (`CMakeLists.txt` and `*.cmake`). By default, it reads the given files and writes formatted output to stdout. File arguments may include glob patterns (e.g. `src/**/*.cmake`).
 
 If no files are given and `--stdin` is not passed, the formatter reads from stdin.
 
@@ -14,7 +14,7 @@ If no files are given and `--stdin` is not passed, the formatter reads from stdi
 
 ### Default (stdout)
 
-Formatted output is written to stdout. No files are modified.
+Formatted output is written to stdout. No files are modified. If a parse error occurs, the original input is written to stdout unchanged, preserving the source for editor piping.
 
 ### `--write` / `--inplace`
 
@@ -50,14 +50,15 @@ Read CMake source from stdin and write formatted output to stdout. Used for edit
 | `--diff`                     | Print a unified diff of formatting changes. No files are modified. |
 | `-w`, `--write`, `--inplace` | Write formatted output back to files in-place.                     |
 | `--stdin`                    | Read source from stdin, write formatted output to stdout.          |
+| `-V`, `--version`            | Print version information and exit.                                |
 
 ### Configuration
 
-| Flag                       | Description                                                                                                                       |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `--config <PATH>`          | Explicit path to a `.cmakefmt.toml` configuration file. Overrides the normal config discovery walk.                               |
-| `--assume-filename <PATH>` | Pretend stdin input comes from this file path. Used for config discovery and file-type detection. Only meaningful with `--stdin`. |
-| `--print-config`           | Print the resolved configuration (after merging defaults, config file, and CLI overrides) as TOML to stdout.                      |
+| Flag                       | Description                                                                                                                                                                             |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--config <PATH>`          | Explicit path to a `.cmakefmt.toml` configuration file. Overrides the normal config discovery walk.                                                                                     |
+| `--assume-filename <PATH>` | Pretend stdin input comes from this file path. Used for config discovery and file-type detection. Only meaningful with `--stdin`.                                                       |
+| `--print-config`           | Print the resolved configuration (after merging defaults, config file, and CLI overrides) as TOML to stdout. When multiple files are given, resolves configuration from the first file. |
 
 ### Diagnostics
 
@@ -78,6 +79,8 @@ Without `--color` or `--no-color`, color is auto-detected based on whether stdou
 | `--trace-summary-output <PATH>` | Write a normalized summary JSON (stage aggregates, hotspots, per-file timing) to the provided path. Requires `--trace-output`. |
 | `--trace-filter <DIRECTIVE>`    | `tracing_subscriber::EnvFilter` directive string for trace capture. Default: `cmakefmt=info,cmakefmt_cli=info`.                |
 
+> **Note:** The trace summary intentionally excludes CMake source snippets and argument text.
+
 ## Format Override Flags
 
 These CLI flags override values from the [configuration file](/guide/configuration):
@@ -86,12 +89,12 @@ These CLI flags override values from the [configuration file](/guide/configurati
 | ------------------------------------------ | -------------------------------------------------------------------------------------- |
 | `--line-width <N>`                         | Maximum line width.                                                                    |
 | `--indent-width <N>`                       | Number of spaces per indentation level.                                                |
-| `--use-tabs`                               | Use tabs instead of spaces for indentation.                                            |
-| `--new-line-kind <lf\|crlf\|auto>`         | Newline style.                                                                         |
+| `--use-tabs`                               | Enable tab indentation (overrides config to use tabs instead of spaces).               |
+| `--new-line-kind <lf\|cr-lf\|auto>`        | Newline style.                                                                         |
 | `--command-case <lower\|upper\|unchanged>` | Case style for commands.                                                               |
 | `--keyword-case <lower\|upper\|unchanged>` | Case style for keywords.                                                               |
 | `--closing-paren-newline <true\|false>`    | Place closing paren on a new line in multi-line commands.                              |
-| `--sort-lists`                             | Sort argument lists alphabetically.                                                    |
+| `--sort-lists`                             | Enable alphabetical sorting of argument lists.                                         |
 | `--max-blank-lines <N>`                    | Maximum consecutive blank lines to preserve.                                           |
 | `--space-before-paren <cmd1,cmd2,...>`     | Insert space before `(` for these commands (comma-separated, e.g. `if,while,foreach`). |
 
@@ -103,6 +106,7 @@ These CLI flags override values from the [configuration file](/guide/configurati
 | `--check` + `--write`                             | Mutually exclusive. The formatter exits with code 2 and a diagnostic message.                                                                        |
 | `--diff` + `--write`                              | Mutually exclusive. The formatter exits with code 2 and a diagnostic message.                                                                        |
 | `--stdin` + file arguments                        | Error, exit code 2.                                                                                                                                  |
+| `--write` + `--stdin`                             | Error, exit code 2.                                                                                                                                  |
 | `--quiet` + `--verbose`                           | `--quiet` wins; non-error output is suppressed.                                                                                                      |
 | `--assume-filename` without `--stdin`             | Warning, flag is ignored.                                                                                                                            |
 | `--trace-summary-output` without `--trace-output` | Error, exit code 2.                                                                                                                                  |
