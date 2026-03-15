@@ -164,6 +164,11 @@ jobs:
           HISTORY_FILE: benchmarks/cmakefmt-fixtures-history.json
         run: |
           set -euo pipefail
+          # workflow_dispatch always re-measures baselines
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [ -f "$HISTORY_WORKTREE/$HISTORY_FILE" ]; then
             has_baselines=$(python3 -c "
           import json
