@@ -1867,7 +1867,9 @@ fn flatten_keyword_groups_for_alignment<'a>(
                         && spec.sections.is_empty());
                 let is_group_keyword =
                     matches!(get_keyword_type(keyword, spec), Some(KwType::Group(..)));
-                if is_section || is_group_keyword {
+                let is_flow = is_flow_keyword(&keyword.text, spec);
+                let is_valueless = values.is_empty();
+                if is_section || is_group_keyword || is_flow || is_valueless {
                     result.push(ArgGroup::Keyword {
                         keyword,
                         values: values.clone(),
@@ -2020,6 +2022,7 @@ fn is_one_line_alignment_candidate(cmd_name: &str, args: &[&FormattedArg]) -> bo
 fn build_positional_alignment_profile(
     cmd_name: &str,
     groups: &[ArgGroup<'_>],
+    keyword_column_width: Option<usize>,
 ) -> Option<PositionalAlignmentProfile> {
     let mut profile = PositionalAlignmentProfile::default();
     let mut candidate_count = 0usize;
@@ -2053,7 +2056,11 @@ fn build_positional_alignment_profile(
     if candidate_count < 2 {
         return None;
     }
-    if keyword_line_count >= 2 {
+    if let Some(kw_width) = keyword_column_width {
+        // Use pre-computed width from compute_keyword_column_width, which
+        // accounts for preserved Keyword groups (flow/option keywords).
+        profile.keyword_first_col_width = Some(kw_width);
+    } else if keyword_line_count >= 2 {
         // Keep an explicit visual gap between keyword columns and values.
         profile.keyword_first_col_width = Some(max_keyword_width + 1);
     }
@@ -2383,8 +2390,14 @@ fn gen_known_multi_line(
             || !spec.keywords.is_empty()
             || !config.custom_keywords.is_empty());
 
+    let keyword_column_width: Option<usize> = if config.align_arg_groups {
+        compute_keyword_column_width(&groups, spec, config)
+    } else {
+        None
+    };
+
     let positional_alignment_profile = if config.align_arg_groups {
-        build_positional_alignment_profile(cmd_name, &groups)
+        build_positional_alignment_profile(cmd_name, &groups, keyword_column_width)
     } else {
         None
     };
@@ -2404,6 +2417,7 @@ fn gen_known_multi_line(
                         false,
                         false,
                         0, // pack_tokens=false, column_start irrelevant
+                        None,
                     );
                 } else if config.align_arg_groups
                     && cmd_name.eq_ignore_ascii_case("install")
@@ -2449,6 +2463,7 @@ fn gen_known_multi_line(
                                     .count()
                                     >= 2,
                             base_indent,
+                            keyword_column_width,
                         );
                     }
                 } else if spec.flow_positional {
@@ -2469,6 +2484,7 @@ fn gen_known_multi_line(
                                 .count()
                                 >= 2,
                         base_indent,
+                        keyword_column_width,
                     );
                 }
             }
@@ -2495,6 +2511,7 @@ fn gen_known_multi_line(
                     cmd_name.eq_ignore_ascii_case("export"),
                     keyword_inline_allowed,
                     force_one_per_line,
+                    keyword_column_width,
                 );
                 expanded_keyword_group_seen |= expanded;
                 if section_keyword {
@@ -2537,6 +2554,7 @@ fn emit_keyword_group(
     allow_plain_section_inline: bool,
     allow_keyword_inline: bool,
     force_one_per_line: bool,
+    keyword_column_width: Option<usize>,
 ) -> bool {
     // Check for compound keyword (e.g., QUERY WINDOWS_REGISTRY)
     if let Some(first_val) = values.first()
@@ -2576,7 +2594,43 @@ fn emit_keyword_group(
             allow_plain_section_inline,
             allow_keyword_inline,
             force_one_per_line,
+            None, // compound keywords don't participate in column alignment
         );
+    }
+
+    // Aligned keyword path: for flow and valueless keywords when
+    // keyword_column_width is set. Section and group keywords fall through
+    // to the existing expanded paths (they need sub-keyword handling).
+    if let Some(kw_col_width) = keyword_column_width {
+        let is_section = is_section_keyword(keyword, spec)
+            || is_custom_keyword(keyword, config)
+            || (config.blank_line_between_sections
+                && keyword.is_keyword
+                && spec.sections.is_empty());
+        let is_group = matches!(get_keyword_type(keyword, spec), Some(KwType::Group(..)));
+
+        if !is_section && !is_group {
+            items.push_signal(Signal::NewLine);
+
+            if values.is_empty() {
+                // Valueless keyword: emit without padding
+                emit_kw_arg(items, keyword, config);
+            } else {
+                // Emit keyword padded to kw_col_width
+                let kw_text = if keyword.is_keyword || get_keyword_type(keyword, spec).is_some() {
+                    apply_keyword_case(&keyword.text, config.keyword_case)
+                } else {
+                    Cow::Borrowed(keyword.text.as_str())
+                };
+                let padded_width = kw_col_width + 1;
+                items.push_string(format!("{:<width$}", kw_text, width = padded_width));
+
+                // Flow-emit values starting inline at value column
+                let value_start_col = base_indent + padded_width;
+                emit_aligned_keyword_values(items, values, config, value_start_col, padded_width);
+            }
+            return true;
+        }
     }
 
     if values.is_empty() {
@@ -2789,6 +2843,7 @@ fn emit_keyword_group(
                     && !force_one_per_line
                     && !(config.blank_line_between_sections && is_section_kw),
                 base_indent,
+                None,
             );
 
             for comment in trailing_comments {
@@ -3025,6 +3080,56 @@ fn emit_flow_values(
         items.push_indented(val_items);
     } else {
         items.extend(val_items);
+    }
+}
+
+/// Emit keyword values in flow layout for keyword-column alignment.
+///
+/// The first value is emitted inline (the keyword is already on the current line).
+/// Subsequent values are packed on the current line until they would exceed
+/// `config.line_width`. Overflow wraps to the next line with visual indent
+/// of `value_indent_width` columns (the keyword column width).
+fn emit_aligned_keyword_values(
+    items: &mut PrintItems,
+    values: &[&FormattedArg],
+    config: &Configuration,
+    value_start_col: usize,
+    value_indent_width: usize,
+) {
+    let mut current_width = value_start_col;
+
+    for (i, val) in values.iter().enumerate() {
+        let val_text = arg_inline_text(val);
+        let val_width = val_text.len();
+
+        let needed = if i == 0 { val_width } else { 1 + val_width };
+
+        if i > 0 && current_width + needed > config.line_width as usize {
+            // Wrap to next line at value column
+            push_newline_with_visual_indent(items, value_indent_width, config);
+            current_width = value_start_col;
+            emit_arg(items, val, config);
+            current_width += val_width;
+        } else {
+            if i > 0 {
+                items.push_space();
+            }
+            emit_arg(items, val, config);
+            current_width += needed;
+        }
+
+        // Handle trailing comments
+        if let Some(comment) = &val.trailing_comment {
+            if val.trailing_is_bracket {
+                items.push_space();
+                items.extend(ir_helpers::gen_from_raw_string(comment));
+            } else {
+                push_comment_gap(items, config.comment_gap);
+                items.extend(ir_helpers::gen_from_raw_string(comment));
+                push_newline_with_visual_indent(items, value_indent_width, config);
+                current_width = value_start_col;
+            }
+        }
     }
 }
 
@@ -3639,6 +3744,7 @@ fn emit_section_values_inner(
                 true,
                 config.align_arg_groups && !config.blank_line_between_sections,
                 base_indent,
+                None,
             );
         }
     }
@@ -5305,11 +5411,55 @@ fn aligned_token_line_width(
     width
 }
 
+/// Pre-compute keyword-column alignment width across all groups.
+///
+/// Examines both preserved flow `Keyword` groups (with values) and flattened
+/// `Positional` groups (whose first token looks keyword-like). Section keywords,
+/// group keywords, valueless keywords, and non-keyword-like tokens are excluded.
+///
+/// Returns `Some(max_keyword_width)` when at least two keyword-first-token
+/// lines participate, `None` otherwise. Callers add their own gap as needed.
+fn compute_keyword_column_width(
+    groups: &[ArgGroup<'_>],
+    spec: &CommandSpec,
+    config: &Configuration,
+) -> Option<usize> {
+    let mut widths: Vec<usize> = Vec::new();
+    for group in groups {
+        match group {
+            ArgGroup::Keyword { keyword, values } if !values.is_empty() => {
+                // Only include non-section, non-group keywords (flow keywords)
+                let is_section = is_section_keyword(keyword, spec)
+                    || is_custom_keyword(keyword, config)
+                    || (config.blank_line_between_sections
+                        && keyword.is_keyword
+                        && spec.sections.is_empty());
+                let is_group = matches!(get_keyword_type(keyword, spec), Some(KwType::Group(..)));
+                if !is_section && !is_group && is_keyword_like_value(keyword) {
+                    widths.push(arg_inline_text(keyword).len());
+                }
+            }
+            ArgGroup::Positional(args) if !args.is_empty() => {
+                if is_keyword_like_value(args[0]) && args.len() > 1 {
+                    widths.push(arg_inline_text(args[0]).len());
+                }
+            }
+            _ => {}
+        }
+    }
+    if widths.len() >= 2 {
+        Some(*widths.iter().max().unwrap())
+    } else {
+        None
+    }
+}
+
 fn apply_arg_group_alignment(
     lines: &[ValueLayoutLine<'_>],
     config: &Configuration,
     wrap_indent: bool,
     continuation_indent: usize,
+    keyword_column_width_override: Option<usize>,
 ) -> Vec<TokenLineAlignment> {
     let mut alignment = vec![TokenLineAlignment::default(); lines.len()];
     let indent_width = if wrap_indent { continuation_indent } else { 0 };
@@ -5353,24 +5503,28 @@ fn apply_arg_group_alignment(
             }
         }
 
-        if keyword_line_indices.len() >= 2 {
-            let keyword_width = keyword_line_indices
-                .iter()
-                .map(|line_idx| {
-                    if let ValueLayoutLine::Tokens(tokens) = &lines[*line_idx] {
-                        token_visual_width(tokens[0])
-                    } else {
-                        0
-                    }
-                })
-                .max()
-                .unwrap_or(0);
-            // Keep an explicit gap after keyword-style first columns so aligned
-            // keyword groups remain visually distinct from their values.
-            let first_column_width = keyword_width + 1;
+        if keyword_line_indices.len() >= 2 || keyword_column_width_override.is_some() {
+            let first_column_width = if let Some(override_width) = keyword_column_width_override {
+                override_width
+            } else {
+                let keyword_width = keyword_line_indices
+                    .iter()
+                    .map(|line_idx| {
+                        if let ValueLayoutLine::Tokens(tokens) = &lines[*line_idx] {
+                            token_visual_width(tokens[0])
+                        } else {
+                            0
+                        }
+                    })
+                    .max()
+                    .unwrap_or(0);
+                // Keep an explicit gap after keyword-style first columns so aligned
+                // keyword groups remain visually distinct from their values.
+                keyword_width + 1
+            };
 
-            for line_idx in keyword_line_indices {
-                alignment[line_idx].first_col_width = Some(first_column_width);
+            for line_idx in &keyword_line_indices {
+                alignment[*line_idx].first_col_width = Some(first_column_width);
             }
         }
 
@@ -5460,6 +5614,7 @@ fn emit_values_with_genex_with_indent(
     skip_first_blank: bool,
     pack_tokens: bool,
     column_start: usize,
+    keyword_column_width: Option<usize>,
 ) {
     let grouped_values = group_args_by_genex(values);
     let indent_width = if wrap_indent { continuation_indent } else { 0 };
@@ -5561,7 +5716,13 @@ fn emit_values_with_genex_with_indent(
     flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
 
     let alignments = if config.align_arg_groups {
-        apply_arg_group_alignment(&lines, config, wrap_indent, continuation_indent)
+        apply_arg_group_alignment(
+            &lines,
+            config,
+            wrap_indent,
+            continuation_indent,
+            keyword_column_width,
+        )
     } else {
         vec![TokenLineAlignment::default(); lines.len()]
     };

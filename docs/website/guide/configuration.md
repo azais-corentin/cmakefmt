@@ -184,7 +184,7 @@ Controls column-alignment of property values, consecutive `set()` calls, and rep
 
 - **`alignPropertyValues`** (`boolean`, default: `false`) — Column-align values in `PROPERTIES` key-value lists (e.g., in `set_target_properties`). Only takes effect when properties are rendered one-per-line.
 - **`alignConsecutiveSet`** (`boolean`, default: `false`) — Align the first value argument of consecutive `set()` commands that form a logical group (not separated by blank lines, comments, or non-`set` commands).
-- **`alignArgGroups`** (`boolean`, default: `false`) — When arguments are laid out one-per-line, detect repeating structural patterns (lines with the same token count) and column-align them. Groups are broken by blank lines or comment lines.
+- **`alignArgGroups`** (`boolean`, default: `false`) — When arguments are laid out one-per-line, detect repeating structural patterns (lines with the same token count) and column-align them. Keyword-as-first-token lines are aligned by keyword column (padded to the width of the longest keyword with values, plus one gap space). Valueless keywords are excluded from width calculation and not padded. Flow keywords preserve their line-width-aware value wrapping under alignment. Groups are broken by blank lines or comment lines.
 
 ```toml
 alignPropertyValues = true

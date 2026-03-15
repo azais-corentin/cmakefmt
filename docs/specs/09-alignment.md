@@ -98,6 +98,8 @@ or generator expression (including its entire nested content as one token).
 - A blank line or a comment line breaks the current group; alignment restarts after it.
 - Arguments under different section keywords are never aligned across keyword boundaries.
 - Additionally, keyword-as-first-token lines are aligned by their keyword column regardless of the total token count on each line. This is separate from the same-token-count alignment of value lines.
+- Valueless keywords (keywords with no value arguments, e.g., `VERBATIM`) are excluded from keyword-column width calculation and are not padded. They appear at their natural width on their own line.
+- Keyword-specific value wrapping is preserved under alignment. Flow keywords (e.g., `COMMAND`) wrap their values at `lineWidth` with continuation lines indented to the keyword value column (keyword column width + base indent).
 
 > **Known limitation:** The heuristic matches on token count alone and does not verify
 > structural similarity. Two consecutive lines with the same number of tokens but
@@ -116,20 +118,21 @@ install(TARGETS
 )
 ```
 
-**Example 2 — `add_custom_command` with multiple similar keyword groups:**
+**Example 2 — `add_custom_command` with keyword alignment and flow wrapping:**
 
 ```cmake
-# alignArgGroups = true
+# alignArgGroups = true, lineWidth = 60
 add_custom_command(
   OUTPUT  ${CMAKE_CURRENT_BINARY_DIR}/generated.cpp
-  COMMAND generator --input schema.json --output generated.cpp
+  COMMAND generator --input schema.json --output
+          generated.cpp
   DEPENDS schema.json
   COMMENT "Generating code"
   VERBATIM
 )
 ```
 
-In this example, the keyword-as-first-token lines (`OUTPUT`, `COMMAND`, `DEPENDS`, `COMMENT`) are aligned by their keyword column, regardless of each line's total token count. `VERBATIM` stands alone (no value) and does not participate in alignment.
+In this example, keyword-as-first-token lines (`OUTPUT`, `COMMAND`, `DEPENDS`, `COMMENT`) are aligned by their keyword column (width 8 = max keyword width 7 + 1 gap). `COMMAND` values flow-wrap at `lineWidth = 60` with continuation at the value column. `VERBATIM` (valueless) is not padded and does not participate in keyword-column width calculation.
 
 **Example 3 — `set()` with tabular data:**
 
