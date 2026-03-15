@@ -121,11 +121,13 @@ jobs:
           done <<< "$all_commits"
 
           echo "Commits to benchmark: $count"
-          if [ "$count" -eq 0 ]; then
+          if [ "$count" -eq 0 ] && [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
-            cat "$todo_file"
+            if [ "$count" -gt 0 ]; then
+              cat "$todo_file"
+            fi
           fi
 
       - name: Set up history worktree
