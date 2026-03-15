@@ -192,6 +192,7 @@ function parseEntries(
 function makeOpts(
   title: string,
   yLabel: string,
+  seriesLabel: string,
   suffix: "ms" | "MB/s",
   strokeColor: string,
   bandFill: string,
@@ -210,7 +211,7 @@ function makeOpts(
       },
     },
     {
-      label: yLabel,
+      label: seriesLabel,
       stroke: strokeColor,
       width: 2,
       value: (
@@ -228,6 +229,7 @@ function makeOpts(
     },
     // CI lower bound — hidden line, used only as band edge.
     {
+      label: "CI Lower",
       show: true,
       stroke: "transparent",
       width: 0,
@@ -236,6 +238,7 @@ function makeOpts(
     },
     // CI upper bound — hidden line, used only as band edge.
     {
+      label: "CI Upper",
       show: true,
       stroke: "transparent",
       width: 0,
@@ -526,6 +529,7 @@ async function createCharts(dark: boolean) {
       makeOpts(
         "Aggregate Throughput (higher is better)",
         "MB/s",
+        "Throughput",
         "MB/s",
         "#22c55e",
         "rgba(34,197,94,0.12)",
@@ -544,6 +548,7 @@ async function createCharts(dark: boolean) {
       makeOpts(
         "Aggregate Timing (lower is better)",
         "ms",
+        "Timing",
         "ms",
         "#6366f1",
         "rgba(99,102,241,0.12)",
@@ -775,8 +780,10 @@ onUnmounted(() => {
   color: var(--vp-c-danger-1);
 }
 
-/* Hide CI band series from the uPlot legend (3rd and 4th entries). */
-.chart-container :deep(.u-legend .u-series:nth-child(n+3)) {
+/* Show only the main data series (2nd entry) in line chart legends.
+   Series 0 = x-axis (commit info, redundant with hover tooltip).
+   Series 2/3 = CI band edges (transparent, no user value). */
+.chart-container :deep(.u-legend .u-series:not(:nth-child(2))) {
   display: none;
 }
 
