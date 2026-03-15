@@ -557,17 +557,15 @@ pub fn gen_command(
     let avoid_inline_compaction = has_deferred_closing_comment
         || (!config.closing_paren_newline && source_is_multiline && cmd.trailing_comment.is_some());
 
-    // Format arguments using wrapping cascade controls (threshold, magic newline, style).
+    // Format arguments using wrapping cascade controls (threshold, wrap style).
     let force_one_per_line = config.wrap_arg_threshold > 0
         && count_wrap_arguments(&arguments) > config.wrap_arg_threshold as usize;
-    let magic_trailing_newline =
-        config.magic_trailing_newline && has_magic_trailing_newline_signal(cmd, source, &arguments);
     let allow_single_line_by_style = match config.wrap_style {
         WrapStyle::Cascade => true,
         WrapStyle::Vertical => count_wrap_arguments(&arguments) <= 2,
     };
     let allow_single_line = allow_single_line_by_style
-        && !(force_one_per_line || magic_trailing_newline || avoid_inline_compaction)
+        && !(force_one_per_line || avoid_inline_compaction)
         && !(source_is_multiline && has_keyword_args);
     if !arguments.is_empty() {
         let single_line = try_single_line(
@@ -608,9 +606,7 @@ pub fn gen_command(
                     }
                 }
                 Some(CommandKind::Known(spec)) => {
-                    let suppress_keyword_inline = force_one_per_line
-                        || avoid_inline_compaction
-                        || (config.wrap_arg_threshold > 0 && magic_trailing_newline);
+                    let suppress_keyword_inline = force_one_per_line || avoid_inline_compaction;
                     let allow_keyword_inline =
                         matches!(config.wrap_style, WrapStyle::Cascade) && !suppress_keyword_inline;
                     let allow_opening_arg_packing = allow_keyword_inline;
@@ -627,9 +623,7 @@ pub fn gen_command(
                 }
                 None => {
                     // Unknown command with customKeywords — use empty spec.
-                    let suppress_keyword_inline = force_one_per_line
-                        || avoid_inline_compaction
-                        || (config.wrap_arg_threshold > 0 && magic_trailing_newline);
+                    let suppress_keyword_inline = force_one_per_line || avoid_inline_compaction;
                     let allow_keyword_inline =
                         matches!(config.wrap_style, WrapStyle::Cascade) && !suppress_keyword_inline;
                     let allow_opening_arg_packing = allow_keyword_inline;
@@ -1111,19 +1105,6 @@ fn arg_width(arg: &FormattedArg) -> usize {
 
 fn count_wrap_arguments(args: &[FormattedArg]) -> usize {
     args.iter().filter(|arg| !arg.text.starts_with('#')).count()
-}
-
-fn has_magic_trailing_newline_signal(
-    cmd: &CommandInvocation,
-    source: &str,
-    args: &[FormattedArg],
-) -> bool {
-    if args.is_empty() {
-        return false;
-    }
-    let before_close = &source[..cmd.close_paren.start];
-    let trimmed_before_close = before_close.trim_end_matches([' ', '\t']);
-    trimmed_before_close.ends_with('\n')
 }
 
 fn can_pack_args_on_line(

@@ -7,7 +7,6 @@ lineWidth = 80
 wrapStyle = "cascade"
 firstArgSameLine = true
 wrapArgThreshold = 0
-magicTrailingNewline = true
 indentWidth = 2
 indentStyle = "space"
 # continuationIndentWidth — inherits indentWidth

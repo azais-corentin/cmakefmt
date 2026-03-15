@@ -13,7 +13,6 @@ pub struct Configuration {
     pub wrap_style: WrapStyle,
     pub first_arg_same_line: bool,
     pub wrap_arg_threshold: u32,
-    pub magic_trailing_newline: bool,
 
     pub indent_width: u8,
     pub use_tabs: bool,
@@ -81,7 +80,6 @@ pub struct CommandConfiguration {
     pub wrap_style: Option<WrapStyle>,
     pub first_arg_same_line: Option<bool>,
     pub wrap_arg_threshold: Option<u32>,
-    pub magic_trailing_newline: Option<bool>,
 
     pub indent_width: Option<u8>,
     pub indent_style: Option<IndentStyle>,
@@ -197,7 +195,6 @@ impl Default for Configuration {
             wrap_style: WrapStyle::Cascade,
             first_arg_same_line: true,
             wrap_arg_threshold: 0,
-            magic_trailing_newline: true,
             indent_width: 2,
             use_tabs: false,
             indent_style: IndentStyle::Space,
@@ -312,9 +309,6 @@ impl Configuration {
         }
         if let Some(v) = overrides.wrap_arg_threshold {
             cfg.wrap_arg_threshold = v;
-        }
-        if let Some(v) = overrides.magic_trailing_newline {
-            cfg.magic_trailing_newline = v;
         }
         if let Some(v) = overrides.indent_width {
             cfg.indent_width = v;

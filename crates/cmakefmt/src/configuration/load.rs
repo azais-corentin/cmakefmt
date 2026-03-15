@@ -467,9 +467,6 @@ fn suppress_per_command_overrides_for_push_keys(
         if explicit_keys.contains(&CanonicalKey::WrapArgThreshold) {
             command_config.wrap_arg_threshold = None;
         }
-        if explicit_keys.contains(&CanonicalKey::MagicTrailingNewline) {
-            command_config.magic_trailing_newline = None;
-        }
 
         if explicit_keys.contains(&CanonicalKey::IndentWidth)
             || explicit_keys.contains(&CanonicalKey::IndentMode)
@@ -575,7 +572,6 @@ enum CanonicalKey {
     WrapStyle,
     FirstArgSameLine,
     WrapArgThreshold,
-    MagicTrailingNewline,
     IndentWidth,
     UseTabs,
     IndentStyle,
@@ -623,9 +619,6 @@ fn canonical_key(key: &str) -> Option<CanonicalKey> {
         "wrapStyle" | "wrap_style" => Some(CanonicalKey::WrapStyle),
         "firstArgSameLine" | "first_arg_same_line" => Some(CanonicalKey::FirstArgSameLine),
         "wrapArgThreshold" | "wrap_arg_threshold" => Some(CanonicalKey::WrapArgThreshold),
-        "magicTrailingNewline" | "magic_trailing_newline" => {
-            Some(CanonicalKey::MagicTrailingNewline)
-        }
         "indentWidth" | "indent_width" => Some(CanonicalKey::IndentWidth),
         "useTabs" | "use_tabs" => Some(CanonicalKey::UseTabs),
         "indentStyle" | "indent_style" => Some(CanonicalKey::IndentStyle),
@@ -737,12 +730,6 @@ impl Loader {
             CanonicalKey::WrapArgThreshold => {
                 if let Some(parsed) = self.parse_u32(key, value) {
                     self.config.wrap_arg_threshold = parsed;
-                    self.record_override(key, parsed.to_string());
-                }
-            }
-            CanonicalKey::MagicTrailingNewline => {
-                if let Some(parsed) = self.parse_bool(key, value) {
-                    self.config.magic_trailing_newline = parsed;
                     self.record_override(key, parsed.to_string());
                 }
             }
@@ -1247,11 +1234,6 @@ impl Loader {
             CanonicalKey::WrapArgThreshold => {
                 if let Some(parsed) = self.parse_u32(&scoped_key, option_value) {
                     target.wrap_arg_threshold = Some(parsed);
-                }
-            }
-            CanonicalKey::MagicTrailingNewline => {
-                if let Some(parsed) = self.parse_bool(&scoped_key, option_value) {
-                    target.magic_trailing_newline = Some(parsed);
                 }
             }
             CanonicalKey::IndentWidth => {

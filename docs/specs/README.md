@@ -55,7 +55,6 @@ exits with a non-zero status code. The formatter never silently corrupts unparse
 | 1.2  | `wrapStyle`                  | `"cascade" \| "vertical"`            | `"cascade"`   |
 | 1.3  | `firstArgSameLine`           | `boolean`                            | `true`        |
 | 1.4  | `wrapArgThreshold`           | `integer`                            | `0`           |
-| 1.5  | `magicTrailingNewline`       | `boolean`                            | `true`        |
 | 2.1  | `indentWidth`                | `integer`                            | `2`           |
 | 2.2  | `indentStyle`                | `"space" \| "tab"`                   | `"space"`     |
 | 2.3  | `continuationIndentWidth`    | `integer \| null`                    | `null`        |

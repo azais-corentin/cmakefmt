@@ -1,4 +1,1 @@
-set(FOO
-  "bar"
-  "baz"
-)
+set(FOO "bar" "baz")

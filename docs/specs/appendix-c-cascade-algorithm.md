@@ -6,10 +6,9 @@ The cascading algorithm is the heart of the formatter. For the vertical variant 
 command_name(arg1 KEYWORD arg2 arg3 KEYWORD2 arg4)
 ```
 
-**Step 0 — Pre-checks.** Before attempting single-line layout, two conditions force expansion:
+**Step 0 — Pre-checks.** Before attempting single-line layout, one condition forces expansion:
 
 - If `wrapArgThreshold > 0` and the command has more than `wrapArgThreshold` arguments, skip directly to Step 3 (one-per-line).
-- If `magicTrailingNewline = true` (§1.5) and the closing `)` was on its own line in the input, skip Step 1 (single-line) — do not collapse to a single line.
 
 **Step 1 — Single line.** Compute the rendered width of the entire line, including block-nesting indentation (the leading whitespace from enclosing `if`/`foreach`/`function`/etc. blocks). If ≤ `lineWidth`, emit on one line.
 
@@ -108,7 +107,7 @@ and `>` as a closing bracket, with `genexIndentWidth` controlling nested indenta
 
 When `wrapStyle = "vertical"` (§1.2), the algorithm simplifies:
 
-**Step 0 — Pre-checks.** Identical to cascade Step 0: `wrapArgThreshold` and `magicTrailingNewline` pre-checks apply. If `wrapArgThreshold` triggers, skip directly to Step 3. If `magicTrailingNewline` triggers, skip Step 1.
+**Step 0 — Pre-checks.** Identical to cascade Step 0: the `wrapArgThreshold` pre-check applies. If `wrapArgThreshold` triggers, skip directly to Step 3.
 
 **Step 1 — Single line.** Identical to cascade Step 1: if the entire invocation fits within `lineWidth`, emit on one line.
 

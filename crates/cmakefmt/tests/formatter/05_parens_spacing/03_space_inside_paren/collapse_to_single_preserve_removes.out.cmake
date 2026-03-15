@@ -1,3 +1,3 @@
-# cmakefmt: push { spaceInsideParen = "preserve", magicTrailingNewline = false }
+# cmakefmt: push { spaceInsideParen = "preserve" }
 set(FOO "bar")
 # cmakefmt: pop

@@ -34,7 +34,7 @@ When pragma `push` overrides are active (§13.4), the current stack frame takes 
 over `perCommandConfig`. See §13.4.4 for the full resolution order.
 
 The exact options overridable via `perCommandConfig` are: `lineWidth`, `wrapStyle`,
-`firstArgSameLine`, `wrapArgThreshold`, `magicTrailingNewline`, `indentWidth`,
+`firstArgSameLine`, `wrapArgThreshold`, `indentWidth`,
 `indentStyle`, `continuationIndentWidth`, `genexIndentWidth`, `commandCase`, `keywordCase`,
 `customKeywords`, `literalCase`, `closingParenNewline`, `spaceBeforeParen`,
 `spaceInsideParen`, `commentPreservation`, `commentWidth`,

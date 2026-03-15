@@ -4,7 +4,4 @@ target_sources(MyApp
     middle.cpp
     zebra.cpp
 )
-set(MY_SOURCES
-  zebra.cpp
-  alpha.cpp
-)
+set(MY_SOURCES zebra.cpp alpha.cpp)

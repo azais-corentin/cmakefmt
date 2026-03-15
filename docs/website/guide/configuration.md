@@ -22,7 +22,6 @@ See the [CLI reference](/guide/cli) for details on these flags.
 | 1.2  | `wrapStyle`                  | `"cascade" \| "vertical"`            | `"cascade"`   |
 | 1.3  | `firstArgSameLine`           | `boolean`                            | `true`        |
 | 1.4  | `wrapArgThreshold`           | `integer`                            | `0`           |
-| 1.5  | `magicTrailingNewline`       | `boolean`                            | `true`        |
 | 2.1  | `indentWidth`                | `integer`                            | `2`           |
 | 2.2  | `indentStyle`                | `"space" \| "tab"`                   | `"space"`     |
 | 2.3  | `continuationIndentWidth`    | `integer \| null`                    | `null`        |
@@ -71,7 +70,6 @@ Controls the maximum line length and how commands are broken across multiple lin
 - **`wrapStyle`** (`"cascade" | "vertical"`, default: `"cascade"`) — Wrapping strategy. `"cascade"` uses a three-step algorithm: fit on one line, then keywords on new lines with arguments packed inline, then one argument per line. `"vertical"` skips the packing step and goes directly to one-per-line.
 - **`firstArgSameLine`** (`boolean`, default: `true`) — Whether the first positional argument (typically the target name) stays on the same line as the command name when wrapping.
 - **`wrapArgThreshold`** (`integer`, default: `0`) — When > 0, forces one-argument-per-line wrapping whenever a command has more than this many arguments, regardless of line width. `0` disables the threshold. Keywords count toward the threshold — `target_link_libraries(MyTarget PRIVATE foo bar)` has 4 arguments, not 2.
-- **`magicTrailingNewline`** (`boolean`, default: `true`) — When `true`, a closing `)` on its own line in the input is treated as an author-intent signal to prevent single-line collapse, even if the invocation would fit on one line.
 
 ```toml
 lineWidth = 120
@@ -208,7 +206,7 @@ genexClosingAngleNewline = false
 
 Allows overriding formatting options on a per-command basis.
 
-- **`perCommandConfig`** (`table`, default: `{}`) — A TOML table keyed by command name (case-insensitive). Each entry can override options from groups 1 (wrapping), 2 (indentation), 4 (casing), 5 (parentheses & spacing), 6 (comments), 9 (alignment), 10 (generator expressions), and 12 (sorting). File-level concerns (blank lines, line endings, whitespace normalization, suppression) cannot be overridden per-command. The overridable options are: `lineWidth`, `wrapStyle`, `firstArgSameLine`, `wrapArgThreshold`, `magicTrailingNewline`, `indentWidth`, `indentStyle`, `continuationIndentWidth`, `genexIndentWidth`, `commandCase`, `keywordCase`, `customKeywords`, `literalCase`, `closingParenNewline`, `spaceBeforeParen`, `spaceInsideParen`, `commentPreservation`, `commentWidth`, `alignTrailingComments`, `commentGap`, `alignPropertyValues`, `alignConsecutiveSet`, `alignArgGroups`, `genexWrap`, `genexClosingAngleNewline`, `sortArguments`, and `sortKeywordSections`.
+- **`perCommandConfig`** (`table`, default: `{}`) — A TOML table keyed by command name (case-insensitive). Each entry can override options from groups 1 (wrapping), 2 (indentation), 4 (casing), 5 (parentheses & spacing), 6 (comments), 9 (alignment), 10 (generator expressions), and 12 (sorting). File-level concerns (blank lines, line endings, whitespace normalization, suppression) cannot be overridden per-command. The overridable options are: `lineWidth`, `wrapStyle`, `firstArgSameLine`, `wrapArgThreshold`, `indentWidth`, `indentStyle`, `continuationIndentWidth`, `genexIndentWidth`, `commandCase`, `keywordCase`, `customKeywords`, `literalCase`, `closingParenNewline`, `spaceBeforeParen`, `spaceInsideParen`, `commentPreservation`, `commentWidth`, `alignTrailingComments`, `commentGap`, `alignPropertyValues`, `alignConsecutiveSet`, `alignArgGroups`, `genexWrap`, `genexClosingAngleNewline`, `sortArguments`, and `sortKeywordSections`.
 
 ```toml
 [perCommandConfig.set]
@@ -297,7 +295,6 @@ lineWidth = 80
 wrapStyle = "cascade"
 firstArgSameLine = true
 wrapArgThreshold = 0
-magicTrailingNewline = true
 indentWidth = 2
 indentStyle = "space"
 # continuationIndentWidth — inherits indentWidth

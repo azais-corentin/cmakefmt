@@ -345,31 +345,31 @@ list(REMOVE_ITEM SYNTHETIC_SOURCES src/synthetic_000.cpp src/synthetic_001.cpp)
 list(REMOVE_AT SYNTHETIC_SOURCES 0 1 2)
 list(REMOVE_DUPLICATES SYNTHETIC_SOURCES)
 list(
-  FILTER   SYNTHETIC_SOURCES
+  FILTER SYNTHETIC_SOURCES
   INCLUDE
-  REGEX    ".*\.cpp$"
+  REGEX  ".*\.cpp$"
 )
 list(
-  FILTER   SYNTHETIC_SOURCES
+  FILTER SYNTHETIC_SOURCES
   EXCLUDE
-  REGEX    ".*_test\.cpp$"
+  REGEX  ".*_test\.cpp$"
 )
 list(
-  SORT     SYNTHETIC_SOURCES
-  COMPARE  NATURAL
-  CASE     INSENSITIVE
-  ORDER    ASCENDING
+  SORT    SYNTHETIC_SOURCES
+  COMPARE NATURAL
+  CASE    INSENSITIVE
+  ORDER   ASCENDING
 )
 list(REVERSE SYNTHETIC_SOURCES)
 list(POP_BACK SYNTHETIC_SOURCES SYNTHETIC_LAST)
 list(POP_FRONT SYNTHETIC_SOURCES SYNTHETIC_FIRST)
 list(
-  TRANSFORM        SYNTHETIC_SOURCES
-  PREPEND          src/
-  OUTPUT_VARIABLE  SYNTHETIC_FULL_PATHS
+  TRANSFORM       SYNTHETIC_SOURCES
+  PREPEND         src/
+  OUTPUT_VARIABLE SYNTHETIC_FULL_PATHS
 )
 list(
-  TRANSFORM  SYNTHETIC_SOURCES
+  TRANSFORM SYNTHETIC_SOURCES
   TOUPPER
 )
 
@@ -2827,8 +2827,8 @@ target_sources(synthetic_core
 # --------------------------------------------------------------------------
 
 install(
-  TARGETS    synthetic_core synthetic_shared
-  EXPORT     SyntheticTargets
+  TARGETS   synthetic_core synthetic_shared
+  EXPORT    SyntheticTargets
   RUNTIME
     DESTINATION ${CMAKE_INSTALL_BINDIR}
     COMPONENT
@@ -2845,7 +2845,7 @@ install(
   ARCHIVE
     DESTINATION ${CMAKE_INSTALL_LIBDIR}
     COMPONENT Development
-  INCLUDES   DESTINATION    ${CMAKE_INSTALL_INCLUDEDIR}
+  INCLUDES  DESTINATION    ${CMAKE_INSTALL_INCLUDEDIR}
 
   PUBLIC_HEADER
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/synthetic
@@ -2853,15 +2853,15 @@ install(
 )
 
 install(
-  FILES         "${CMAKE_CURRENT_SOURCE_DIR}/include/synthetic/core.h" "${CMAKE_CURRENT_SOURCE_DIR}/include/synthetic/types.h" "${CMAKE_CURRENT_SOURCE_DIR}/include/synthetic/utils.h" "${CMAKE_CURRENT_SOURCE_DIR}/include/synthetic/config.h"
-  DESTINATION   "${CMAKE_INSTALL_INCLUDEDIR}/synthetic"
-  COMPONENT     Development
+  FILES        "${CMAKE_CURRENT_SOURCE_DIR}/include/synthetic/core.h" "${CMAKE_CURRENT_SOURCE_DIR}/include/synthetic/types.h" "${CMAKE_CURRENT_SOURCE_DIR}/include/synthetic/utils.h" "${CMAKE_CURRENT_SOURCE_DIR}/include/synthetic/config.h"
+  DESTINATION  "${CMAKE_INSTALL_INCLUDEDIR}/synthetic"
+  COMPONENT    Development
 )
 
 install(
-  DIRECTORY        "${CMAKE_CURRENT_SOURCE_DIR}/include/"
-  DESTINATION      "${CMAKE_INSTALL_INCLUDEDIR}"
-  COMPONENT        Development
+  DIRECTORY    "${CMAKE_CURRENT_SOURCE_DIR}/include/"
+  DESTINATION  "${CMAKE_INSTALL_INCLUDEDIR}"
+  COMPONENT    Development
   FILES_MATCHING
   PATTERN
     "*.h"
@@ -2876,11 +2876,11 @@ install(
 )
 
 install(
-  EXPORT        SyntheticTargets
-  FILE          SyntheticTargets.cmake
-  NAMESPACE     Synthetic::
-  DESTINATION   "${CMAKE_INSTALL_LIBDIR}/cmake/Synthetic"
-  COMPONENT     Development
+  EXPORT       SyntheticTargets
+  FILE         SyntheticTargets.cmake
+  NAMESPACE    Synthetic::
+  DESTINATION  "${CMAKE_INSTALL_LIBDIR}/cmake/Synthetic"
+  COMPONENT    Development
 )
 
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/SyntheticConfig.cmake.in"
@@ -2889,9 +2889,9 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/SyntheticConfig.cmake.in"
 )
 
 install(
-  FILES         "${CMAKE_CURRENT_BINARY_DIR}/SyntheticConfig.cmake" "${CMAKE_CURRENT_BINARY_DIR}/SyntheticConfigVersion.cmake"
-  DESTINATION   "${CMAKE_INSTALL_LIBDIR}/cmake/Synthetic"
-  COMPONENT     Development
+  FILES        "${CMAKE_CURRENT_BINARY_DIR}/SyntheticConfig.cmake" "${CMAKE_CURRENT_BINARY_DIR}/SyntheticConfigVersion.cmake"
+  DESTINATION  "${CMAKE_INSTALL_LIBDIR}/cmake/Synthetic"
+  COMPONENT    Development
 )
 
 # --------------------------------------------------------------------------
@@ -4315,9 +4315,9 @@ set_property(
 )
 
 export(
-  TARGETS    synthetic_core synthetic_shared
-  NAMESPACE  Synthetic::
-  FILE       "${CMAKE_BINARY_DIR}/SyntheticTargets.cmake"
+  TARGETS   synthetic_core synthetic_shared
+  NAMESPACE Synthetic::
+  FILE      "${CMAKE_BINARY_DIR}/SyntheticTargets.cmake"
 )
 
 mark_as_advanced(
