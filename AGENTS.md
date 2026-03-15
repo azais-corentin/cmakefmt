@@ -259,6 +259,7 @@ Before non-trivial changes:
 3. Update all affected call sites/types in one cutover.
 4. Run targeted test command(s) for touched behavior.
 5. For performance-sensitive changes, run fixture benchmark.
+6. For changes to the documentation website (`docs/website/`), use Puppeteer to visually verify the rendered result in a browser.
 
 Avoid:
 
