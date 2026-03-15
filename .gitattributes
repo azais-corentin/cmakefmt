@@ -1,0 +1,3 @@
+# Test fixtures — exclude from GitHub language statistics
+crates/cmakefmt/tests/formatter/**/*.in.cmake linguist-vendored
+crates/cmakefmt/tests/formatter/**/*.out.cmake linguist-vendored
