@@ -2321,6 +2321,7 @@ fn gen_known_multi_line(
                         config.effective_continuation_indent_width() as usize,
                         false,
                         false,
+                        0, // pack_tokens=false, column_start irrelevant
                     );
                 } else if config.align_arg_groups
                     && cmd_name.eq_ignore_ascii_case("install")
@@ -2365,6 +2366,7 @@ fn gen_known_multi_line(
                                     .take(2)
                                     .count()
                                     >= 2,
+                            base_indent,
                         );
                     }
                 } else if spec.flow_positional {
@@ -2384,6 +2386,7 @@ fn gen_known_multi_line(
                                 .take(2)
                                 .count()
                                 >= 2,
+                        base_indent,
                     );
                 }
             }
@@ -2703,6 +2706,7 @@ fn emit_keyword_group(
                 config.align_arg_groups
                     && !force_one_per_line
                     && !(config.blank_line_between_sections && is_section_kw),
+                base_indent,
             );
 
             for comment in trailing_comments {
@@ -3552,6 +3556,7 @@ fn emit_section_values_inner(
                 continuation_indent,
                 true,
                 config.align_arg_groups && !config.blank_line_between_sections,
+                base_indent,
             );
         }
     }
@@ -5349,6 +5354,7 @@ fn apply_arg_group_alignment(
 }
 
 /// Emit values with genex detection using an explicit indentation strategy.
+#[allow(clippy::too_many_arguments)]
 fn emit_values_with_genex_with_indent(
     items: &mut PrintItems,
     values: &[&FormattedArg],
@@ -5357,6 +5363,7 @@ fn emit_values_with_genex_with_indent(
     continuation_indent: usize,
     skip_first_blank: bool,
     pack_tokens: bool,
+    column_start: usize,
 ) {
     let grouped_values = group_args_by_genex(values);
     let indent_width = if wrap_indent { continuation_indent } else { 0 };
@@ -5422,7 +5429,8 @@ fn emit_values_with_genex_with_indent(
                         current_width = token_width;
                     } else {
                         let required = 1 + token_width;
-                        let available_width = max_content_width.saturating_sub(indent_width);
+                        let available_width =
+                            max_content_width.saturating_sub(column_start + indent_width);
                         let last_has_line_comment = current_tokens.last().is_some_and(|token| {
                             token.trailing_comment.is_some() && !token.trailing_is_bracket
                         });
