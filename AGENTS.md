@@ -267,6 +267,12 @@ Before non-trivial changes:
 6. For changes to the documentation website (`docs/website/`), use Puppeteer to visually verify the rendered result in a browser.
 7. After all modifications are complete, run `dprint fmt` to ensure consistent formatting across all touched files.
 
+When updating specs (`docs/specs/`):
+
+- You **MUST** update the implementation code to match the new spec behavior. Specs are the source of truth — code that contradicts the spec is a bug.
+- You **MUST** update the documentation website (`docs/website/`) to reflect the spec change. User-facing docs that contradict the spec are a bug.
+- A spec change is not complete until code and docs are consistent with it.
+
 Avoid:
 
 - Editing fixture expected files unless explicitly requested.
