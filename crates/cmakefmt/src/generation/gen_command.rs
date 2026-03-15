@@ -511,14 +511,14 @@ pub fn gen_command(
     // Multi-line quoted/bracket arguments are emitted via the raw command path so
     // their internal content and line endings remain byte-preserved.
     if has_multiline_verbatim_argument(&cmd.arguments, source) {
-        return gen_unknown_command(cmd, source, config, &formatted_name);
+        return gen_unknown_command(cmd, source, config, &formatted_name, indent_depth);
     }
 
     // Check if this is an unknown command — preserve original formatting
     // But if customKeywords is set, unknown commands may still have keyword recognition
     let cmd_kind = lookup_command(raw_name);
     if cmd_kind.is_none() && config.custom_keywords.is_empty() {
-        return gen_unknown_command(cmd, source, config, &formatted_name);
+        return gen_unknown_command(cmd, source, config, &formatted_name, indent_depth);
     }
 
     items.push_string(formatted_name.clone().into_owned());
@@ -671,6 +671,7 @@ fn gen_unknown_command(
     source: &str,
     config: &Configuration,
     formatted_name: &str,
+    indent_depth: u32,
 ) -> PrintItems {
     let mut items = PrintItems::new();
 
@@ -685,9 +686,62 @@ fn gen_unknown_command(
     let raw_content = &source[content_start..content_end];
 
     if !raw_content.contains('\n') {
-        // Single-line: emit content as-is
-        if !raw_content.is_empty() {
-            items.extend(ir_helpers::gen_from_raw_string(raw_content));
+        // Single-line: apply basic formatting (spaceInsideParen, collapseSpaces)
+        if cmd.arguments.is_empty() {
+            // Empty parens — no content to format
+        } else {
+            let paren_spacing = resolve_single_line_paren_spacing(cmd, source, config, true);
+
+            // Extract argument texts and join with single spaces
+            let arg_texts: Vec<&str> = cmd
+                .arguments
+                .iter()
+                .map(|arg| {
+                    let (start, end) = arg_source_range(arg);
+                    &source[start..end]
+                })
+                .collect();
+
+            let formatted_content = if config.collapse_spaces {
+                arg_texts.join(" ")
+            } else {
+                // Preserve original spacing between arguments
+                raw_content.trim().to_string()
+            };
+
+            // Check if single-line fits within line_width
+            let base_indent = indent_depth as usize * config.indent_width as usize;
+            let paren_space_width =
+                usize::from(paren_spacing.after_open) + usize::from(paren_spacing.before_close);
+            let total_width = base_indent
+                + formatted_name.len()
+                + 1 // open paren
+                + paren_space_width
+                + formatted_content.len()
+                + 1; // close paren
+
+            if total_width <= config.line_width as usize {
+                // Fits on one line
+                if paren_spacing.after_open {
+                    items.push_space();
+                }
+                items.extend(ir_helpers::gen_from_raw_string(&formatted_content));
+                if paren_spacing.before_close {
+                    items.push_space();
+                }
+            } else {
+                // Exceeds line_width: emit one argument per line (basic Step 3)
+                let continuation = config.effective_continuation_indent_width() as usize;
+                for arg in &cmd.arguments {
+                    let (start, end) = arg_source_range(arg);
+                    let arg_text = &source[start..end];
+                    push_newline_with_visual_indent(&mut items, continuation, config);
+                    items.extend(ir_helpers::gen_from_raw_string(arg_text));
+                }
+                if config.closing_paren_newline {
+                    items.push_signal(Signal::NewLine);
+                }
+            }
         }
     } else {
         // Multi-line: process per-argument to preserve bracket/quoted content verbatim.
