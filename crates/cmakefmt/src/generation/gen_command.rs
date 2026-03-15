@@ -1131,10 +1131,35 @@ fn try_single_line(
         return None;
     }
 
+    // Only reject single-line if the command actually has section-bearing keywords
+    // that would produce blank lines in multi-line layout. Commands like
+    // cmake_minimum_required(VERSION 3.28 FATAL_ERROR) have multiple keywords
+    // but no section structure, so they should still collapse to a single line.
     if config.blank_line_between_sections
         && args.iter().filter(|arg| arg.is_keyword).take(2).count() >= 2
     {
-        return None;
+        let has_sections = match cmd_kind {
+            Some(CommandKind::Known(spec)) => {
+                // Command has explicit sections, or has custom keywords
+                // that act as section dividers.
+                !spec.sections.is_empty()
+                    || args.iter().any(|arg| {
+                        arg.is_keyword
+                            && (is_section_keyword(arg, spec) || is_custom_keyword(arg, config))
+                    })
+            }
+            Some(CommandKind::ConditionSyntax) | None => {
+                // Condition syntax (if/while/elseif) and unknown commands:
+                // only reject if custom keywords create sections.
+                !config.custom_keywords.is_empty()
+                    && args
+                        .iter()
+                        .any(|arg| arg.is_keyword && is_custom_keyword(arg, config))
+            }
+        };
+        if has_sections {
+            return None;
+        }
     }
 
     // Calculate total width including file-level indentation.
@@ -1781,8 +1806,11 @@ fn flatten_keyword_groups_for_alignment<'a>(
     for group in groups {
         match group {
             ArgGroup::Keyword { keyword, values } => {
-                let is_section =
-                    is_section_keyword(keyword, spec) || is_custom_keyword(keyword, config);
+                let is_section = is_section_keyword(keyword, spec)
+                    || is_custom_keyword(keyword, config)
+                    || (config.blank_line_between_sections
+                        && keyword.is_keyword
+                        && spec.sections.is_empty());
                 let is_group_keyword =
                     matches!(get_keyword_type(keyword, spec), Some(KwType::Group(..)));
                 if is_section || is_group_keyword {
