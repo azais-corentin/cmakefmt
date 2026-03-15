@@ -790,13 +790,13 @@ onUnmounted(() => {
   font-weight: normal;
 }
 
-/* Reset VitePress table borders leaking into uPlot legends. */
-.chart-container :deep(.u-legend tr) {
-  border-top: none;
-}
-
+/* Reset VitePress .vp-doc table styles leaking into uPlot legends.
+   uPlot legends are unstyled by default; .vp-doc adds borders and
+   background colors to tr/th/td meant for content tables. */
+.chart-container :deep(.u-legend tr),
 .chart-container :deep(.u-legend th),
 .chart-container :deep(.u-legend td) {
   border: none;
+  background: none;
 }
 </style>
