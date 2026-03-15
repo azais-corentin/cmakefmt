@@ -59,8 +59,7 @@ def load_history(path: Path) -> dict[str, Any]:
     if not isinstance(entries, list):
         raise ValueError(f"history object must contain an entries array: {path}")
 
-    schema_version = int(data.get("schema_version", 1))
-    return {"schema_version": schema_version, "entries": entries}
+    return data
 
 
 def validate_entry(entry: Any) -> dict[str, Any]:
@@ -91,14 +90,11 @@ def main() -> int:
 
     entries.append(entry)
 
-    history_payload = {
-        "schema_version": 1,
-        "entries": entries,
-    }
+    history["entries"] = entries
 
     history_file.parent.mkdir(parents=True, exist_ok=True)
     with history_file.open("w", encoding="utf-8") as handle:
-        json.dump(history_payload, handle, indent=2)
+        json.dump(history, handle, indent=2)
         handle.write("\n")
 
     return 0

@@ -38,6 +38,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/scripts"
           cp scripts/collect_benchmark_results.py "$RUNNER_TEMP/scripts/"
           cp scripts/append_benchmark_history.py "$RUNNER_TEMP/scripts/"
+          cp scripts/collect_baseline_results.py "$RUNNER_TEMP/scripts/"
+          cp scripts/bench_cmake_format_baseline.py "$RUNNER_TEMP/scripts/"
 
       - name: Plan commits to benchmark
         id: plan
@@ -153,6 +155,67 @@ jobs:
           fi
 
           echo "HISTORY_WORKTREE=$history_worktree" >> "$GITHUB_ENV"
+
+      - name: Check if baselines exist
+        id: check_baselines
+        if: steps.plan.outputs.skip != 'true'
+        env:
+          HISTORY_FILE: benchmarks/cmakefmt-fixtures-history.json
+        run: |
+          set -euo pipefail
+          if [ -f "$HISTORY_WORKTREE/$HISTORY_FILE" ]; then
+            has_baselines=$(python3 -c "
+          import json
+          with open('$HISTORY_WORKTREE/$HISTORY_FILE') as f:
+            data = json.load(f)
+          print('true' if 'baselines' in data else 'false')
+          ")
+          else
+            has_baselines="false"
+          fi
+          echo "skip=$has_baselines" >> "$GITHUB_OUTPUT"
+
+      - name: Install baseline benchmark tools
+        if: steps.plan.outputs.skip != 'true' && steps.check_baselines.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          pip install cmakelang gersemi pytest pytest-benchmark
+          sudo apt-get install -y hyperfine
+
+      - name: Run cmake_format baseline
+        if: steps.plan.outputs.skip != 'true' && steps.check_baselines.outputs.skip != 'true'
+        run: |
+          pytest "$RUNNER_TEMP/scripts/bench_cmake_format_baseline.py" \
+            --benchmark-json="$RUNNER_TEMP/cmake-format-bench.json"
+
+      - name: Run gersemi baseline
+        if: steps.plan.outputs.skip != 'true' && steps.check_baselines.outputs.skip != 'true'
+        env:
+          FIXTURE: crates/cmakefmt/tests/formatter/respositories/XNNPACK/CMakeLists.in.cmake
+        run: |
+          hyperfine --warmup 3 --runs 10 --export-json "$RUNNER_TEMP/gersemi-bench.json" \
+            "gersemi --no-cache - < $FIXTURE"
+
+      - name: Collect baseline results
+        if: steps.plan.outputs.skip != 'true' && steps.check_baselines.outputs.skip != 'true'
+        env:
+          HISTORY_FILE: benchmarks/cmakefmt-fixtures-history.json
+          FIXTURE: crates/cmakefmt/tests/formatter/respositories/XNNPACK/CMakeLists.in.cmake
+        run: |
+          set -euo pipefail
+          cmake_format_version=$(python3 -c "from cmakelang import __version__; print(__version__)")
+          gersemi_version=$(gersemi --version | head -1)
+          input_bytes=$(wc -c < "$FIXTURE")
+
+          python3 "$RUNNER_TEMP/scripts/collect_baseline_results.py" \
+            --cmake-format-json "$RUNNER_TEMP/cmake-format-bench.json" \
+            --gersemi-json "$RUNNER_TEMP/gersemi-bench.json" \
+            --cmake-format-version "$cmake_format_version" \
+            --gersemi-version "$gersemi_version" \
+            --input-bytes "$input_bytes" \
+            --runner "${RUNNER_OS}" \
+            --rust-version "${RUST_VERSION}" \
+            --history-file "$HISTORY_WORKTREE/$HISTORY_FILE"
 
       - name: Run benchmark loop
         if: steps.plan.outputs.skip != 'true'
