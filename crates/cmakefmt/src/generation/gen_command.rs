@@ -4655,13 +4655,21 @@ fn sort_section_with_groups(args: &mut [FormattedArg]) {
             .iter()
             .any(|item| !is_standalone_comment(item) && item.new_line_before);
 
+        let mut genex_depth: i32 = 0;
+
         for item in &segment[start_index..] {
             if is_standalone_comment(item) {
                 pending_comments.push(item.clone());
                 continue;
             }
 
-            let starts_new_row = if has_explicit_rows {
+            let delta = genex_depth_delta(&item.text);
+
+            // While inside a genex (depth > 0), all tokens belong to the
+            // current sort unit — never start a new row.
+            let starts_new_row = if genex_depth > 0 {
+                false
+            } else if has_explicit_rows {
                 item.new_line_before && row_key.is_some()
             } else {
                 row_key.is_some()
@@ -4675,6 +4683,10 @@ fn sort_section_with_groups(args: &mut [FormattedArg]) {
                 row_items.append(&mut pending_comments);
             }
             row_items.push(item.clone());
+            genex_depth += delta;
+            if genex_depth < 0 {
+                genex_depth = 0; // Clamp for malformed input
+            }
         }
 
         flush_row(&mut units, &mut row_key, &mut row_items);
