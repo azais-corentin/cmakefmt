@@ -83,20 +83,20 @@ Without `--color` or `--no-color`, color is auto-detected based on whether stdou
 
 ## Format Override Flags
 
-These CLI flags override values from the [configuration file](/guide/configuration):
+These CLI flags override values from the [configuration file](/guide/configuration). The Config Key column shows the equivalent `.cmakefmt.toml` option:
 
-| Flag                                       | Description                                                                            |
-| ------------------------------------------ | -------------------------------------------------------------------------------------- |
-| `--line-width <N>`                         | Maximum line width.                                                                    |
-| `--indent-width <N>`                       | Number of spaces per indentation level.                                                |
-| `--use-tabs`                               | Enable tab indentation (overrides config to use tabs instead of spaces).               |
-| `--new-line-kind <lf\|cr-lf\|auto>`        | Newline style.                                                                         |
-| `--command-case <lower\|upper\|unchanged>` | Case style for commands.                                                               |
-| `--keyword-case <lower\|upper\|unchanged>` | Case style for keywords.                                                               |
-| `--closing-paren-newline <true\|false>`    | Place closing paren on a new line in multi-line commands.                              |
-| `--sort-lists`                             | Enable alphabetical sorting of argument lists.                                         |
-| `--max-blank-lines <N>`                    | Maximum consecutive blank lines to preserve.                                           |
-| `--space-before-paren <cmd1,cmd2,...>`     | Insert space before `(` for these commands (comma-separated, e.g. `if,while,foreach`). |
+| Flag                                       | Config Key            | Description                                                                           |
+| ------------------------------------------ | --------------------- | ------------------------------------------------------------------------------------- |
+| `--line-width <N>`                         | `lineWidth`           | Maximum line width.                                                                   |
+| `--indent-width <N>`                       | `indentWidth`         | Number of spaces per indentation level.                                               |
+| `--use-tabs`                               | `indentStyle`         | Enable tab indentation (sets `indentStyle = "tab"`).                                  |
+| `--new-line-kind <lf\|cr-lf\|auto>`        | `lineEnding`          | Newline style.                                                                        |
+| `--command-case <lower\|upper\|unchanged>` | `commandCase`         | Case style for commands.                                                              |
+| `--keyword-case <lower\|upper\|unchanged>` | `keywordCase`         | Case style for keywords.                                                              |
+| `--closing-paren-newline <true\|false>`    | `closingParenNewline` | Place closing paren on a new line in multi-line commands.                             |
+| `--sort-lists`                             | `sortArguments`       | Enable alphabetical sorting of argument lists (equivalent to `sortArguments = true`). |
+| `--max-blank-lines <N>`                    | `maxBlankLines`       | Maximum consecutive blank lines to preserve.                                          |
+| `--space-before-paren <cmd1,cmd2,...>`     | `spaceBeforeParen`    | Insert space before `(` for these commands (comma-separated).                         |
 
 ## Flag Interactions
 

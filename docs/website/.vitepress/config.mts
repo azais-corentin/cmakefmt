@@ -16,6 +16,7 @@ export default defineConfig({
       { text: "Guide", link: "/guide/getting-started" },
       { text: "Configuration", link: "/guide/configuration" },
       { text: "CLI", link: "/guide/cli" },
+      { text: "Inline Pragmas", link: "/guide/inline-pragmas" },
       { text: "Benchmarks", link: "/benchmarks" },
     ],
     sidebar: {
@@ -26,6 +27,7 @@ export default defineConfig({
             { text: "Getting Started", link: "/guide/getting-started" },
             { text: "Configuration", link: "/guide/configuration" },
             { text: "CLI Reference", link: "/guide/cli" },
+            { text: "Inline Pragmas", link: "/guide/inline-pragmas" },
           ],
         },
       ],

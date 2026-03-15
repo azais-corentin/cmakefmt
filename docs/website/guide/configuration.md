@@ -70,7 +70,7 @@ Controls the maximum line length and how commands are broken across multiple lin
 - **`lineWidth`** (`integer`, default: `80`) — Maximum columns per line. The formatter never breaks within a single token. Range: 40–320.
 - **`wrapStyle`** (`"cascade" | "vertical"`, default: `"cascade"`) — Wrapping strategy. `"cascade"` uses a three-step algorithm: fit on one line, then keywords on new lines with arguments packed inline, then one argument per line. `"vertical"` skips the packing step and goes directly to one-per-line.
 - **`firstArgSameLine`** (`boolean`, default: `true`) — Whether the first positional argument (typically the target name) stays on the same line as the command name when wrapping.
-- **`wrapArgThreshold`** (`integer`, default: `0`) — When > 0, forces one-argument-per-line wrapping whenever a command has more than this many arguments, regardless of line width. `0` disables the threshold.
+- **`wrapArgThreshold`** (`integer`, default: `0`) — When > 0, forces one-argument-per-line wrapping whenever a command has more than this many arguments, regardless of line width. `0` disables the threshold. Keywords count toward the threshold — `target_link_libraries(MyTarget PRIVATE foo bar)` has 4 arguments, not 2.
 - **`magicTrailingNewline`** (`boolean`, default: `true`) — When `true`, a closing `)` on its own line in the input is treated as an author-intent signal to prevent single-line collapse, even if the invocation would fit on one line.
 
 ```toml
@@ -85,7 +85,7 @@ Controls indent character, width, and specialized indent overrides for continuat
 
 - **`indentWidth`** (`integer`, default: `2`) — Spaces (or tab stops) per indentation level. Each nesting level increases indentation by this amount. Range: 1–8.
 - **`indentStyle`** (`"space" | "tab"`, default: `"space"`) — Whether to indent with spaces or hard tab characters.
-- **`continuationIndentWidth`** (`integer | null`, default: `null`) — Indentation for value lines under a keyword within a wrapped command, measured relative to the keyword. When `null`, inherits `indentWidth`. Range: 1–8.
+- **`continuationIndentWidth`** (`integer | null`, default: `null`) — Indentation for value lines under a keyword within a wrapped command, measured relative to the keyword. When `null`, inherits `indentWidth`. Range: 1–8. For commands without recognized keywords, `indentWidth` is used instead.
 - **`genexIndentWidth`** (`integer | null`, default: `null`) — Override indentation inside generator expressions (`$<...>`), relative to the column where `$<` starts. When `null`, inherits `indentWidth`. Range: 1–8.
 
 ```toml
@@ -98,7 +98,7 @@ continuationIndentWidth = 2
 
 Controls how blank lines between statements and within commands are handled.
 
-- **`maxBlankLines`** (`integer`, default: `1`) — Maximum consecutive blank lines preserved between top-level statements. Runs exceeding this count are collapsed. Leading blank lines at the start of a file are always removed. Range: 0–100.
+- **`maxBlankLines`** (`integer`, default: `1`) — Maximum consecutive blank lines preserved between top-level statements. Runs exceeding this count are collapsed. Leading blank lines at the start of a file are always removed. Range: 0–100. Blank lines inside command argument lists are always discarded during reformatting. Trailing blank lines at end-of-file are also subject to this limit.
 - **`minBlankLinesBetweenBlocks`** (`integer`, default: `0`) — Minimum blank lines inserted before block-opening commands (`if`, `foreach`, `while`, `function`, `macro`, `block`). Takes precedence over `maxBlankLines` at block boundaries. Range: 0–10.
 - **`blankLineBetweenSections`** (`boolean`, default: `false`) — When `true`, insert a blank line between keyword sections (e.g., between `PUBLIC` and `PRIVATE` argument groups) within a command.
 
@@ -128,9 +128,9 @@ literalCase = "upper"
 
 Controls placement of the closing parenthesis and spacing around parentheses.
 
-- **`closingParenNewline`** (`boolean`, default: `true`) — When a command spans multiple lines, place the closing `)` on its own line at the block's base indentation.
+- **`closingParenNewline`** (`boolean`, default: `true`) — When a command spans multiple lines, place the closing `)` on its own line at the block's base indentation. When `false`, the `)` stays on the last argument's line. If the last argument has a trailing comment, `)` is placed before the `#` marker.
 - **`spaceBeforeParen`** (`boolean | string[]`, default: `false`) — Insert a space between the command name and `(`. `false` = no space, `true` = space for all commands, or pass an array of command names to apply selectively (e.g., `["if", "elseif", "while"]`). Case-insensitive matching.
-- **`spaceInsideParen`** (`"insert" | "remove" | "preserve"`, default: `"remove"`) — Controls whitespace after `(` and before `)` on single-line invocations. Does not apply to multi-line commands or empty argument lists.
+- **`spaceInsideParen`** (`"insert" | "remove" | "preserve"`, default: `"remove"`) — Controls whitespace after `(` and before `)` on single-line invocations. Does not apply to multi-line commands or empty argument lists. When a multi-line command collapses to a single line, `"preserve"` mode treats it as `"remove"`.
 
 ```toml
 closingParenNewline = false
@@ -142,7 +142,7 @@ spaceInsideParen = "insert"
 
 Controls comment formatting, alignment, and spacing.
 
-- **`commentPreservation`** (`"preserve" | "reflow"`, default: `"preserve"`) — `"preserve"` keeps comments in-place (re-indenting as needed; standalone comments inside argument lists prevent single-line collapse). `"reflow"` reflows comment text to fit within `commentWidth`, treating consecutive `#` lines as paragraphs.
+- **`commentPreservation`** (`"preserve" | "reflow"`, default: `"preserve"`) — `"preserve"` keeps comments in-place (re-indenting as needed; standalone comments inside argument lists prevent single-line collapse). `"reflow"` reflows comment text to fit within `commentWidth`, treating consecutive `#` lines as paragraphs. Paragraph breaks occur at blank comment lines or whitespace-pattern changes. Indented blocks (4+ spaces) and fenced blocks (triple backticks) are preserved verbatim. List items (starting with `-`, `*`, `+`, or digits) are not reflowed.
 - **`commentWidth`** (`integer | null`, default: `null`) — Maximum line width for comments. Only effective when `commentPreservation` is `"reflow"`. When `null`, inherits `lineWidth`. Range: 40–320.
 - **`alignTrailingComments`** (`boolean`, default: `false`) — When `true`, align trailing `#` comments on consecutive lines to start at the same column. Groups are broken by blank lines or lines without trailing comments.
 - **`commentGap`** (`integer`, default: `1`) — Minimum spaces between the last code token and a trailing `#` comment. Range: 0–10.
@@ -208,7 +208,7 @@ genexClosingAngleNewline = false
 
 Allows overriding formatting options on a per-command basis.
 
-- **`perCommandConfig`** (`table`, default: `{}`) — A TOML table keyed by command name (case-insensitive). Each entry can override options from groups 1 (wrapping), 2 (indentation), 4 (casing), 5 (parentheses & spacing), 6 (comments), 9 (alignment), 10 (generator expressions), and 12 (sorting). File-level concerns (blank lines, line endings, whitespace normalization, suppression) cannot be overridden per-command.
+- **`perCommandConfig`** (`table`, default: `{}`) — A TOML table keyed by command name (case-insensitive). Each entry can override options from groups 1 (wrapping), 2 (indentation), 4 (casing), 5 (parentheses & spacing), 6 (comments), 9 (alignment), 10 (generator expressions), and 12 (sorting). File-level concerns (blank lines, line endings, whitespace normalization, suppression) cannot be overridden per-command. The overridable options are: `lineWidth`, `wrapStyle`, `firstArgSameLine`, `wrapArgThreshold`, `magicTrailingNewline`, `indentWidth`, `indentStyle`, `continuationIndentWidth`, `genexIndentWidth`, `commandCase`, `keywordCase`, `customKeywords`, `literalCase`, `closingParenNewline`, `spaceBeforeParen`, `spaceInsideParen`, `commentPreservation`, `commentWidth`, `alignTrailingComments`, `commentGap`, `alignPropertyValues`, `alignConsecutiveSet`, `alignArgGroups`, `genexWrap`, `genexClosingAngleNewline`, `sortArguments`, and `sortKeywordSections`.
 
 ```toml
 [perCommandConfig.set]
@@ -222,11 +222,13 @@ lineWidth = 120
 spaceBeforeParen = true
 ```
 
+For temporary overrides within a file, see [Inline Pragmas](/guide/inline-pragmas).
+
 ### Sorting
 
 Controls alphabetical sorting of arguments and canonical reordering of keyword sections.
 
-- **`sortArguments`** (`boolean | string[]`, default: `false`) — When `true`, alphabetically sort arguments within keyword sections marked as sortable (e.g., `PRIVATE`, `PUBLIC`, `DEPENDS`, `SOURCES`). Pass an array of section names to sort only specific sections. Sorting is case-insensitive and stable. Attached comments travel with their argument; unattached comments act as group boundaries.
+- **`sortArguments`** (`boolean | string[]`, default: `false`) — When `true`, alphabetically sort arguments within keyword sections marked as sortable (e.g., `PRIVATE`, `PUBLIC`, `DEPENDS`, `SOURCES`). Pass an array of section names to sort only specific sections. Sorting is case-insensitive and stable. Attached comments travel with their argument; unattached comments act as group boundaries. Unattached comments and blank lines act as group boundaries — sorting does not cross them. Generator expressions and variable references are sorted by their literal text. For `add_library` and `add_executable`, source file sections are implicitly sortable. Commands without recognized keyword sections are unaffected.
 - **`sortKeywordSections`** (`boolean`, default: `false`) — When `true`, reorder keyword sections to a canonical order (e.g., `PUBLIC` before `INTERFACE` before `PRIVATE`). The canonical order is defined per-command in the keyword dictionary.
 
 ```toml
@@ -239,7 +241,7 @@ sortKeywordSections = true
 Controls indentation of flow-control block bodies and handling of arguments in closing commands.
 
 - **`indentBlockBody`** (`boolean`, default: `true`) — When `true`, indent the body of flow-control blocks (`if`/`foreach`/`while`/`function`/`macro`/`block`) by `indentWidth`. When `false`, block bodies are not indented.
-- **`endCommandArgs`** (`"remove" | "preserve" | "match"`, default: `"remove"`) — Controls arguments inside block-closing commands (`endif()`, `endfunction()`, etc.) and intermediate commands (`else()`, `elseif()`). `"remove"` strips them, `"preserve"` keeps the original, `"match"` repeats the opening command's arguments.
+- **`endCommandArgs`** (`"remove" | "preserve" | "match"`, default: `"remove"`) — Controls arguments inside block-closing commands (`endif()`, `endfunction()`, etc.) and intermediate commands (`else()`, `elseif()`). `"remove"` strips them, `"preserve"` keeps the original, `"match"` repeats the opening command's arguments. `else()` in `"match"` mode copies the enclosing `if()` condition. `elseif()` is never affected by this option. `block()`/`endblock()` always produces empty `endblock()`.
 
 ```toml
 indentBlockBody = true
@@ -332,3 +334,8 @@ ignoreCommands = []
 indentBlockBody = true
 endCommandArgs = "remove"
 ```
+
+## See Also
+
+- [Inline Pragmas](/guide/inline-pragmas) — control formatting locally within a file using comment directives
+- [CLI Reference](/guide/cli) — command-line flags and usage
