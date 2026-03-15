@@ -3179,7 +3179,7 @@ fn looks_like_property_key(arg: &FormattedArg) -> bool {
         return false;
     }
 
-    text.contains('_')
+    !text.is_empty()
         && text
             .chars()
             .all(|ch| ch.is_ascii_uppercase() || ch.is_ascii_digit() || ch == '_')
