@@ -116,6 +116,11 @@ mise run size                          # build release-wasm + report binary size
 
 # Pre-commit
 mise run pre-commit                    # hk hooks: fmt, clippy, dprint, etc.
+
+# Documentation website (docs/website/)
+bun run dev                              # VitePress dev server with hot-reload
+bun run build                            # production build
+bun run preview                          # preview production build
 ```
 
 ## Code Conventions & Common Patterns
