@@ -266,18 +266,6 @@ fn canonical_section_order(cmd_name: &str) -> Option<&'static [&'static str]> {
             "LINK_INTERFACE_LIBRARIES",
         ]),
         "target_sources" => Some(&["PUBLIC", "INTERFACE", "PRIVATE"]),
-        "install" => Some(&[
-            "ARCHIVE",
-            "LIBRARY",
-            "RUNTIME",
-            "OBJECTS",
-            "FRAMEWORK",
-            "BUNDLE",
-            "PUBLIC_HEADER",
-            "PRIVATE_HEADER",
-            "RESOURCE",
-            "FILE_SET",
-        ]),
         "export" => Some(&["PACKAGE_DEPENDENCY", "TARGET", "VERSION"]),
         _ => None,
     }
