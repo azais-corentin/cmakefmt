@@ -260,7 +260,7 @@ jobs:
 
             commit_ts="$(git show -s --format=%aI "$sha")"
 
-            git checkout "$sha" --
+            git checkout -f "$sha" --
 
             # Clean stale Criterion output to prevent cross-commit contamination
             rm -rf target/criterion/formatter_fixtures
@@ -308,7 +308,7 @@ jobs:
           done < "$todo_file"
 
           # Restore working tree to default branch
-          git checkout "$DEFAULT_BRANCH_SHA" --
+          git checkout -f "$DEFAULT_BRANCH_SHA" --
 
       - name: Publish benchmark history
         if: steps.plan.outputs.skip != 'true'
