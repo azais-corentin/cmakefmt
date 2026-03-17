@@ -28,7 +28,7 @@ SET(  FOO   "bar"  )
 
 Glob patterns for files that should be skipped entirely. Patterns are resolved
 relative to the configuration file's directory. When patterns are inherited via
-`extends` (§15.2), each pattern is resolved relative to the config file in which
+`extends` (§15.1), each pattern is resolved relative to the config file in which
 it appears, not relative to the extending file.
 
 Patterns use gitignore-style glob syntax: `*` matches any sequence except `/`, `**` matches

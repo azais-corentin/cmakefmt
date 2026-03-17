@@ -92,7 +92,7 @@ set_target_properties(MyTarget PROPERTIES
 
 `push {}` (empty table) creates a save-point with no changes.
 
-When `push` includes `perCommandConfig`, the pushed table shallow-merges with the current effective `perCommandConfig` at the command-key level (same semantics as `extends` §15.2): top-level command keys in the pushed table override the existing entry for that command entirely. Command entries not present in the pushed table are preserved from the current frame. Step 2 of the resolution order (§13.4.4) consults this effective merged `perCommandConfig`.
+When `push` includes `perCommandConfig`, the pushed table shallow-merges with the current effective `perCommandConfig` at the command-key level (same semantics as `extends` §15.1): top-level command keys in the pushed table override the existing entry for that command entirely. Command entries not present in the pushed table are preserved from the current frame. Step 2 of the resolution order (§13.4.4) consults this effective merged `perCommandConfig`.
 
 #### 13.4.2 `pop`
 
