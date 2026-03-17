@@ -596,7 +596,6 @@ enum CanonicalKey {
     IgnoreCommands,
     IndentBlockBody,
     EndCommandArgs,
-    Schema,
     Extends,
     IndentMode,
 }
@@ -654,7 +653,6 @@ fn canonical_key(key: &str) -> Option<CanonicalKey> {
         "ignoreCommands" | "ignore_commands" => Some(CanonicalKey::IgnoreCommands),
         "indentBlockBody" | "indent_block_body" => Some(CanonicalKey::IndentBlockBody),
         "endCommandArgs" | "end_command_args" => Some(CanonicalKey::EndCommandArgs),
-        "$schema" => Some(CanonicalKey::Schema),
         "extends" => Some(CanonicalKey::Extends),
         "indent" => Some(CanonicalKey::IndentMode),
         _ => None,
@@ -940,12 +938,6 @@ impl Loader {
                 if let Some(parsed) = self.parse_end_command_args(key, value) {
                     self.config.end_command_args = parsed;
                     self.record_override(key, format!("{parsed:?}"));
-                }
-            }
-            CanonicalKey::Schema => {
-                if let Some(parsed) = self.parse_string(key, value) {
-                    self.config.schema = Some(parsed.clone());
-                    self.record_override(key, parsed);
                 }
             }
             CanonicalKey::Extends => {
@@ -1308,7 +1300,6 @@ impl Loader {
             | CanonicalKey::IgnoreCommands
             | CanonicalKey::IndentBlockBody
             | CanonicalKey::EndCommandArgs
-            | CanonicalKey::Schema
             | CanonicalKey::Extends
             | CanonicalKey::IndentMode
             | CanonicalKey::UseTabs => {
@@ -1853,20 +1844,6 @@ mod tests {
     }
 
     #[test]
-    fn parses_schema_without_diagnostic() {
-        let result = load_from_header(
-            r#"{"$schema": "https://example.com/cmakefmt-schema.json", "commandCase": "upper"}"#,
-        );
-
-        assert_eq!(
-            result.config.schema,
-            Some("https://example.com/cmakefmt-schema.json".to_string())
-        );
-        assert_eq!(result.config.command_case, CaseStyle::Upper);
-        assert!(result.diagnostics.is_empty());
-    }
-
-    #[test]
     fn parses_nullable_inherited_fields() {
         let result = load_from_header(r#"{"commentWidth": null, "continuationIndentWidth": 6}"#);
 
@@ -1893,23 +1870,6 @@ mod tests {
         );
         assert!(result.diagnostics.is_empty());
     }
-    #[test]
-    fn parses_toml_schema_without_diagnostic() {
-        let result = load_from_toml(
-            r#"
-"$schema" = "https://example.com/cmakefmt-schema.json"
-commandCase = "upper"
-"#,
-        );
-
-        assert_eq!(
-            result.config.schema,
-            Some("https://example.com/cmakefmt-schema.json".to_string())
-        );
-        assert_eq!(result.config.command_case, CaseStyle::Upper);
-        assert!(result.diagnostics.is_empty());
-    }
-
     #[test]
     fn parses_toml_arrays_and_per_command_tables() {
         let result = load_from_toml(
@@ -2010,49 +1970,6 @@ spaceBeforeParen = true
             elseif_config.space_before_paren,
             Some(SpaceBeforeParen::Always)
         );
-    }
-
-    #[test]
-    fn loads_toml_configuration_from_path() {
-        let config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/formatter/15_config_meta/01_schema/schema_ignored/.cmakefmt.toml");
-
-        let result = load_from_toml_path(&config_path);
-
-        assert_eq!(
-            result.config.schema,
-            Some("https://example.com/cmakefmt-schema.json".to_string())
-        );
-        assert_eq!(result.config.command_case, CaseStyle::Upper);
-        assert!(result.diagnostics.is_empty());
-    }
-
-    #[test]
-    fn applies_toml_configuration_fixture_to_formatting() {
-        let fixture_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/formatter/15_config_meta/01_schema/schema_ignored");
-        let config_path = fixture_dir.join(".cmakefmt.toml");
-        let input_path = fixture_dir.join("schema_ignored.in.cmake");
-        let expected_path = fixture_dir.join("schema_ignored.out.cmake");
-
-        let load_result = load_from_toml_path(&config_path);
-        assert!(
-            load_result.diagnostics.is_empty(),
-            "unexpected config diagnostics: {:?}",
-            load_result.diagnostics
-        );
-
-        let input = std::fs::read_to_string(&input_path).expect("failed to read fixture input");
-        let expected =
-            std::fs::read_to_string(&expected_path).expect("failed to read fixture output");
-        let formatted = crate::format_text::format_text(
-            std::path::Path::new("CMakeLists.txt"),
-            &input,
-            &load_result.config,
-        )
-        .expect("formatting failed");
-
-        assert_eq!(formatted.as_deref(), Some(expected.as_str()));
     }
 
     #[test]

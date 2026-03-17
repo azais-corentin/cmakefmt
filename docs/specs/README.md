@@ -84,8 +84,7 @@ exits with a non-zero status code. The formatter never silently corrupts unparse
 | 12.2 | `sortKeywordSections`        | `boolean`                            | `false`       |
 | 14.1 | `indentBlockBody`            | `boolean`                            | `true`        |
 | 14.2 | `endCommandArgs`             | `"remove" \| "preserve" \| "match"`  | `"remove"`    |
-| 15.1 | `$schema`                    | `string`                             | —             |
-| 15.2 | `extends`                    | `string`                             | —             |
+| 15.1 | `extends`                    | `string`                             | —             |
 | 16.1 | `disableFormatting`          | `boolean`                            | `false`       |
 | 16.2 | `ignorePatterns`             | `string[]`                           | `[]`          |
 | 16.3 | `ignoreCommands`             | `string[]`                           | `[]`          |

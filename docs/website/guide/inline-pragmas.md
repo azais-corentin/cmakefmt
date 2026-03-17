@@ -123,7 +123,6 @@ All formatting options listed in the [Configuration Reference](/guide/configurat
 
 - `disableFormatting`
 - `extends`
-- `$schema`
 - `ignorePatterns`
 
 `push` has broader scope than `perCommandConfig`: it can also set file-level options such as `maxBlankLines`, `lineEnding`, `finalNewline`, `trimTrailingWhitespace`, `collapseSpaces`, `endCommandArgs`, and `indentBlockBody`. Changing `indentBlockBody` via `push` affects only blocks opened after the push, not the currently enclosing block.

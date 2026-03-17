@@ -51,7 +51,6 @@ See the [CLI reference](/guide/cli) for details on these flags.
 | 12.2 | `sortKeywordSections`        | `boolean`                            | `false`       |
 | 14.1 | `indentBlockBody`            | `boolean`                            | `true`        |
 | 14.2 | `endCommandArgs`             | `"remove" \| "preserve" \| "match"`  | `"remove"`    |
-| 15.1 | `$schema`                    | `string`                             | —             |
 | 15.2 | `extends`                    | `string`                             | —             |
 | 16.1 | `disableFormatting`          | `boolean`                            | `false`       |
 | 16.2 | `ignorePatterns`             | `string[]`                           | `[]`          |
@@ -248,14 +247,6 @@ ignoreCommands = ["ExternalProject_Add", "FetchContent_Declare"]
 ```
 
 ## Config Meta
-
-### `$schema`
-
-Optional JSON Schema URL for editor validation and autocomplete. Has no effect on the formatter itself.
-
-```toml
-"$schema" = "https://raw.githubusercontent.com/azais-corentin/cmakefmt/main/schema.json"
-```
 
 ### `extends`
 

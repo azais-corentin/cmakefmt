@@ -129,7 +129,7 @@ A `push` override always takes priority over `perCommandConfig`.
 ### 13.5 Pragma-Settable Options
 
 The options settable via `push` include all formatting options listed in the Summary Table. Only `disableFormatting`,
-`extends`, `$schema`, and `ignorePatterns` cannot be set in a pragma — these control configuration
+`extends`, and `ignorePatterns` cannot be set in a pragma — these control configuration
 infrastructure or file-level routing, not formatting behavior. Setting any of these produces a warning and is
 ignored. Note that `push` has broader scope than `perCommandConfig` (§11.1): it can also
 set file-level options such as `maxBlankLines`, `lineEnding`, `finalNewline`,

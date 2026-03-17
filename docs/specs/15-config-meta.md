@@ -1,20 +1,6 @@
 ## 15 · Configuration Meta
 
-### 15.1 `$schema`
-
-|             |          |
-| ----------- | -------- |
-| **Type**    | `string` |
-| **Default** | *(none)* |
-
-Optional JSON Schema URL for editor validation and autocomplete. Has no effect on the
-formatter itself.
-
-```toml
-"$schema" = "https://raw.githubusercontent.com/yourorg/cmakefmt/main/schema.json"
-```
-
-### 15.2 `extends`
+### 15.1 `extends`
 
 |             |          |
 | ----------- | -------- |
@@ -43,7 +29,7 @@ extends = "../../.cmakefmt.toml"
 wrapStyle = "vertical"
 ```
 
-### 15.3 Unknown Keys
+### 15.2 Unknown Keys
 
 |              |         |
 | ------------ | ------- |

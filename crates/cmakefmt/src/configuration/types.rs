@@ -63,7 +63,6 @@ pub struct Configuration {
     pub indent_block_body: bool,
     pub end_command_args: EndCommandArgs,
 
-    pub schema: Option<String>,
     pub extends: Option<String>,
 
     /// Legacy compatibility field used by existing sorting logic.
@@ -215,7 +214,6 @@ impl Default for Configuration {
             ignore_commands: Vec::new(),
             indent_block_body: true,
             end_command_args: EndCommandArgs::Remove,
-            schema: None,
             extends: None,
             sort_lists: false,
         }
