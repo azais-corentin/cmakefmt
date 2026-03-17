@@ -121,8 +121,6 @@ jobs:
   build-wasm:
     needs: validate
     runs-on: ubuntu-latest
-    env:
-      WASM_NAME: cmakefmt-dprint-${{ needs.validate.outputs.version }}.wasm
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -142,13 +140,13 @@ jobs:
         run: cargo build --profile release-wasm -p cmakefmt-dprint --target wasm32-unknown-unknown
 
       - name: Rename WASM artifact
-        run: cp target/wasm32-unknown-unknown/release-wasm/cmakefmt_dprint.wasm "$WASM_NAME"
+        run: cp target/wasm32-unknown-unknown/release-wasm/cmakefmt_dprint.wasm cmakefmt-dprint.wasm
 
       - name: Upload artifact
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: cmakefmt-dprint-wasm
-          path: ${{ env.WASM_NAME }}
+          path: cmakefmt-dprint.wasm
           if-no-files-found: error
 
   publish-crate:
