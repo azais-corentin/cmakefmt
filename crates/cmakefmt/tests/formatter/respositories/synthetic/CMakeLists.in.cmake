@@ -102,7 +102,7 @@ find_package(Boost
     program_options
     regex
 )
-FIND_PACKAGE(Qt6
+Find_Package(Qt6
   6.5
   REQUIRED
   COMPONENTS
@@ -113,7 +113,7 @@ FIND_PACKAGE(Qt6
     Sql
     Xml
 )
-Find_Package(OpenCV
+find_package(OpenCV
   4.8
   REQUIRED
   COMPONENTS
@@ -123,19 +123,19 @@ Find_Package(OpenCV
     videoio
     calib3d
 )
-Find_Package(Protobuf
+FIND_PACKAGE(Protobuf
   3.21
   REQUIRED
 )
-FIND_PACKAGE(gRPC
+find_package(gRPC
   1.50
   REQUIRED
 )
-FIND_PACKAGE(CUDA
+Find_Package(CUDA
   12.0
   REQUIRED
 )
-FIND_PACKAGE(OpenSSL
+Find_Package(OpenSSL
   3.0
   REQUIRED
 )
@@ -157,7 +157,7 @@ FIND_FILE(SYNTHETIC_CONFIG  synthetic.cfg  HINTS  ${CMAKE_PREFIX_PATH}/etc  /etc
 
 STRING(  REGEX MATCH "([0-9]+)\.([0-9]+)\.([0-9]+)" SYNTHETIC_VERSION_MATCH ${SYNTHETIC_VERSION_STRING} )
 STRING(REGEX  MATCHALL "[a-zA-Z_][a-zA-Z0-9_]*" SYNTHETIC_IDENTIFIERS "${SYNTHETIC_SOURCE_TEXT}")
-string(REGEX REPLACE "([^;]+)" "prefix_\1" SYNTHETIC_PREFIXED ${SYNTHETIC_LIST}  )
+string(REGEX REPLACE "[;]+" "," SYNTHETIC_PREFIXED ${SYNTHETIC_LIST}  )
 STRING(  REPLACE "old_pattern" "new_pattern" SYNTHETIC_REPLACED "${SYNTHETIC_INPUT}" )
 string( APPEND SYNTHETIC_BUFFER  "first part "  "second part "  "third part")
 STRING(PREPEND SYNTHETIC_BUFFER "header: ")

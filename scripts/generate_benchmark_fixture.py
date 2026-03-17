@@ -118,7 +118,7 @@ def string_operations() -> Iterator[str]:
     # Various string subcommands
     yield 'STRING(  REGEX MATCH "([0-9]+)\\.([0-9]+)\\.([0-9]+)" SYNTHETIC_VERSION_MATCH ${SYNTHETIC_VERSION_STRING} )'
     yield 'STRING(REGEX  MATCHALL "[a-zA-Z_][a-zA-Z0-9_]*" SYNTHETIC_IDENTIFIERS "${SYNTHETIC_SOURCE_TEXT}")'
-    yield 'string(REGEX REPLACE "([^;]+)" "prefix_\\1" SYNTHETIC_PREFIXED ${SYNTHETIC_LIST}  )'
+    yield 'string(REGEX REPLACE "[;]+" "," SYNTHETIC_PREFIXED ${SYNTHETIC_LIST}  )'
     yield 'STRING(  REPLACE "old_pattern" "new_pattern" SYNTHETIC_REPLACED "${SYNTHETIC_INPUT}" )'
     yield 'string( APPEND SYNTHETIC_BUFFER  "first part "  "second part "  "third part")'
     yield 'STRING(PREPEND SYNTHETIC_BUFFER "header: ")'

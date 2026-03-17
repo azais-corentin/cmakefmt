@@ -246,7 +246,7 @@ string(
   REGEX MATCHALL "[a-zA-Z_][a-zA-Z0-9_]*"
   SYNTHETIC_IDENTIFIERS "${SYNTHETIC_SOURCE_TEXT}"
 )
-string(REGEX REPLACE "([^;]+)" "prefix_\1" SYNTHETIC_PREFIXED ${SYNTHETIC_LIST})
+string(REGEX REPLACE "[;]+" "," SYNTHETIC_PREFIXED ${SYNTHETIC_LIST})
 string(
   REPLACE
     "old_pattern"
