@@ -626,7 +626,15 @@ watch(isDark, (dark) => createCharts(dark));
 onMounted(async () => {
   try {
     const res = await fetch(`${DATA_URL}?_t=${Date.now()}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      if (res.status === 404) {
+        error.value = "Benchmark data is not available.";
+      } else {
+        error.value = `HTTP ${res.status} \u2014 failed to load benchmark data`;
+      }
+      loading.value = false;
+      return;
+    }
     const json = await res.json();
 
     const entries: any[] = json.entries ?? [];
