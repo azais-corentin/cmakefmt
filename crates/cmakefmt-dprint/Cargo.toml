@@ -13,8 +13,8 @@ description = "dprint plugin for CMake formatting"
 crate-type = ["cdylib"]
 
 [dependencies]
-anyhow = "1.0.102"
-cmakefmt = { package = "cmakefmt-rs", version = "0.1.0", path = "../cmakefmt" }
-dprint-core = { version = "0.67.4", features = ["formatting", "wasm"] }
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = { version = "1.0.149", features = ["preserve_order"] }
+anyhow.workspace = true
+cmakefmt.workspace = true
+dprint-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true

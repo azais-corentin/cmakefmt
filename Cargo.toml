@@ -10,6 +10,27 @@ repository = "https://github.com/azais-corentin/cmakefmt"
 members = ["crates/cmakefmt", "crates/cmakefmt-cli", "crates/cmakefmt-dprint"]
 resolver = "3"
 
+[workspace.dependencies]
+# Internal
+cmakefmt = { package = "cmakefmt-rs", path = "crates/cmakefmt", version = "0.1.1" }
+
+# External
+anyhow = "1.0.102"
+clap = { version = "4.6.0", features = ["derive"] }
+criterion = { version = "0.8.2", features = ["html_reports"] }
+dprint-core = { version = "0.67.4", features = ["formatting", "wasm"] }
+glob = "0.3.3"
+imara-diff = "0.2.0"
+logos = "0.16.1"
+memchr = "2.8.0"
+rstest = "0.26.1"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = { version = "1.0.149", features = ["preserve_order"] }
+toml = "0.9.8"
+tracing = "0.1.44"
+tracing-chrome = "0.7.2"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
+
 [profile.bench]
 debug = 2
 split-debuginfo = "unpacked"

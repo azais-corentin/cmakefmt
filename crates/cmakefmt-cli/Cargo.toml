@@ -13,13 +13,13 @@ name = "cmakefmt"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1.0.102"
-clap = { version = "4.6.0", features = ["derive"] }
-cmakefmt = { package = "cmakefmt-rs", version = "0.1.0", path = "../cmakefmt", features = ["cli"] }
-glob = "0.3.3"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = { version = "1.0.149", features = ["preserve_order"] }
-toml = "0.9.8"
-tracing = "0.1.44"
-tracing-chrome = "0.7.2"
-tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
+anyhow.workspace = true
+clap.workspace = true
+cmakefmt = { workspace = true, features = ["cli"] }
+glob.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+tracing.workspace = true
+tracing-chrome.workspace = true
+tracing-subscriber.workspace = true
