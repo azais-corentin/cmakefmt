@@ -1,0 +1,26 @@
+tag_prefix = "v"
+branch_whitelist = ["main"]
+skip_untracked = false
+
+pre_bump_hooks = [
+  # Update workspace version in all Cargo.toml files
+  "cargo set-version {{version}}",
+  # Update internal workspace dependency version pin
+  """sed -i '/cmakefmt-rs/s/version = "[^"]*"/version = "{{version}}"/' Cargo.toml""",
+  # Regenerate Cargo.lock with new version
+  "cargo check",
+  # Stage all version-bumped files for the version commit
+  "git add :/Cargo.toml :/Cargo.lock",
+]
+
+post_bump_hooks = [
+  "git push origin main",
+  "git push origin {{version_tag}}",
+]
+
+[changelog]
+path = "CHANGELOG.md"
+template = "remote"
+remote = "github.com"
+owner = "azais-corentin"
+repository = "cmakefmt"

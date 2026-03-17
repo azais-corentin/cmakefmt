@@ -71,7 +71,7 @@ Add cmakefmt as a WASM plugin in your `.dprintrc.json`:
 ```json
 {
   "plugins": [
-    "https://github.com/azais-corentin/cmakefmt/releases/download/v0.1.1/cmakefmt-v0.1.1.wasm"
+    "https://github.com/azais-corentin/cmakefmt/releases/latest/download/cmakefmt-dprint.wasm"
   ]
 }
 ```

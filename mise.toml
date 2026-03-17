@@ -61,6 +61,15 @@ pkl format -
 code=$?
 ([ $code -eq 0 ] || [ $code -eq 11 ]) && exit 0 || exit $code
 '''
+
+[tasks.release]
+description = "Bump version, update changelog, tag, and push (via cog bump --auto)"
+run = "cog bump --auto"
+
+[tasks."release:dry-run"]
+description = "Preview next version without making changes"
+run = "cog bump --auto --dry-run"
+
 [tools]
 actionlint = "latest"
 bun = "latest"
@@ -72,3 +81,7 @@ java = "latest"
 pinact = "latest"
 pkl = "latest"
 zizmor = "latest"
+"cargo:cargo-edit" = "latest"
+
+[settings]
+cargo_binstall = true

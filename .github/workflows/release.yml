@@ -193,17 +193,21 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Install git-cliff
-        uses: orhun/git-cliff-action@c93ef52f3d0ddcdcc9bd5447d98d458a11cd4f72 # v4.7.1
-        with:
-          args: --version
+      - name: Install cocogitto
+        run: |
+          curl -sSL https://github.com/cocogitto/cocogitto/releases/latest/download/cocogitto-x86_64-unknown-linux-musl.tar.gz | tar xz
+          chmod +x cog
+          sudo mv cog /usr/local/bin/
 
       - name: Generate changelog
         id: changelog
-        uses: orhun/git-cliff-action@c93ef52f3d0ddcdcc9bd5447d98d458a11cd4f72 # v4.7.1
-        with:
-          config: cliff.toml
-          args: --latest --strip header
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          NOTES=$(cog changelog --at "$TAG_NAME")
+          echo "content<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$NOTES" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
 
       - name: Download all artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
