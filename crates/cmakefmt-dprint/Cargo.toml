@@ -10,7 +10,7 @@ repository.workspace = true
 description = "dprint plugin for CMake formatting"
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 anyhow.workspace = true
@@ -18,3 +18,7 @@ cmakefmt.workspace = true
 dprint-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+tempfile.workspace = true
