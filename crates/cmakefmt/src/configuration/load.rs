@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use super::types::{
-    CaseStyle, CommandConfiguration, CommentPreservation, Configuration, EndCommandArgs, GenexWrap,
+    CaseStyle, CommandConfiguration, CommentPreservation, Configuration, EndCommandArgs,
     IndentStyle, NewLineKind, SortArguments, SpaceBeforeParen, SpaceInsideParen, WrapStyle,
 };
 
@@ -481,9 +481,6 @@ fn suppress_per_command_overrides_for_push_keys(
         if explicit_keys.contains(&CanonicalKey::ContinuationIndentWidth) {
             command_config.continuation_indent_width = None;
         }
-        if explicit_keys.contains(&CanonicalKey::GenexIndentWidth) {
-            command_config.genex_indent_width = None;
-        }
 
         if explicit_keys.contains(&CanonicalKey::CommandCase) {
             command_config.command_case = None;
@@ -531,12 +528,6 @@ fn suppress_per_command_overrides_for_push_keys(
             command_config.align_arg_groups = None;
         }
 
-        if explicit_keys.contains(&CanonicalKey::GenexWrap) {
-            command_config.genex_wrap = None;
-        }
-        if explicit_keys.contains(&CanonicalKey::GenexClosingAngleNewline) {
-            command_config.genex_closing_angle_newline = None;
-        }
         if explicit_keys.contains(&CanonicalKey::SortArguments)
             || explicit_keys.contains(&CanonicalKey::SortKeywordSections)
         {
@@ -576,7 +567,6 @@ enum CanonicalKey {
     UseTabs,
     IndentStyle,
     ContinuationIndentWidth,
-    GenexIndentWidth,
     NewLineKind,
     FinalNewline,
     MaxBlankLines,
@@ -598,8 +588,6 @@ enum CanonicalKey {
     AlignPropertyValues,
     AlignConsecutiveSet,
     AlignArgGroups,
-    GenexWrap,
-    GenexClosingAngleNewline,
     PerCommandConfig,
     SortArguments,
     SortKeywordSections,
@@ -625,7 +613,6 @@ fn canonical_key(key: &str) -> Option<CanonicalKey> {
         "continuationIndentWidth" | "continuation_indent_width" => {
             Some(CanonicalKey::ContinuationIndentWidth)
         }
-        "genexIndentWidth" | "genex_indent_width" => Some(CanonicalKey::GenexIndentWidth),
         "lineEnding" | "line_ending" | "newLineKind" | "new_line_kind" => {
             Some(CanonicalKey::NewLineKind)
         }
@@ -657,10 +644,6 @@ fn canonical_key(key: &str) -> Option<CanonicalKey> {
         "alignPropertyValues" | "align_property_values" => Some(CanonicalKey::AlignPropertyValues),
         "alignConsecutiveSet" | "align_consecutive_set" => Some(CanonicalKey::AlignConsecutiveSet),
         "alignArgGroups" | "align_arg_groups" => Some(CanonicalKey::AlignArgGroups),
-        "genexWrap" | "genex_wrap" => Some(CanonicalKey::GenexWrap),
-        "genexClosingAngleNewline" | "genex_closing_angle_newline" => {
-            Some(CanonicalKey::GenexClosingAngleNewline)
-        }
         "perCommandConfig" | "per_command_config" => Some(CanonicalKey::PerCommandConfig),
         "sortArguments" | "sort_arguments" | "sortLists" | "sort_lists" => {
             Some(CanonicalKey::SortArguments)
@@ -760,12 +743,6 @@ impl Loader {
             CanonicalKey::ContinuationIndentWidth => {
                 if let Some(parsed) = self.parse_nullable_u8(key, value) {
                     self.config.continuation_indent_width = parsed;
-                    self.record_override_nullable_u8(key, parsed);
-                }
-            }
-            CanonicalKey::GenexIndentWidth => {
-                if let Some(parsed) = self.parse_nullable_u8(key, value) {
-                    self.config.genex_indent_width = parsed;
                     self.record_override_nullable_u8(key, parsed);
                 }
             }
@@ -903,18 +880,6 @@ impl Loader {
             CanonicalKey::AlignArgGroups => {
                 if let Some(parsed) = self.parse_bool(key, value) {
                     self.config.align_arg_groups = parsed;
-                    self.record_override(key, parsed.to_string());
-                }
-            }
-            CanonicalKey::GenexWrap => {
-                if let Some(parsed) = self.parse_genex_wrap(key, value) {
-                    self.config.genex_wrap = parsed;
-                    self.record_override(key, format!("{parsed:?}"));
-                }
-            }
-            CanonicalKey::GenexClosingAngleNewline => {
-                if let Some(parsed) = self.parse_bool(key, value) {
-                    self.config.genex_closing_angle_newline = parsed;
                     self.record_override(key, parsed.to_string());
                 }
             }
@@ -1091,19 +1056,6 @@ impl Loader {
         Some(style)
     }
 
-    fn parse_genex_wrap(&mut self, key: &str, value: RawConfigValue) -> Option<GenexWrap> {
-        let parsed = self.parse_string(key, value)?;
-        let Ok(style) = parsed.parse::<GenexWrap>() else {
-            self.push_invalid_value(
-                key,
-                format!("Invalid genexWrap value '{parsed}'. Expected one of: cascade, never"),
-            );
-            return None;
-        };
-
-        Some(style)
-    }
-
     fn parse_end_command_args(
         &mut self,
         key: &str,
@@ -1251,11 +1203,6 @@ impl Loader {
                     target.continuation_indent_width = parsed;
                 }
             }
-            CanonicalKey::GenexIndentWidth => {
-                if let Some(parsed) = self.parse_nullable_u8(&scoped_key, option_value) {
-                    target.genex_indent_width = parsed;
-                }
-            }
             CanonicalKey::CommandCase => {
                 if let Some(parsed) =
                     self.parse_case_style(&scoped_key, option_value, "commandCase")
@@ -1335,16 +1282,6 @@ impl Loader {
             CanonicalKey::AlignArgGroups => {
                 if let Some(parsed) = self.parse_bool(&scoped_key, option_value) {
                     target.align_arg_groups = Some(parsed);
-                }
-            }
-            CanonicalKey::GenexWrap => {
-                if let Some(parsed) = self.parse_genex_wrap(&scoped_key, option_value) {
-                    target.genex_wrap = Some(parsed);
-                }
-            }
-            CanonicalKey::GenexClosingAngleNewline => {
-                if let Some(parsed) = self.parse_bool(&scoped_key, option_value) {
-                    target.genex_closing_angle_newline = Some(parsed);
                 }
             }
             CanonicalKey::SortArguments => {
@@ -1931,13 +1868,10 @@ mod tests {
 
     #[test]
     fn parses_nullable_inherited_fields() {
-        let result = load_from_header(
-            r#"{"commentWidth": null, "continuationIndentWidth": 6, "genexIndentWidth": null}"#,
-        );
+        let result = load_from_header(r#"{"commentWidth": null, "continuationIndentWidth": 6}"#);
 
         assert_eq!(result.config.comment_width, None);
         assert_eq!(result.config.continuation_indent_width, Some(6));
-        assert_eq!(result.config.genex_indent_width, None);
         assert!(result.diagnostics.is_empty());
     }
 

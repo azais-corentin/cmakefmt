@@ -1,12 +1,6 @@
 # cmakefmt: push { firstArgSameLine = false }
 target_sources(
   MyProgram
-  PRIVATE
-    main.cpp
-    utils.cpp
-    helper.cpp
-    extra.cpp
-    more.cpp
-    another.cpp
+  PRIVATE main.cpp utils.cpp helper.cpp extra.cpp more.cpp another.cpp
 )
 # cmakefmt: pop

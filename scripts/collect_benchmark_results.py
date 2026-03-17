@@ -15,6 +15,7 @@ NANOSECONDS_PER_SECOND = 1_000_000_000.0
 BYTES_PER_DECIMAL_GIGABYTE = 1_000_000_000.0
 TARGET_GROUP_ID = "formatter_fixtures"
 
+
 @dataclass(frozen=True)
 class CriterionBenchmark:
     benchmark_id: str
@@ -88,7 +89,9 @@ def parse_throughput_bytes(raw_throughput: Any, source_path: Path) -> int:
     )
 
 
-def parse_criterion_benchmark(benchmark_meta: dict[str, Any], source_path: Path) -> CriterionBenchmark:
+def parse_criterion_benchmark(
+    benchmark_meta: dict[str, Any], source_path: Path
+) -> CriterionBenchmark:
     benchmark_id = benchmark_meta.get("full_id") or benchmark_meta.get("title")
     if not isinstance(benchmark_id, str) or not benchmark_id:
         raise ValueError(f"missing benchmark full_id/title in {source_path}")
@@ -109,7 +112,9 @@ def parse_criterion_benchmark(benchmark_meta: dict[str, Any], source_path: Path)
     if not isinstance(directory_name, str) or not directory_name:
         raise ValueError(f"missing benchmark directory_name in {source_path}")
 
-    throughput_bytes = parse_throughput_bytes(benchmark_meta.get("throughput"), source_path)
+    throughput_bytes = parse_throughput_bytes(
+        benchmark_meta.get("throughput"), source_path
+    )
 
     return CriterionBenchmark(
         benchmark_id=benchmark_id,
@@ -121,7 +126,9 @@ def parse_criterion_benchmark(benchmark_meta: dict[str, Any], source_path: Path)
     )
 
 
-def load_criterion_results(criterion_dir: Path) -> dict[str, tuple[CriterionBenchmark, dict[str, Any]]]:
+def load_criterion_results(
+    criterion_dir: Path,
+) -> dict[str, tuple[CriterionBenchmark, dict[str, Any]]]:
     results_by_benchmark_id: dict[str, tuple[CriterionBenchmark, dict[str, Any]]] = {}
 
     for benchmark_json in sorted(criterion_dir.glob("**/new/benchmark.json")):
@@ -141,7 +148,9 @@ def load_criterion_results(criterion_dir: Path) -> dict[str, tuple[CriterionBenc
             estimates = json.load(handle)
 
         if benchmark.benchmark_id in results_by_benchmark_id:
-            raise ValueError(f"duplicate benchmark id in criterion output: {benchmark.benchmark_id}")
+            raise ValueError(
+                f"duplicate benchmark id in criterion output: {benchmark.benchmark_id}"
+            )
 
         results_by_benchmark_id[benchmark.benchmark_id] = (benchmark, estimates)
 
@@ -170,7 +179,9 @@ def parse_fixture_identity(benchmark: CriterionBenchmark) -> tuple[str, str, str
     return lowered, "default", source
 
 
-def build_fixture_entry(benchmark: CriterionBenchmark, estimates: dict[str, Any]) -> dict[str, Any]:
+def build_fixture_entry(
+    benchmark: CriterionBenchmark, estimates: dict[str, Any]
+) -> dict[str, Any]:
     mean = estimates["mean"]
     median = estimates["median"]
 
@@ -201,8 +212,12 @@ def build_fixture_entry(benchmark: CriterionBenchmark, estimates: dict[str, Any]
         "median_seconds": median_seconds,
         "mean_confidence_interval_lower_seconds": ns_to_seconds(mean_ci["lower_bound"]),
         "mean_confidence_interval_upper_seconds": ns_to_seconds(mean_ci["upper_bound"]),
-        "median_confidence_interval_lower_seconds": ns_to_seconds(median_ci["lower_bound"]),
-        "median_confidence_interval_upper_seconds": ns_to_seconds(median_ci["upper_bound"]),
+        "median_confidence_interval_lower_seconds": ns_to_seconds(
+            median_ci["lower_bound"]
+        ),
+        "median_confidence_interval_upper_seconds": ns_to_seconds(
+            median_ci["upper_bound"]
+        ),
         "throughput_gb_per_s": throughput_gb_per_s,
     }
 
@@ -210,7 +225,12 @@ def build_fixture_entry(benchmark: CriterionBenchmark, estimates: dict[str, Any]
 def normalize_commit_timestamp(raw_timestamp: str | None) -> str:
     if raw_timestamp:
         return raw_timestamp
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return (
+        datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
 
 def main() -> int:

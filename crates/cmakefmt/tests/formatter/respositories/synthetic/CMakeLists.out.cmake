@@ -80,106 +80,91 @@ set(VAR_D                      "value_29")
 set(SYNTHETIC_CACHE_00
   "default_0"
   CACHE
-    STRING
-    "Cache variable 0"
+    STRING "Cache variable 0"
   FORCE
 )
 set(SYNTHETIC_CACHE_01
   "default_1"
   CACHE
-    BOOL
-    "Cache variable 1"
+    BOOL "Cache variable 1"
   FORCE
 )
 set(SYNTHETIC_CACHE_02
   "default_2"
   CACHE
-    PATH
-    "Cache variable 2"
+    PATH "Cache variable 2"
   FORCE
 )
 set(SYNTHETIC_CACHE_03
   "default_3"
   CACHE
-    FILEPATH
-    "Cache variable 3"
+    FILEPATH "Cache variable 3"
   FORCE
 )
 set(SYNTHETIC_CACHE_04
   "default_4"
   CACHE
-    INTERNAL
-    "Cache variable 4"
+    INTERNAL "Cache variable 4"
   FORCE
 )
 set(SYNTHETIC_CACHE_05
   "default_5"
   CACHE
-    STRING
-    "Cache variable 5"
+    STRING "Cache variable 5"
   FORCE
 )
 set(SYNTHETIC_CACHE_06
   "default_6"
   CACHE
-    BOOL
-    "Cache variable 6"
+    BOOL "Cache variable 6"
   FORCE
 )
 set(SYNTHETIC_CACHE_07
   "default_7"
   CACHE
-    PATH
-    "Cache variable 7"
+    PATH "Cache variable 7"
   FORCE
 )
 set(SYNTHETIC_CACHE_08
   "default_8"
   CACHE
-    FILEPATH
-    "Cache variable 8"
+    FILEPATH "Cache variable 8"
   FORCE
 )
 set(SYNTHETIC_CACHE_09
   "default_9"
   CACHE
-    INTERNAL
-    "Cache variable 9"
+    INTERNAL "Cache variable 9"
   FORCE
 )
 set(SYNTHETIC_CACHE_10
   "default_10"
   CACHE
-    STRING
-    "Cache variable 10"
+    STRING "Cache variable 10"
   FORCE
 )
 set(SYNTHETIC_CACHE_11
   "default_11"
   CACHE
-    BOOL
-    "Cache variable 11"
+    BOOL "Cache variable 11"
   FORCE
 )
 set(SYNTHETIC_CACHE_12
   "default_12"
   CACHE
-    PATH
-    "Cache variable 12"
+    PATH "Cache variable 12"
   FORCE
 )
 set(SYNTHETIC_CACHE_13
   "default_13"
   CACHE
-    FILEPATH
-    "Cache variable 13"
+    FILEPATH "Cache variable 13"
   FORCE
 )
 set(SYNTHETIC_CACHE_14
   "default_14"
   CACHE
-    INTERNAL
-    "Cache variable 14"
+    INTERNAL "Cache variable 14"
   FORCE
 )
 
@@ -254,13 +239,11 @@ find_file(SYNTHETIC_CONFIG synthetic.cfg HINTS ${CMAKE_PREFIX_PATH}/etc /etc)
 # --------------------------------------------------------------------------
 
 string(
-  REGEX MATCH
-    "([0-9]+)\.([0-9]+)\.([0-9]+)"
+  REGEX MATCH "([0-9]+)\.([0-9]+)\.([0-9]+)"
   SYNTHETIC_VERSION_MATCH ${SYNTHETIC_VERSION_STRING}
 )
 string(
-  REGEX MATCHALL
-    "[a-zA-Z_][a-zA-Z0-9_]*"
+  REGEX MATCHALL "[a-zA-Z_][a-zA-Z0-9_]*"
   SYNTHETIC_IDENTIFIERS "${SYNTHETIC_SOURCE_TEXT}"
 )
 string(REGEX REPLACE "([^;]+)" "prefix_\1" SYNTHETIC_PREFIXED ${SYNTHETIC_LIST})
@@ -400,8 +383,7 @@ file(WRITE "${CMAKE_BINARY_DIR}/generated.h" "#pragma once\n// Generated\n")
 file(APPEND "${CMAKE_BINARY_DIR}/generated.h" "#define SYNTHETIC 1\n")
 
 file(
-  GENERATE OUTPUT
-    "${CMAKE_BINARY_DIR}/config_$<CONFIG>.h"
+  GENERATE OUTPUT "${CMAKE_BINARY_DIR}/config_$<CONFIG>.h"
 
   CONTENT
     "#define BUILD_TYPE \"$<CONFIG>\"\n"
@@ -2660,38 +2642,38 @@ target_compile_definitions(synthetic_objects
 
 target_compile_options(synthetic_core
   PUBLIC
-    $<$<CXX_COMPILER_ID:Clang>:-Wall;-Wextra;-Wpedantic;-Wno-unused-parameter>
-    $<$<CXX_COMPILER_ID:GNU>:-Wall;-Wextra;-Wpedantic>
-    $<$<CXX_COMPILER_ID:MSVC>:/W4;/WX>
+    $<$<CXX_COMPILER_ID:Clang>:-Wall -Wextra -Wpedantic -Wno-unused-parameter>
+    $<$<CXX_COMPILER_ID:GNU>:-Wall -Wextra -Wpedantic>
+    $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX>
 
   PRIVATE
-    $<$<CONFIG:Debug>:-O0;-g>
-    $<$<CONFIG:Release>:-O3;-DNDEBUG>
-    $<$<CONFIG:RelWithDebInfo>:-O2;-g>
+    $<$<CONFIG:Debug>:-O0 -g>
+    $<$<CONFIG:Release>:-O3 -DNDEBUG>
+    $<$<CONFIG:RelWithDebInfo>:-O2 -g>
 )
 
 target_compile_options(synthetic_shared
   PUBLIC
-    $<$<CXX_COMPILER_ID:Clang>:-Wall;-Wextra;-Wpedantic;-Wno-unused-parameter>
-    $<$<CXX_COMPILER_ID:GNU>:-Wall;-Wextra;-Wpedantic>
-    $<$<CXX_COMPILER_ID:MSVC>:/W4;/WX>
+    $<$<CXX_COMPILER_ID:Clang>:-Wall -Wextra -Wpedantic -Wno-unused-parameter>
+    $<$<CXX_COMPILER_ID:GNU>:-Wall -Wextra -Wpedantic>
+    $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX>
 
   PRIVATE
-    $<$<CONFIG:Debug>:-O0;-g>
-    $<$<CONFIG:Release>:-O3;-DNDEBUG>
-    $<$<CONFIG:RelWithDebInfo>:-O2;-g>
+    $<$<CONFIG:Debug>:-O0 -g>
+    $<$<CONFIG:Release>:-O3 -DNDEBUG>
+    $<$<CONFIG:RelWithDebInfo>:-O2 -g>
 )
 
 target_compile_options(synthetic_objects
   PUBLIC
-    $<$<CXX_COMPILER_ID:Clang>:-Wall;-Wextra;-Wpedantic;-Wno-unused-parameter>
-    $<$<CXX_COMPILER_ID:GNU>:-Wall;-Wextra;-Wpedantic>
-    $<$<CXX_COMPILER_ID:MSVC>:/W4;/WX>
+    $<$<CXX_COMPILER_ID:Clang>:-Wall -Wextra -Wpedantic -Wno-unused-parameter>
+    $<$<CXX_COMPILER_ID:GNU>:-Wall -Wextra -Wpedantic>
+    $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX>
 
   PRIVATE
-    $<$<CONFIG:Debug>:-O0;-g>
-    $<$<CONFIG:Release>:-O3;-DNDEBUG>
-    $<$<CONFIG:RelWithDebInfo>:-O2;-g>
+    $<$<CONFIG:Debug>:-O0 -g>
+    $<$<CONFIG:Release>:-O3 -DNDEBUG>
+    $<$<CONFIG:RelWithDebInfo>:-O2 -g>
 )
 
 target_compile_features(synthetic_core PUBLIC cxx_std_20)
@@ -2827,8 +2809,8 @@ target_sources(synthetic_core
 # --------------------------------------------------------------------------
 
 install(
-  TARGETS   synthetic_core synthetic_shared
-  EXPORT    SyntheticTargets
+  TARGETS synthetic_core synthetic_shared
+  EXPORT  SyntheticTargets
   RUNTIME
     DESTINATION ${CMAKE_INSTALL_BINDIR}
     COMPONENT
@@ -2845,7 +2827,7 @@ install(
   ARCHIVE
     DESTINATION ${CMAKE_INSTALL_LIBDIR}
     COMPONENT Development
-  INCLUDES  DESTINATION    ${CMAKE_INSTALL_INCLUDEDIR}
+  INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 
   PUBLIC_HEADER
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/synthetic
@@ -2853,15 +2835,19 @@ install(
 )
 
 install(
-  FILES        "${CMAKE_CURRENT_SOURCE_DIR}/include/synthetic/core.h" "${CMAKE_CURRENT_SOURCE_DIR}/include/synthetic/types.h" "${CMAKE_CURRENT_SOURCE_DIR}/include/synthetic/utils.h" "${CMAKE_CURRENT_SOURCE_DIR}/include/synthetic/config.h"
-  DESTINATION  "${CMAKE_INSTALL_INCLUDEDIR}/synthetic"
-  COMPONENT    Development
+  FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/synthetic/core.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/synthetic/types.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/synthetic/utils.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/synthetic/config.h"
+  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/synthetic"
+  COMPONENT   Development
 )
 
 install(
-  DIRECTORY    "${CMAKE_CURRENT_SOURCE_DIR}/include/"
-  DESTINATION  "${CMAKE_INSTALL_INCLUDEDIR}"
-  COMPONENT    Development
+  DIRECTORY   "${CMAKE_CURRENT_SOURCE_DIR}/include/"
+  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+  COMPONENT   Development
   FILES_MATCHING
   PATTERN
     "*.h"
@@ -2876,11 +2862,11 @@ install(
 )
 
 install(
-  EXPORT       SyntheticTargets
-  FILE         SyntheticTargets.cmake
-  NAMESPACE    Synthetic::
-  DESTINATION  "${CMAKE_INSTALL_LIBDIR}/cmake/Synthetic"
-  COMPONENT    Development
+  EXPORT      SyntheticTargets
+  FILE        SyntheticTargets.cmake
+  NAMESPACE   Synthetic::
+  DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/Synthetic"
+  COMPONENT   Development
 )
 
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/SyntheticConfig.cmake.in"
@@ -2889,9 +2875,11 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/SyntheticConfig.cmake.in"
 )
 
 install(
-  FILES        "${CMAKE_CURRENT_BINARY_DIR}/SyntheticConfig.cmake" "${CMAKE_CURRENT_BINARY_DIR}/SyntheticConfigVersion.cmake"
-  DESTINATION  "${CMAKE_INSTALL_LIBDIR}/cmake/Synthetic"
-  COMPONENT    Development
+  FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/SyntheticConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/SyntheticConfigVersion.cmake"
+  DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/Synthetic"
+  COMPONENT   Development
 )
 
 # --------------------------------------------------------------------------
@@ -3612,27 +3600,14 @@ target_link_libraries(synthetic_core
   PRIVATE
     $<$<AND:$<PLATFORM_ID:Linux>,$<CXX_COMPILER_ID:GNU>>:asan>
     $<$<AND:$<PLATFORM_ID:Linux>,$<CXX_COMPILER_ID:GNU>>:ubsan>
-    $<IF:
-      $<BOOL:${SYNTHETIC_USE_JEMALLOC}>,
-      jemalloc
-    >
+    $<IF:$<BOOL:${SYNTHETIC_USE_JEMALLOC}>,jemalloc,>
     $<TARGET_OBJECTS:synthetic_objects>
 )
 
 install(TARGETS
   synthetic_core
-  RUNTIME DESTINATION
-  $<IF:
-      $<PLATFORM_ID:Windows>,
-      bin,
-      libexec
-    >
-  LIBRARY DESTINATION
-  $<IF:
-      $<PLATFORM_ID:Windows>,
-      bin,
-      lib
-    >
+  RUNTIME DESTINATION $<IF:$<PLATFORM_ID:Windows>,bin,libexec>
+  LIBRARY DESTINATION $<IF:$<PLATFORM_ID:Windows>,bin,lib>
 )
 
 add_custom_command(
@@ -3655,55 +3630,19 @@ add_custom_command(
 )
 
 set(SYNTHETIC_COMPLEX_GENEX
-  $<$<AND:
-      $<NOT:
-        $<BOOL:${SYNTHETIC_DISABLE_FEATURE_A}>
-      >,
-      $<OR:
-        $<CONFIG:Debug>,
-        $<CONFIG:RelWithDebInfo>
-      >
-    >:
-      FEATURE_A_DEBUG
-    >
+  $<$<AND:$<NOT:$<BOOL:${SYNTHETIC_DISABLE_FEATURE_A}>>,$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>>:FEATURE_A_DEBUG>
 )
 
 target_compile_options(synthetic_shared
   PRIVATE
-    $<$<AND:
-      $<CXX_COMPILER_ID:Clang>,
-      $<VERSION_GREATER_EQUAL:
-        $<CXX_COMPILER_VERSION>,
-        15.0
-      >
-    >:
-      -Wno-unused-but-set-variable
-    >
-    $<$<AND:
-      $<CXX_COMPILER_ID:GNU>,
-      $<VERSION_GREATER_EQUAL:
-        $<CXX_COMPILER_VERSION>,
-        12.0
-      >
-    >:
-      -Wno-dangling-reference
-    >
+    $<$<AND:$<CXX_COMPILER_ID:Clang>,$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,15.0>>:-Wno-unused-but-set-variable>
+    $<$<AND:$<CXX_COMPILER_ID:GNU>,$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,12.0>>:-Wno-dangling-reference>
 )
 
 set(SYNTHETIC_PLATFORM_SOURCES
-  $<$<PLATFORM_ID:Linux>:
-      src/platform/linux_impl.cpp
-      src/platform/linux_sysctl.cpp
-      src/platform/linux_epoll.cpp
-    >
-  $<$<PLATFORM_ID:Windows>:
-      src/platform/windows_impl.cpp
-      src/platform/windows_iocp.cpp
-    >
-  $<$<PLATFORM_ID:Darwin>:
-      src/platform/macos_impl.cpp
-      src/platform/macos_kqueue.cpp
-    >
+  $<$<PLATFORM_ID:Linux>:src/platform/linux_impl.cpp;src/platform/linux_sysctl.cpp;src/platform/linux_epoll.cpp>
+  $<$<PLATFORM_ID:Windows>:src/platform/windows_impl.cpp;src/platform/windows_iocp.cpp>
+  $<$<PLATFORM_ID:Darwin>:src/platform/macos_impl.cpp;src/platform/macos_kqueue.cpp>
 )
 
 # --------------------------------------------------------------------------
@@ -3863,7 +3802,7 @@ SET(   SKIP_4    value_4   )
 
 cmake_language(CALL message STATUS "Called via cmake_language")
 
-cmake_language(  EVAL  CODE  "
+cmake_language(EVAL CODE "
   message(STATUS \"Evaluated code\")
 ")
 
@@ -4084,13 +4023,13 @@ endfunction(synthetic_add_module module_name)
 # Bracket arguments and multiline strings
 # --------------------------------------------------------------------------
 
-set(SYNTHETIC_BRACKET_VAR  [==[This is a bracket argument.
+set(SYNTHETIC_BRACKET_VAR [==[This is a bracket argument.
 It spans multiple lines.
 Special chars: ]] ] [ [[ are fine here.
 Even "quotes" and ${variables} are literal.
 ]==])
 
-set(SYNTHETIC_MULTILINE_STR  "This is a multiline
+set(SYNTHETIC_MULTILINE_STR "This is a multiline
 quoted string that spans
 multiple lines. The formatter
 should preserve it verbatim.")
@@ -4195,7 +4134,7 @@ my_project_setup(
 )
 
 internal_configure(
-  CONFIG_FILE  "${CMAKE_CURRENT_SOURCE_DIR}/config.yml"
+  CONFIG_FILE "${CMAKE_CURRENT_SOURCE_DIR}/config.yml"
   OUTPUT_DIR  "${CMAKE_BINARY_DIR}/configured"
   TEMPLATES
     template_a.in
@@ -4383,10 +4322,10 @@ add_link_options($<$<CONFIG:Debug>:-fsanitize=address>)
 add_definitions(-DSYNTHETIC_COMPAT=1)
 
 include(FetchContent)
-fetchcontent_declare(  synthetic_dep
-  GIT_REPOSITORY  https://github.com/example/synthetic_dep.git
-  GIT_TAG  v1.2.3
-  GIT_SHALLOW  TRUE
+fetchcontent_declare(synthetic_dep
+  GIT_REPOSITORY https://github.com/example/synthetic_dep.git
+  GIT_TAG        v1.2.3
+  GIT_SHALLOW    TRUE
 )
 fetchcontent_makeavailable(synthetic_dep)
 
@@ -4535,8 +4474,7 @@ add_executable(test_module_000
 
 target_link_libraries(test_module_000
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_000
+    GTest::gtest_main synthetic_module_000
 )
 gtest_discover_tests(test_module_000
   TEST_PREFIX
@@ -4637,8 +4575,7 @@ add_executable(test_module_001
 
 target_link_libraries(test_module_001
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_001
+    GTest::gtest_main synthetic_module_001
 )
 gtest_discover_tests(test_module_001
   TEST_PREFIX
@@ -4739,8 +4676,7 @@ add_executable(test_module_002
 
 target_link_libraries(test_module_002
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_002
+    GTest::gtest_main synthetic_module_002
 )
 gtest_discover_tests(test_module_002
   TEST_PREFIX
@@ -4841,8 +4777,7 @@ add_executable(test_module_003
 
 target_link_libraries(test_module_003
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_003
+    GTest::gtest_main synthetic_module_003
 )
 gtest_discover_tests(test_module_003
   TEST_PREFIX
@@ -4943,8 +4878,7 @@ add_executable(test_module_004
 
 target_link_libraries(test_module_004
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_004
+    GTest::gtest_main synthetic_module_004
 )
 gtest_discover_tests(test_module_004
   TEST_PREFIX
@@ -5045,8 +4979,7 @@ add_executable(test_module_005
 
 target_link_libraries(test_module_005
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_005
+    GTest::gtest_main synthetic_module_005
 )
 gtest_discover_tests(test_module_005
   TEST_PREFIX
@@ -5147,8 +5080,7 @@ add_executable(test_module_006
 
 target_link_libraries(test_module_006
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_006
+    GTest::gtest_main synthetic_module_006
 )
 gtest_discover_tests(test_module_006
   TEST_PREFIX
@@ -5249,8 +5181,7 @@ add_executable(test_module_007
 
 target_link_libraries(test_module_007
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_007
+    GTest::gtest_main synthetic_module_007
 )
 gtest_discover_tests(test_module_007
   TEST_PREFIX
@@ -5351,8 +5282,7 @@ add_executable(test_module_008
 
 target_link_libraries(test_module_008
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_008
+    GTest::gtest_main synthetic_module_008
 )
 gtest_discover_tests(test_module_008
   TEST_PREFIX
@@ -5453,8 +5383,7 @@ add_executable(test_module_009
 
 target_link_libraries(test_module_009
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_009
+    GTest::gtest_main synthetic_module_009
 )
 gtest_discover_tests(test_module_009
   TEST_PREFIX
@@ -5555,8 +5484,7 @@ add_executable(test_module_010
 
 target_link_libraries(test_module_010
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_010
+    GTest::gtest_main synthetic_module_010
 )
 gtest_discover_tests(test_module_010
   TEST_PREFIX
@@ -5657,8 +5585,7 @@ add_executable(test_module_011
 
 target_link_libraries(test_module_011
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_011
+    GTest::gtest_main synthetic_module_011
 )
 gtest_discover_tests(test_module_011
   TEST_PREFIX
@@ -5759,8 +5686,7 @@ add_executable(test_module_012
 
 target_link_libraries(test_module_012
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_012
+    GTest::gtest_main synthetic_module_012
 )
 gtest_discover_tests(test_module_012
   TEST_PREFIX
@@ -5861,8 +5787,7 @@ add_executable(test_module_013
 
 target_link_libraries(test_module_013
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_013
+    GTest::gtest_main synthetic_module_013
 )
 gtest_discover_tests(test_module_013
   TEST_PREFIX
@@ -5963,8 +5888,7 @@ add_executable(test_module_014
 
 target_link_libraries(test_module_014
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_014
+    GTest::gtest_main synthetic_module_014
 )
 gtest_discover_tests(test_module_014
   TEST_PREFIX
@@ -6065,8 +5989,7 @@ add_executable(test_module_015
 
 target_link_libraries(test_module_015
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_015
+    GTest::gtest_main synthetic_module_015
 )
 gtest_discover_tests(test_module_015
   TEST_PREFIX
@@ -6167,8 +6090,7 @@ add_executable(test_module_016
 
 target_link_libraries(test_module_016
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_016
+    GTest::gtest_main synthetic_module_016
 )
 gtest_discover_tests(test_module_016
   TEST_PREFIX
@@ -6269,8 +6191,7 @@ add_executable(test_module_017
 
 target_link_libraries(test_module_017
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_017
+    GTest::gtest_main synthetic_module_017
 )
 gtest_discover_tests(test_module_017
   TEST_PREFIX
@@ -6371,8 +6292,7 @@ add_executable(test_module_018
 
 target_link_libraries(test_module_018
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_018
+    GTest::gtest_main synthetic_module_018
 )
 gtest_discover_tests(test_module_018
   TEST_PREFIX
@@ -6473,8 +6393,7 @@ add_executable(test_module_019
 
 target_link_libraries(test_module_019
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_019
+    GTest::gtest_main synthetic_module_019
 )
 gtest_discover_tests(test_module_019
   TEST_PREFIX
@@ -6575,8 +6494,7 @@ add_executable(test_module_020
 
 target_link_libraries(test_module_020
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_020
+    GTest::gtest_main synthetic_module_020
 )
 gtest_discover_tests(test_module_020
   TEST_PREFIX
@@ -6677,8 +6595,7 @@ add_executable(test_module_021
 
 target_link_libraries(test_module_021
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_021
+    GTest::gtest_main synthetic_module_021
 )
 gtest_discover_tests(test_module_021
   TEST_PREFIX
@@ -6779,8 +6696,7 @@ add_executable(test_module_022
 
 target_link_libraries(test_module_022
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_022
+    GTest::gtest_main synthetic_module_022
 )
 gtest_discover_tests(test_module_022
   TEST_PREFIX
@@ -6881,8 +6797,7 @@ add_executable(test_module_023
 
 target_link_libraries(test_module_023
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_023
+    GTest::gtest_main synthetic_module_023
 )
 gtest_discover_tests(test_module_023
   TEST_PREFIX
@@ -6983,8 +6898,7 @@ add_executable(test_module_024
 
 target_link_libraries(test_module_024
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_024
+    GTest::gtest_main synthetic_module_024
 )
 gtest_discover_tests(test_module_024
   TEST_PREFIX
@@ -7085,8 +6999,7 @@ add_executable(test_module_025
 
 target_link_libraries(test_module_025
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_025
+    GTest::gtest_main synthetic_module_025
 )
 gtest_discover_tests(test_module_025
   TEST_PREFIX
@@ -7187,8 +7100,7 @@ add_executable(test_module_026
 
 target_link_libraries(test_module_026
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_026
+    GTest::gtest_main synthetic_module_026
 )
 gtest_discover_tests(test_module_026
   TEST_PREFIX
@@ -7289,8 +7201,7 @@ add_executable(test_module_027
 
 target_link_libraries(test_module_027
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_027
+    GTest::gtest_main synthetic_module_027
 )
 gtest_discover_tests(test_module_027
   TEST_PREFIX
@@ -7391,8 +7302,7 @@ add_executable(test_module_028
 
 target_link_libraries(test_module_028
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_028
+    GTest::gtest_main synthetic_module_028
 )
 gtest_discover_tests(test_module_028
   TEST_PREFIX
@@ -7493,8 +7403,7 @@ add_executable(test_module_029
 
 target_link_libraries(test_module_029
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_029
+    GTest::gtest_main synthetic_module_029
 )
 gtest_discover_tests(test_module_029
   TEST_PREFIX
@@ -7595,8 +7504,7 @@ add_executable(test_module_030
 
 target_link_libraries(test_module_030
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_030
+    GTest::gtest_main synthetic_module_030
 )
 gtest_discover_tests(test_module_030
   TEST_PREFIX
@@ -7697,8 +7605,7 @@ add_executable(test_module_031
 
 target_link_libraries(test_module_031
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_031
+    GTest::gtest_main synthetic_module_031
 )
 gtest_discover_tests(test_module_031
   TEST_PREFIX
@@ -7799,8 +7706,7 @@ add_executable(test_module_032
 
 target_link_libraries(test_module_032
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_032
+    GTest::gtest_main synthetic_module_032
 )
 gtest_discover_tests(test_module_032
   TEST_PREFIX
@@ -7901,8 +7807,7 @@ add_executable(test_module_033
 
 target_link_libraries(test_module_033
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_033
+    GTest::gtest_main synthetic_module_033
 )
 gtest_discover_tests(test_module_033
   TEST_PREFIX
@@ -8003,8 +7908,7 @@ add_executable(test_module_034
 
 target_link_libraries(test_module_034
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_034
+    GTest::gtest_main synthetic_module_034
 )
 gtest_discover_tests(test_module_034
   TEST_PREFIX
@@ -8105,8 +8009,7 @@ add_executable(test_module_035
 
 target_link_libraries(test_module_035
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_035
+    GTest::gtest_main synthetic_module_035
 )
 gtest_discover_tests(test_module_035
   TEST_PREFIX
@@ -8207,8 +8110,7 @@ add_executable(test_module_036
 
 target_link_libraries(test_module_036
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_036
+    GTest::gtest_main synthetic_module_036
 )
 gtest_discover_tests(test_module_036
   TEST_PREFIX
@@ -8309,8 +8211,7 @@ add_executable(test_module_037
 
 target_link_libraries(test_module_037
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_037
+    GTest::gtest_main synthetic_module_037
 )
 gtest_discover_tests(test_module_037
   TEST_PREFIX
@@ -8411,8 +8312,7 @@ add_executable(test_module_038
 
 target_link_libraries(test_module_038
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_038
+    GTest::gtest_main synthetic_module_038
 )
 gtest_discover_tests(test_module_038
   TEST_PREFIX
@@ -8513,8 +8413,7 @@ add_executable(test_module_039
 
 target_link_libraries(test_module_039
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_039
+    GTest::gtest_main synthetic_module_039
 )
 gtest_discover_tests(test_module_039
   TEST_PREFIX
@@ -8615,8 +8514,7 @@ add_executable(test_module_040
 
 target_link_libraries(test_module_040
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_040
+    GTest::gtest_main synthetic_module_040
 )
 gtest_discover_tests(test_module_040
   TEST_PREFIX
@@ -8717,8 +8615,7 @@ add_executable(test_module_041
 
 target_link_libraries(test_module_041
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_041
+    GTest::gtest_main synthetic_module_041
 )
 gtest_discover_tests(test_module_041
   TEST_PREFIX
@@ -8819,8 +8716,7 @@ add_executable(test_module_042
 
 target_link_libraries(test_module_042
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_042
+    GTest::gtest_main synthetic_module_042
 )
 gtest_discover_tests(test_module_042
   TEST_PREFIX
@@ -8921,8 +8817,7 @@ add_executable(test_module_043
 
 target_link_libraries(test_module_043
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_043
+    GTest::gtest_main synthetic_module_043
 )
 gtest_discover_tests(test_module_043
   TEST_PREFIX
@@ -9023,8 +8918,7 @@ add_executable(test_module_044
 
 target_link_libraries(test_module_044
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_044
+    GTest::gtest_main synthetic_module_044
 )
 gtest_discover_tests(test_module_044
   TEST_PREFIX
@@ -9125,8 +9019,7 @@ add_executable(test_module_045
 
 target_link_libraries(test_module_045
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_045
+    GTest::gtest_main synthetic_module_045
 )
 gtest_discover_tests(test_module_045
   TEST_PREFIX
@@ -9227,8 +9120,7 @@ add_executable(test_module_046
 
 target_link_libraries(test_module_046
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_046
+    GTest::gtest_main synthetic_module_046
 )
 gtest_discover_tests(test_module_046
   TEST_PREFIX
@@ -9329,8 +9221,7 @@ add_executable(test_module_047
 
 target_link_libraries(test_module_047
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_047
+    GTest::gtest_main synthetic_module_047
 )
 gtest_discover_tests(test_module_047
   TEST_PREFIX
@@ -9431,8 +9322,7 @@ add_executable(test_module_048
 
 target_link_libraries(test_module_048
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_048
+    GTest::gtest_main synthetic_module_048
 )
 gtest_discover_tests(test_module_048
   TEST_PREFIX
@@ -9533,8 +9423,7 @@ add_executable(test_module_049
 
 target_link_libraries(test_module_049
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_049
+    GTest::gtest_main synthetic_module_049
 )
 gtest_discover_tests(test_module_049
   TEST_PREFIX
@@ -9635,8 +9524,7 @@ add_executable(test_module_050
 
 target_link_libraries(test_module_050
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_050
+    GTest::gtest_main synthetic_module_050
 )
 gtest_discover_tests(test_module_050
   TEST_PREFIX
@@ -9737,8 +9625,7 @@ add_executable(test_module_051
 
 target_link_libraries(test_module_051
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_051
+    GTest::gtest_main synthetic_module_051
 )
 gtest_discover_tests(test_module_051
   TEST_PREFIX
@@ -9839,8 +9726,7 @@ add_executable(test_module_052
 
 target_link_libraries(test_module_052
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_052
+    GTest::gtest_main synthetic_module_052
 )
 gtest_discover_tests(test_module_052
   TEST_PREFIX
@@ -9941,8 +9827,7 @@ add_executable(test_module_053
 
 target_link_libraries(test_module_053
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_053
+    GTest::gtest_main synthetic_module_053
 )
 gtest_discover_tests(test_module_053
   TEST_PREFIX
@@ -10043,8 +9928,7 @@ add_executable(test_module_054
 
 target_link_libraries(test_module_054
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_054
+    GTest::gtest_main synthetic_module_054
 )
 gtest_discover_tests(test_module_054
   TEST_PREFIX
@@ -10145,8 +10029,7 @@ add_executable(test_module_055
 
 target_link_libraries(test_module_055
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_055
+    GTest::gtest_main synthetic_module_055
 )
 gtest_discover_tests(test_module_055
   TEST_PREFIX
@@ -10247,8 +10130,7 @@ add_executable(test_module_056
 
 target_link_libraries(test_module_056
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_056
+    GTest::gtest_main synthetic_module_056
 )
 gtest_discover_tests(test_module_056
   TEST_PREFIX
@@ -10349,8 +10231,7 @@ add_executable(test_module_057
 
 target_link_libraries(test_module_057
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_057
+    GTest::gtest_main synthetic_module_057
 )
 gtest_discover_tests(test_module_057
   TEST_PREFIX
@@ -10451,8 +10332,7 @@ add_executable(test_module_058
 
 target_link_libraries(test_module_058
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_058
+    GTest::gtest_main synthetic_module_058
 )
 gtest_discover_tests(test_module_058
   TEST_PREFIX
@@ -10553,8 +10433,7 @@ add_executable(test_module_059
 
 target_link_libraries(test_module_059
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_059
+    GTest::gtest_main synthetic_module_059
 )
 gtest_discover_tests(test_module_059
   TEST_PREFIX
@@ -10655,8 +10534,7 @@ add_executable(test_module_060
 
 target_link_libraries(test_module_060
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_060
+    GTest::gtest_main synthetic_module_060
 )
 gtest_discover_tests(test_module_060
   TEST_PREFIX
@@ -10757,8 +10635,7 @@ add_executable(test_module_061
 
 target_link_libraries(test_module_061
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_061
+    GTest::gtest_main synthetic_module_061
 )
 gtest_discover_tests(test_module_061
   TEST_PREFIX
@@ -10859,8 +10736,7 @@ add_executable(test_module_062
 
 target_link_libraries(test_module_062
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_062
+    GTest::gtest_main synthetic_module_062
 )
 gtest_discover_tests(test_module_062
   TEST_PREFIX
@@ -10961,8 +10837,7 @@ add_executable(test_module_063
 
 target_link_libraries(test_module_063
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_063
+    GTest::gtest_main synthetic_module_063
 )
 gtest_discover_tests(test_module_063
   TEST_PREFIX
@@ -11063,8 +10938,7 @@ add_executable(test_module_064
 
 target_link_libraries(test_module_064
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_064
+    GTest::gtest_main synthetic_module_064
 )
 gtest_discover_tests(test_module_064
   TEST_PREFIX
@@ -11165,8 +11039,7 @@ add_executable(test_module_065
 
 target_link_libraries(test_module_065
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_065
+    GTest::gtest_main synthetic_module_065
 )
 gtest_discover_tests(test_module_065
   TEST_PREFIX
@@ -11267,8 +11140,7 @@ add_executable(test_module_066
 
 target_link_libraries(test_module_066
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_066
+    GTest::gtest_main synthetic_module_066
 )
 gtest_discover_tests(test_module_066
   TEST_PREFIX
@@ -11369,8 +11241,7 @@ add_executable(test_module_067
 
 target_link_libraries(test_module_067
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_067
+    GTest::gtest_main synthetic_module_067
 )
 gtest_discover_tests(test_module_067
   TEST_PREFIX
@@ -11471,8 +11342,7 @@ add_executable(test_module_068
 
 target_link_libraries(test_module_068
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_068
+    GTest::gtest_main synthetic_module_068
 )
 gtest_discover_tests(test_module_068
   TEST_PREFIX
@@ -11573,8 +11443,7 @@ add_executable(test_module_069
 
 target_link_libraries(test_module_069
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_069
+    GTest::gtest_main synthetic_module_069
 )
 gtest_discover_tests(test_module_069
   TEST_PREFIX
@@ -11675,8 +11544,7 @@ add_executable(test_module_070
 
 target_link_libraries(test_module_070
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_070
+    GTest::gtest_main synthetic_module_070
 )
 gtest_discover_tests(test_module_070
   TEST_PREFIX
@@ -11777,8 +11645,7 @@ add_executable(test_module_071
 
 target_link_libraries(test_module_071
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_071
+    GTest::gtest_main synthetic_module_071
 )
 gtest_discover_tests(test_module_071
   TEST_PREFIX
@@ -11879,8 +11746,7 @@ add_executable(test_module_072
 
 target_link_libraries(test_module_072
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_072
+    GTest::gtest_main synthetic_module_072
 )
 gtest_discover_tests(test_module_072
   TEST_PREFIX
@@ -11981,8 +11847,7 @@ add_executable(test_module_073
 
 target_link_libraries(test_module_073
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_073
+    GTest::gtest_main synthetic_module_073
 )
 gtest_discover_tests(test_module_073
   TEST_PREFIX
@@ -12083,8 +11948,7 @@ add_executable(test_module_074
 
 target_link_libraries(test_module_074
   PRIVATE
-    GTest::gtest_main
-    synthetic_module_074
+    GTest::gtest_main synthetic_module_074
 )
 gtest_discover_tests(test_module_074
   TEST_PREFIX

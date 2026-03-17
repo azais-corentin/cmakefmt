@@ -9,7 +9,9 @@ if(A)
               if(H)
                 if(I)
                   if(J)
-                    message(STATUS "deep")
+                    message(STATUS
+                      "deep"
+                    )
                   endif()
                 endif()
               endif()

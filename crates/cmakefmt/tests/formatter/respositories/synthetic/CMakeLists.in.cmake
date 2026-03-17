@@ -102,7 +102,7 @@ find_package(Boost
     program_options
     regex
 )
-Find_Package(Qt6
+FIND_PACKAGE(Qt6
   6.5
   REQUIRED
   COMPONENTS
@@ -127,22 +127,22 @@ Find_Package(Protobuf
   3.21
   REQUIRED
 )
-find_package(gRPC
+FIND_PACKAGE(gRPC
   1.50
   REQUIRED
 )
-Find_Package(CUDA
+FIND_PACKAGE(CUDA
   12.0
   REQUIRED
 )
-find_package(OpenSSL
+FIND_PACKAGE(OpenSSL
   3.0
   REQUIRED
 )
-FIND_PACKAGE(ZLIB
+Find_Package(ZLIB
   REQUIRED
 )
-Find_Package(Threads
+FIND_PACKAGE(Threads
   REQUIRED
 )
 
@@ -3029,19 +3029,9 @@ target_compile_options(  synthetic_shared  PRIVATE
 )
 
 SET(SYNTHETIC_PLATFORM_SOURCES
-  $<$<PLATFORM_ID:Linux>:
-    src/platform/linux_impl.cpp
-    src/platform/linux_sysctl.cpp
-    src/platform/linux_epoll.cpp
-  >
-  $<$<PLATFORM_ID:Windows>:
-    src/platform/windows_impl.cpp
-    src/platform/windows_iocp.cpp
-  >
-  $<$<PLATFORM_ID:Darwin>:
-    src/platform/macos_impl.cpp
-    src/platform/macos_kqueue.cpp
-  >
+  $<$<PLATFORM_ID:Linux>:src/platform/linux_impl.cpp;src/platform/linux_sysctl.cpp;src/platform/linux_epoll.cpp>
+  $<$<PLATFORM_ID:Windows>:src/platform/windows_impl.cpp;src/platform/windows_iocp.cpp>
+  $<$<PLATFORM_ID:Darwin>:src/platform/macos_impl.cpp;src/platform/macos_kqueue.cpp>
 )
 
 # --------------------------------------------------------------------------

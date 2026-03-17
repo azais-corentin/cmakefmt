@@ -17,7 +17,9 @@ from pathlib import Path
 from cmakelang import configuration
 from cmakelang.format.__main__ import process_file
 
-FIXTURE = Path("crates/cmakefmt/tests/formatter/respositories/XNNPACK/CMakeLists.in.cmake")
+FIXTURE = Path(
+    "crates/cmakefmt/tests/formatter/respositories/XNNPACK/CMakeLists.in.cmake"
+)
 
 
 def test_cmake_format(benchmark):

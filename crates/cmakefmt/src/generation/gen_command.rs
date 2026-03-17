@@ -514,8 +514,9 @@ pub fn gen_command(
         return gen_unknown_command(cmd, source, config, &formatted_name, indent_depth);
     }
 
-    // Check if this is an unknown command — preserve original formatting
-    // But if customKeywords is set, unknown commands may still have keyword recognition
+    // Unknown commands without custom keywords: format via the enhanced
+    // gen_unknown_command path which preserves raw layout while applying space
+    // collapsing and keyword-column alignment.
     let cmd_kind = lookup_command(raw_name);
     if cmd_kind.is_none() && config.custom_keywords.is_empty() {
         return gen_unknown_command(cmd, source, config, &formatted_name, indent_depth);
@@ -553,9 +554,26 @@ pub fn gen_command(
     if !config.closing_paren_newline {
         deferred_closing_comment = extract_deferred_closing_comment(&mut arguments);
     }
-    let has_deferred_closing_comment = deferred_closing_comment.is_some();
-    let avoid_inline_compaction = has_deferred_closing_comment
-        || (!config.closing_paren_newline && source_is_multiline && cmd.trailing_comment.is_some());
+
+    // When closingParenNewline=false, the inline `)` (and any trailing comment
+    // appearing after it) occupies space on the last argument's line. Include this
+    // extra width in cascade width calculations so packing decisions account for it.
+    // The trailing comment may come from either source: a deferred argument comment
+    // (first format) or cmd.trailing_comment (re-format of already-compact output).
+    let closing_paren_extra: usize = if config.closing_paren_newline {
+        0
+    } else {
+        let comment_extra = deferred_closing_comment
+            .as_ref()
+            .map(|c| config.comment_gap as usize + c.len())
+            .or_else(|| {
+                cmd.trailing_comment
+                    .as_ref()
+                    .map(|s| config.comment_gap as usize + s.text(source).len())
+            })
+            .unwrap_or(0);
+        1 + comment_extra // 1 for `)`
+    };
 
     // Format arguments using wrapping cascade controls (threshold, wrap style).
     let force_one_per_line = config.wrap_arg_threshold > 0
@@ -564,9 +582,22 @@ pub fn gen_command(
         WrapStyle::Cascade => true,
         WrapStyle::Vertical => count_wrap_arguments(&arguments) <= 2,
     };
+    // Prevent multiline commands with spec-defined keywords from collapsing
+    // to single line. Sort-group-only keywords (PUBLIC/PRIVATE on add_executable)
+    // don't block collapse since they aren't structural for that command,
+    // UNLESS sorting is active (sorted output should preserve structured layout).
+    let has_structural_keyword_args = match cmd_kind.as_ref() {
+        Some(CommandKind::Known(spec)) => arguments
+            .iter()
+            .any(|arg| arg.is_keyword && is_in_command_spec(&arg.text, spec)),
+        _ => has_keyword_args,
+    };
+    let sorting_with_keywords = has_keyword_args
+        && (should_sort_for_command(raw_name, config, cmd_kind.as_ref())
+            || config.sort_keyword_sections);
     let allow_single_line = allow_single_line_by_style
-        && !(force_one_per_line || avoid_inline_compaction)
-        && !(source_is_multiline && has_keyword_args);
+        && !force_one_per_line
+        && !(source_is_multiline && (has_structural_keyword_args || sorting_with_keywords));
     if !arguments.is_empty() {
         let single_line = try_single_line(
             &formatted_name,
@@ -606,9 +637,7 @@ pub fn gen_command(
                     }
                 }
                 Some(CommandKind::Known(spec)) => {
-                    let suppress_keyword_inline = force_one_per_line || avoid_inline_compaction;
-                    let allow_keyword_inline =
-                        matches!(config.wrap_style, WrapStyle::Cascade) && !suppress_keyword_inline;
+                    let allow_keyword_inline = matches!(config.wrap_style, WrapStyle::Cascade);
                     let allow_opening_arg_packing = allow_keyword_inline;
                     items.extend(gen_known_multi_line(
                         &formatted_name,
@@ -619,13 +648,12 @@ pub fn gen_command(
                         allow_keyword_inline,
                         allow_opening_arg_packing,
                         config.first_arg_same_line,
+                        closing_paren_extra,
                     ));
                 }
                 None => {
                     // Unknown command with customKeywords — use empty spec.
-                    let suppress_keyword_inline = force_one_per_line || avoid_inline_compaction;
-                    let allow_keyword_inline =
-                        matches!(config.wrap_style, WrapStyle::Cascade) && !suppress_keyword_inline;
+                    let allow_keyword_inline = matches!(config.wrap_style, WrapStyle::Cascade);
                     let allow_opening_arg_packing = allow_keyword_inline;
                     items.extend(gen_known_multi_line(
                         &formatted_name,
@@ -636,6 +664,7 @@ pub fn gen_command(
                         allow_keyword_inline,
                         allow_opening_arg_packing,
                         config.first_arg_same_line,
+                        closing_paren_extra,
                     ));
                 }
             }
@@ -738,12 +767,19 @@ fn gen_unknown_command(
             }
         }
     } else {
-        // Multi-line: process per-argument to preserve bracket/quoted content verbatim.
+        // Multi-line: process per-argument to preserve bracket/quoted content verbatim,
+        // while applying space collapsing and keyword-column alignment.
         let cmd_line_start = source[..cmd.name.start]
             .rfind('\n')
             .map(|p| p + 1)
             .unwrap_or(0);
         let base_indent_len = cmd.name.start - cmd_line_start;
+
+        let keyword_col_width = if config.collapse_spaces && config.align_arg_groups {
+            compute_raw_keyword_col_width(&cmd.arguments, source, content_start)
+        } else {
+            None
+        };
 
         emit_unknown_args_raw(
             &mut items,
@@ -752,6 +788,8 @@ fn gen_unknown_command(
             content_start,
             content_end,
             base_indent_len,
+            config.collapse_spaces,
+            keyword_col_width,
         );
     }
 
@@ -765,6 +803,57 @@ fn gen_unknown_command(
     items
 }
 
+/// Checks whether `text` looks like a CMake keyword (all uppercase, digits, or
+/// underscores, starting with a letter).  Works on raw source text.
+fn is_raw_keyword_like(text: &str) -> bool {
+    !text.is_empty()
+        && text.as_bytes()[0].is_ascii_uppercase()
+        && text
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
+}
+
+/// Pre-compute keyword-column alignment width for the raw (unknown-command) path.
+///
+/// A keyword contributes when it is the first token on its line AND the next
+/// argument follows on the same line (i.e. it has at least one inline value).
+/// Returns `Some(max_width)` when at least two qualifying keywords are found.
+fn compute_raw_keyword_col_width(
+    args: &[Argument],
+    source: &str,
+    content_start: usize,
+) -> Option<usize> {
+    let mut keyword_widths: Vec<usize> = Vec::new();
+    let mut pos = content_start;
+
+    for (i, arg) in args.iter().enumerate() {
+        let (arg_start, arg_end) = arg_source_range(arg);
+        let gap = &source[pos..arg_start];
+        let is_first_on_line = gap.contains('\n') || pos == content_start;
+
+        if is_first_on_line {
+            let arg_text = &source[arg_start..arg_end];
+            if is_raw_keyword_like(arg_text) {
+                // Only count if the next arg is on the same source line (inline value).
+                if let Some(next_arg) = args.get(i + 1) {
+                    let (next_start, _) = arg_source_range(next_arg);
+                    let next_gap = &source[arg_end..next_start];
+                    if !next_gap.contains('\n') {
+                        keyword_widths.push(arg_text.len());
+                    }
+                }
+            }
+        }
+        pos = arg_end;
+    }
+    if keyword_widths.len() >= 2 {
+        Some(*keyword_widths.iter().max().unwrap())
+    } else {
+        None
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn emit_unknown_args_raw(
     items: &mut PrintItems,
     args: &[Argument],
@@ -772,10 +861,13 @@ fn emit_unknown_args_raw(
     content_start: usize,
     content_end: usize,
     base_indent_len: usize,
+    collapse_spaces: bool,
+    keyword_col_width: Option<usize>,
 ) {
     let mut pos = content_start;
+    let mut first_on_line = true;
 
-    for arg in args {
+    for (i, arg) in args.iter().enumerate() {
         let (arg_start, arg_end) = arg_source_range(arg);
         let gap = &source[pos..arg_start];
         if gap.contains('\n') {
@@ -786,8 +878,41 @@ fn emit_unknown_args_raw(
                     items.extend(ir_helpers::gen_from_raw_string(stripped));
                 }
             }
+            first_on_line = true;
         } else if !gap.is_empty() {
-            items.extend(ir_helpers::gen_from_raw_string(gap));
+            // Skip the gap between '(' and first arg — spaceInsideParen
+            // handling is done by the caller (gen_unknown_command).  For all
+            // other same-line gaps collapse or preserve.
+            if i == 0 && collapse_spaces {
+                // Suppressed: caller already placed the opening paren.
+            } else if collapse_spaces {
+                // When keyword alignment is active and the previous token was a
+                // keyword-like first-on-line token with an inline value, pad to
+                // the keyword column width instead of collapsing to one space.
+                let kw_padding = if let Some(kw_width) = keyword_col_width {
+                    if i > 0 && first_on_line {
+                        let (prev_start, prev_end) = arg_source_range(&args[i - 1]);
+                        let prev_text = &source[prev_start..prev_end];
+                        if is_raw_keyword_like(prev_text) {
+                            // Pad: keyword column width + 1 gap minus keyword length.
+                            Some((kw_width + 1).saturating_sub(prev_text.len()))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                let spaces = kw_padding.unwrap_or(1).max(1);
+                for _ in 0..spaces {
+                    items.push_space();
+                }
+            } else {
+                items.extend(ir_helpers::gen_from_raw_string(gap));
+            }
+            first_on_line = false;
         }
 
         let arg_text = &source[arg_start..arg_end];
@@ -1214,20 +1339,8 @@ fn try_single_line(
         || cmd_name.eq_ignore_ascii_case("while")
         || cmd_name.eq_ignore_ascii_case("elseif");
     let has_keyword_args = args.iter().any(|arg| arg.is_keyword);
-    let has_unbreakable_long_token = cmd_name.len() > line_width
-        || arg_widths.iter().zip(args.iter()).any(|(&w, a)| {
-            w > line_width && {
-                let t = arg_inline_text(a);
-                memchr::memmem::find(t.as_bytes(), b"$<").is_none()
-            }
-        });
-    let indentation_overflow = base_indent > line_width;
-    let deep_indentation = base_indent.saturating_mul(2) >= line_width;
     if !keep_condition_header_inline
-        && ((total > line_width && !has_unbreakable_long_token)
-            || (!has_keyword_args && total == line_width))
-        && !indentation_overflow
-        && !deep_indentation
+        && ((total > line_width) || (!has_keyword_args && total == line_width))
     {
         return None;
     }
@@ -1988,8 +2101,31 @@ fn reshape_install_target_groups_for_alignment<'a>(
 
 #[derive(Default)]
 struct PositionalAlignmentProfile {
-    keyword_first_col_width: Option<usize>,
-    column_widths_by_count: std::collections::BTreeMap<usize, Vec<usize>>,
+    /// Per-section keyword first-column widths. Each section is delineated by
+    /// Keyword groups. Keywords separated by section boundaries should not share
+    /// a column width — they are aligned independently.
+    keyword_first_col_widths: Vec<Option<usize>>,
+    /// Per-section column widths. Each section is delineated by Keyword groups.
+    /// The profile-building pass assigns each Positional group a section index;
+    /// column widths are computed independently per section so that values under
+    /// different keyword sections are never aligned against each other.
+    section_column_widths: Vec<std::collections::BTreeMap<usize, Vec<usize>>>,
+}
+
+impl PositionalAlignmentProfile {
+    fn keyword_first_col_width_for_section(&self, section: usize) -> Option<usize> {
+        self.keyword_first_col_widths
+            .get(section)
+            .copied()
+            .flatten()
+    }
+
+    fn column_widths_for_section(&self, section: usize, token_count: usize) -> Option<&[usize]> {
+        self.section_column_widths
+            .get(section)
+            .and_then(|m| m.get(&token_count))
+            .map(|v| v.as_slice())
+    }
 }
 
 fn is_one_line_alignment_candidate(cmd_name: &str, args: &[&FormattedArg]) -> bool {
@@ -2003,33 +2139,56 @@ fn is_one_line_alignment_candidate(cmd_name: &str, args: &[&FormattedArg]) -> bo
 fn build_positional_alignment_profile(
     cmd_name: &str,
     groups: &[ArgGroup<'_>],
-    keyword_column_width: Option<usize>,
+    _keyword_column_width: Option<usize>,
+    spec: &CommandSpec,
+    config: &Configuration,
 ) -> Option<PositionalAlignmentProfile> {
-    let mut profile = PositionalAlignmentProfile::default();
+    let mut section_column_widths: Vec<std::collections::BTreeMap<usize, Vec<usize>>> =
+        vec![Default::default()];
     let mut candidate_count = 0usize;
-    let mut keyword_line_count = 0usize;
-    let mut max_keyword_width = 0usize;
+
+    // Per-section keyword-line tracking for fallback width computation.
+    // Each entry is (keyword_line_count, max_keyword_width).
+    let mut section_keyword_stats: Vec<(usize, usize)> = vec![(0, 0)];
+
+    // Track whether each section boundary is "hard" (actual section keyword
+    // that should isolate alignment) or "soft" (flow/option keyword that should
+    // not break the keyword-column alignment context).
+    let mut section_is_hard_boundary: Vec<bool> = vec![false]; // section 0 has no predecessor
 
     for group in groups {
-        let ArgGroup::Positional(args) = group else {
-            continue;
-        };
-        if !is_one_line_alignment_candidate(cmd_name, args) {
-            continue;
-        }
+        match group {
+            ArgGroup::Keyword { keyword, .. } | ArgGroup::CmdLineKeyword { keyword, .. } => {
+                // Section boundary: start a new section for subsequent Positional groups.
+                section_column_widths.push(Default::default());
+                section_keyword_stats.push((0, 0));
+                let is_hard = is_section_keyword(keyword, spec)
+                    || is_custom_keyword(keyword, config)
+                    || (config.blank_line_between_sections
+                        && keyword.is_keyword
+                        && spec.sections.is_empty());
+                section_is_hard_boundary.push(is_hard);
+            }
+            ArgGroup::Positional(args) => {
+                if !is_one_line_alignment_candidate(cmd_name, args) {
+                    continue;
+                }
 
-        candidate_count += 1;
-        if is_keyword_like_value(args[0]) {
-            keyword_line_count += 1;
-            max_keyword_width = max_keyword_width.max(token_visual_width(args[0]));
-        }
-        if args.len() >= 2 {
-            let widths = profile
-                .column_widths_by_count
-                .entry(args.len())
-                .or_insert_with(|| vec![0; args.len()]);
-            for (index, arg) in args.iter().enumerate() {
-                widths[index] = widths[index].max(token_visual_width(arg));
+                candidate_count += 1;
+                if is_keyword_like_value(args[0]) {
+                    let stats = section_keyword_stats.last_mut().unwrap();
+                    stats.0 += 1;
+                    stats.1 = stats.1.max(token_visual_width(args[0]));
+                }
+                if args.len() >= 2 {
+                    let section = section_column_widths.last_mut().unwrap();
+                    let widths = section
+                        .entry(args.len())
+                        .or_insert_with(|| vec![0; args.len()]);
+                    for (index, arg) in args.iter().enumerate() {
+                        widths[index] = widths[index].max(token_visual_width(arg));
+                    }
+                }
             }
         }
     }
@@ -2037,16 +2196,49 @@ fn build_positional_alignment_profile(
     if candidate_count < 2 {
         return None;
     }
-    if let Some(kw_width) = keyword_column_width {
-        // Use pre-computed width from compute_keyword_column_width, which
-        // accounts for preserved Keyword groups (flow/option keywords).
-        profile.keyword_first_col_width = Some(kw_width);
-    } else if keyword_line_count >= 2 {
-        // Keep an explicit visual gap between keyword columns and values.
-        profile.keyword_first_col_width = Some(max_keyword_width + 1);
+
+    // Build per-section keyword_first_col_widths. Sections separated by hard
+    // boundaries (real section keywords) are aligned independently. Sections
+    // separated by soft boundaries (flow/option keywords kept as Keyword groups)
+    // share a merged keyword-column width so that OUTPUT, DEPENDS, COMMENT etc.
+    // in the same logical block remain aligned even when a multi-value keyword
+    // like COMMAND sits between them as an unflattened Keyword group.
+    let section_count = section_column_widths.len();
+
+    // 1. Identify alignment zones: contiguous runs of sections separated only
+    //    by soft boundaries.  Each zone gets a single merged (count, max) stat.
+    //    `zone_id[i]` maps section i to its zone.
+    let mut zone_id = vec![0usize; section_count];
+    let mut current_zone = 0usize;
+    for i in 1..section_count {
+        if section_is_hard_boundary[i] {
+            current_zone += 1;
+        }
+        zone_id[i] = current_zone;
+    }
+    let zone_count = current_zone + 1;
+
+    // 2. Merge stats per zone.
+    let mut zone_stats: Vec<(usize, usize)> = vec![(0, 0); zone_count];
+    for (i, &zid) in zone_id.iter().enumerate() {
+        let (kw_count, kw_max) = section_keyword_stats[i];
+        zone_stats[zid].0 += kw_count;
+        zone_stats[zid].1 = zone_stats[zid].1.max(kw_max);
     }
 
-    Some(profile)
+    // 3. Assign keyword_first_col_widths per section from its zone.
+    let mut keyword_first_col_widths = vec![None; section_count];
+    for (section_idx, entry) in keyword_first_col_widths.iter_mut().enumerate() {
+        let (kw_count, kw_max) = zone_stats[zone_id[section_idx]];
+        if kw_count >= 2 {
+            *entry = Some(kw_max);
+        }
+    }
+
+    Some(PositionalAlignmentProfile {
+        keyword_first_col_widths,
+        section_column_widths,
+    })
 }
 
 fn emit_aligned_single_positional_line(
@@ -2054,7 +2246,8 @@ fn emit_aligned_single_positional_line(
     args: &[&FormattedArg],
     config: &Configuration,
     profile: &PositionalAlignmentProfile,
-    cmd_name: &str,
+    section_index: usize,
+    _cmd_name: &str,
 ) {
     items.push_signal(Signal::NewLine);
     for (index, arg) in args.iter().enumerate() {
@@ -2067,18 +2260,97 @@ fn emit_aligned_single_positional_line(
         let mut spaces = 1usize;
         if index == 0
             && is_keyword_like_value(args[0])
-            && let Some(width) = profile.keyword_first_col_width
+            && let Some(width) = profile.keyword_first_col_width_for_section(section_index)
         {
             spaces = spaces.max(width.saturating_sub(token_width) + 1);
         }
-        if let Some(column_widths) = profile.column_widths_by_count.get(&args.len()) {
+        if let Some(column_widths) = profile.column_widths_for_section(section_index, args.len()) {
             spaces = spaces.max(column_widths[index].saturating_sub(token_width) + 1);
-        }
-        if index == 0 && cmd_name.eq_ignore_ascii_case("install") {
-            spaces += 1;
         }
         for _ in 0..spaces {
             items.push_space();
+        }
+    }
+}
+
+/// Compute the total visual width an aligned positional line would occupy.
+fn compute_aligned_line_width(
+    args: &[&FormattedArg],
+    profile: &PositionalAlignmentProfile,
+    section_index: usize,
+    base_indent: usize,
+) -> usize {
+    let mut width = base_indent;
+    for (index, arg) in args.iter().enumerate() {
+        width += token_visual_width(arg);
+        if index + 1 >= args.len() {
+            break;
+        }
+        let token_width = token_visual_width(arg);
+        let mut spaces = 1usize;
+        if index == 0
+            && is_keyword_like_value(args[0])
+            && let Some(kw_width) = profile.keyword_first_col_width_for_section(section_index)
+        {
+            spaces = spaces.max(kw_width.saturating_sub(token_width) + 1);
+        }
+        if let Some(column_widths) = profile.column_widths_for_section(section_index, args.len()) {
+            spaces = spaces.max(column_widths[index].saturating_sub(token_width) + 1);
+        }
+        width += spaces;
+    }
+    width
+}
+
+/// Emit an alignment candidate that overflows lineWidth: keyword on its own line
+/// with keyword-column alignment, values packed greedily on subsequent lines.
+fn emit_aligned_overflow_packed(
+    items: &mut PrintItems,
+    args: &[&FormattedArg],
+    config: &Configuration,
+    _profile: &PositionalAlignmentProfile,
+    _section_index: usize,
+    base_indent: usize,
+) {
+    let keyword = args[0];
+    let values = &args[1..];
+    let continuation_indent = config.effective_continuation_indent_width() as usize;
+    let max_width = config.line_width as usize;
+
+    // Emit keyword on its own line with keyword-column alignment.
+    items.push_signal(Signal::NewLine);
+    emit_arg(items, keyword, config);
+
+    if values.is_empty() {
+        return;
+    }
+
+    // Pack values greedily on subsequent lines with extra indentation.
+    let val_indent = continuation_indent;
+    let available = max_width.saturating_sub(base_indent + val_indent);
+    let mut current_width = 0usize;
+    let mut first_on_line = true;
+    for val in values {
+        let w = arg_width(val);
+        if first_on_line {
+            items.push_signal(Signal::NewLine);
+            for _ in 0..val_indent {
+                items.push_space();
+            }
+            emit_arg(items, val, config);
+            current_width = w;
+            first_on_line = false;
+        } else if current_width + 1 + w <= available {
+            items.push_space();
+            emit_arg(items, val, config);
+            current_width += 1 + w;
+        } else {
+            items.push_signal(Signal::NewLine);
+            for _ in 0..val_indent {
+                items.push_space();
+            }
+            emit_arg(items, val, config);
+            current_width = w;
         }
     }
 }
@@ -2114,11 +2386,7 @@ fn emit_install_target_rows(
                 continue;
             }
 
-            let mut spaces = column_widths[index].saturating_sub(token_visual_width(token)) + 1;
-            if index == 0 {
-                // Keep an extra gap between TARGET name and artifact section keyword.
-                spaces += 1;
-            }
+            let spaces = column_widths[index].saturating_sub(token_visual_width(token)) + 1;
             for _ in 0..spaces {
                 items.push_space();
             }
@@ -2134,49 +2402,143 @@ fn emit_flattened_target_sources_sections(
     config: &Configuration,
     spec: &CommandSpec,
 ) {
-    let mut lines: Vec<Vec<&FormattedArg>> = Vec::new();
-    let mut current: Vec<&FormattedArg> = Vec::new();
-    for arg in args {
-        if arg.new_line_before && !current.is_empty() {
-            lines.push(std::mem::take(&mut current));
+    let continuation_indent = config.effective_continuation_indent_width() as usize;
+    let max_width = config.line_width as usize;
+
+    // Split args into structural segments: each segment starts with a keyword.
+    let mut segments: Vec<(/* is_section */ bool, Vec<&FormattedArg>)> = Vec::new();
+    for &arg in args {
+        let is_kw = is_section_keyword(arg, spec);
+        if is_kw || (arg.is_keyword && !segments.is_empty()) {
+            segments.push((is_kw, vec![arg]));
+        } else if let Some((_, seg)) = segments.last_mut() {
+            seg.push(arg);
+        } else {
+            segments.push((false, vec![arg]));
         }
-        current.push(*arg);
-    }
-    if !current.is_empty() {
-        lines.push(current);
     }
 
-    let value_column_width = lines
+    // Detect whether this is a FILE_SET structure (has sub-keywords) or a
+    // simple section structure (PUBLIC/PRIVATE with direct values).
+    let has_sub_keywords = segments.iter().any(|(is_sec, _)| !is_sec);
+
+    // Compute keyword-value alignment width across non-section keyword segments.
+    let value_column_width = segments
         .iter()
-        .filter(|line| line.len() >= 2 && !is_section_keyword(line[0], spec))
-        .map(|line| token_visual_width(line[0]))
+        .filter(|(is_sec, seg)| !is_sec && seg.len() >= 2)
+        .map(|(_, seg)| token_visual_width(seg[0]))
         .max()
         .unwrap_or(0);
-    let continuation_indent = config.effective_continuation_indent_width() as usize;
 
-    for line in lines {
+    for (is_section, segment) in &segments {
+        let keyword = segment[0];
+        let values = &segment[1..];
+
         items.push_signal(Signal::NewLine);
-        let is_section_header = line.len() == 1 && is_section_keyword(line[0], spec);
-        if !is_section_header {
+
+        if *is_section && has_sub_keywords {
+            // FILE_SET section header: emit keyword + immediate value, no extra indent.
+            emit_arg(items, keyword, config);
+            for val in values {
+                items.push_space();
+                emit_arg(items, val, config);
+            }
+        } else if *is_section {
+            // Simple section keyword (PUBLIC/PRIVATE): emit keyword then values
+            // with source line grouping, using continuation indent for values.
+            emit_arg(items, keyword, config);
+            emit_section_values_source_grouped(items, values, config, continuation_indent);
+        } else {
+            // Sub-keyword (BASE_DIRS, FILES): continuation indent + smart packing.
             for _ in 0..continuation_indent {
                 items.push_space();
             }
-        }
 
-        for (index, arg) in line.iter().enumerate() {
-            emit_arg(items, arg, config);
-            if index + 1 >= line.len() {
+            if values.is_empty() {
+                emit_arg(items, keyword, config);
                 continue;
             }
 
-            let mut spaces = 1usize;
-            if !is_section_header && index == 0 && value_column_width > 0 {
-                spaces = spaces.max(value_column_width.saturating_sub(token_visual_width(arg)) + 1);
-            }
-            for _ in 0..spaces {
-                items.push_space();
+            // Compute how wide keyword + all values would be on one line.
+            let kw_width = token_visual_width(keyword);
+            let padded_kw_width = if value_column_width > 0 {
+                value_column_width.max(kw_width)
+            } else {
+                kw_width
+            };
+            let values_total_width: usize =
+                values.iter().map(|v| arg_width(v)).sum::<usize>() + values.len().saturating_sub(1);
+            let line_start = continuation_indent;
+            let one_line_width = line_start + padded_kw_width + 1 + values_total_width;
+
+            if one_line_width <= max_width {
+                // Everything fits on one line: keyword + all values.
+                emit_arg(items, keyword, config);
+                let kw_padding = padded_kw_width.saturating_sub(kw_width) + 1;
+                for _ in 0..kw_padding {
+                    items.push_space();
+                }
+                for (i, val) in values.iter().enumerate() {
+                    if i > 0 {
+                        items.push_space();
+                    }
+                    emit_arg(items, val, config);
+                }
+            } else {
+                // Values don't fit on same line as keyword.
+                // Emit keyword alone, then pack values greedily.
+                emit_arg(items, keyword, config);
+                let val_indent = continuation_indent * 2;
+                let available = max_width.saturating_sub(val_indent);
+                let mut current_width = 0usize;
+                let mut first_on_line = true;
+                for val in values {
+                    let w = arg_width(val);
+                    if first_on_line {
+                        items.push_signal(Signal::NewLine);
+                        for _ in 0..val_indent {
+                            items.push_space();
+                        }
+                        emit_arg(items, val, config);
+                        current_width = w;
+                        first_on_line = false;
+                    } else if current_width + 1 + w <= available {
+                        items.push_space();
+                        emit_arg(items, val, config);
+                        current_width += 1 + w;
+                    } else {
+                        items.push_signal(Signal::NewLine);
+                        for _ in 0..val_indent {
+                            items.push_space();
+                        }
+                        emit_arg(items, val, config);
+                        current_width = w;
+                    }
+                }
             }
         }
+    }
+}
+
+/// Emit section values with source line grouping. Each value that had a source
+/// newline before it starts a new line; otherwise values share the line.
+fn emit_section_values_source_grouped(
+    items: &mut PrintItems,
+    values: &[&FormattedArg],
+    config: &Configuration,
+    continuation_indent: usize,
+) {
+    for (i, val) in values.iter().enumerate() {
+        let start_new_line = i == 0 || val.new_line_before;
+        if start_new_line {
+            items.push_signal(Signal::NewLine);
+            for _ in 0..continuation_indent {
+                items.push_space();
+            }
+        } else {
+            items.push_space();
+        }
+        emit_arg(items, val, config);
     }
 }
 
@@ -2194,6 +2556,7 @@ fn gen_known_multi_line(
     allow_keyword_inline: bool,
     allow_opening_arg_packing: bool,
     first_arg_same_line: bool,
+    closing_paren_extra: usize,
 ) -> PrintItems {
     let (mut front_pos, mut groups, back_pos) = split_arguments(arguments, spec, config);
 
@@ -2281,13 +2644,6 @@ fn gen_known_multi_line(
         cmd_name.eq_ignore_ascii_case("set_target_properties") && opening_pair_values.is_some();
     let force_one_per_line = config.wrap_arg_threshold > 0
         && count_wrap_arguments(arguments) > config.wrap_arg_threshold as usize;
-    let opening_line_overflow = first_arg_same_line
-        && opening_args
-            .first()
-            .map(|first| {
-                command_indent + cmd_name.len() + 1 + arg_width(first) > config.line_width as usize
-            })
-            .unwrap_or(false);
     if first_arg_same_line {
         if let Some((first, rest)) = opening_args.split_first() {
             if first.is_keyword {
@@ -2364,12 +2720,8 @@ fn gen_known_multi_line(
     }
 
     let mut emitted_section_groups = 0usize;
-    let mut expanded_keyword_group_seen = opening_line_overflow || opening_pair_values.is_some();
-    let disable_inline_after_expansion = config.line_width <= 40;
-    let force_expanded_keyword_layout = config.blank_line_between_sections
-        && (!spec.sections.is_empty()
-            || !spec.keywords.is_empty()
-            || !config.custom_keywords.is_empty());
+    let mut expanded_keyword_group_seen = opening_pair_values.is_some();
+    let disable_inline_after_expansion = !first_arg_same_line;
 
     let keyword_column_width: Option<usize> = if config.align_arg_groups {
         compute_keyword_column_width(&groups, spec, config)
@@ -2378,12 +2730,13 @@ fn gen_known_multi_line(
     };
 
     let positional_alignment_profile = if config.align_arg_groups {
-        build_positional_alignment_profile(cmd_name, &groups, keyword_column_width)
+        build_positional_alignment_profile(cmd_name, &groups, keyword_column_width, spec, config)
     } else {
         None
     };
 
     // Emit keyword groups
+    let mut section_index = 0usize;
     for group in groups.iter() {
         last_on_opening_line = false;
         match group {
@@ -2395,6 +2748,7 @@ fn gen_known_multi_line(
                         config,
                         false,
                         config.effective_continuation_indent_width() as usize,
+                        false,
                         false,
                         false,
                         0, // pack_tokens=false, column_start irrelevant
@@ -2419,13 +2773,34 @@ fn gen_known_multi_line(
                     );
                 } else if is_one_line_alignment_candidate(cmd_name, args.as_slice()) {
                     if let Some(profile) = positional_alignment_profile.as_ref() {
-                        emit_aligned_single_positional_line(
-                            &mut inner,
+                        // Check if the aligned line would overflow lineWidth.
+                        let aligned_width = compute_aligned_line_width(
                             args.as_slice(),
-                            config,
                             profile,
-                            cmd_name,
+                            section_index,
+                            base_indent,
                         );
+                        if args.len() >= 3 && aligned_width > config.line_width as usize {
+                            // Keyword + values overflow: emit keyword on its
+                            // own line with alignment, then pack values below.
+                            emit_aligned_overflow_packed(
+                                &mut inner,
+                                args.as_slice(),
+                                config,
+                                profile,
+                                section_index,
+                                base_indent,
+                            );
+                        } else {
+                            emit_aligned_single_positional_line(
+                                &mut inner,
+                                args.as_slice(),
+                                config,
+                                profile,
+                                section_index,
+                                cmd_name,
+                            );
+                        }
                     } else if spec.flow_positional {
                         emit_flow_values(&mut inner, args.as_slice(), config, base_indent, false);
                     } else {
@@ -2443,6 +2818,10 @@ fn gen_known_multi_line(
                                     .take(2)
                                     .count()
                                     >= 2,
+                            // Greedy pack: only when alignArgGroups=false and source
+                            // has multi-value lines (some args share a source line).
+                            !config.align_arg_groups
+                                && args.iter().skip(1).any(|arg| !arg.new_line_before),
                             base_indent,
                             keyword_column_width,
                         );
@@ -2464,12 +2843,17 @@ fn gen_known_multi_line(
                                 .take(2)
                                 .count()
                                 >= 2,
+                        // Greedy pack: only when alignArgGroups=false and source
+                        // has multi-value lines (some args share a source line).
+                        !config.align_arg_groups
+                            && args.iter().skip(1).any(|arg| !arg.new_line_before),
                         base_indent,
                         keyword_column_width,
                     );
                 }
             }
             ArgGroup::Keyword { keyword, values } => {
+                section_index += 1;
                 let section_keyword = is_section_keyword(keyword, spec)
                     || is_custom_keyword(keyword, config)
                     || (keyword.is_keyword && spec.sections.is_empty());
@@ -2480,7 +2864,6 @@ fn gen_known_multi_line(
                     inner.push_signal(Signal::NewLine);
                 }
                 let keyword_inline_allowed = allow_keyword_inline
-                    && !force_expanded_keyword_layout
                     && !(disable_inline_after_expansion && expanded_keyword_group_seen);
                 let expanded = emit_keyword_group(
                     &mut inner,
@@ -2491,8 +2874,9 @@ fn gen_known_multi_line(
                     base_indent,
                     cmd_name.eq_ignore_ascii_case("export"),
                     keyword_inline_allowed,
-                    force_one_per_line,
+                    false,
                     keyword_column_width,
+                    closing_paren_extra,
                 );
                 expanded_keyword_group_seen |= expanded;
                 if section_keyword {
@@ -2500,6 +2884,7 @@ fn gen_known_multi_line(
                 }
             }
             ArgGroup::CmdLineKeyword { keyword, value } => {
+                section_index += 1;
                 emit_cmd_line_keyword(&mut inner, keyword, *value, config, base_indent);
             }
         }
@@ -2536,6 +2921,7 @@ fn emit_keyword_group(
     allow_keyword_inline: bool,
     force_one_per_line: bool,
     keyword_column_width: Option<usize>,
+    closing_paren_extra: usize,
 ) -> bool {
     // Check for compound keyword (e.g., QUERY WINDOWS_REGISTRY)
     if let Some(first_val) = values.first()
@@ -2576,6 +2962,7 @@ fn emit_keyword_group(
             allow_keyword_inline,
             force_one_per_line,
             None, // compound keywords don't participate in column alignment
+            closing_paren_extra,
         );
     }
 
@@ -2635,7 +3022,6 @@ fn emit_keyword_group(
         && section_front > 0
         && values.len() > section_front;
 
-    let continuation_is_explicit = config.continuation_indent_width.is_some();
     let preserve_inline_keyword_layout = (config.sort_arguments_explicit
         || config.sort_keyword_sections_explicit)
         && !allow_plain_section_inline
@@ -2649,15 +3035,12 @@ fn emit_keyword_group(
             .iter()
             .all(|v| v.trailing_comment.is_none() || v.trailing_is_bracket)
         && (keyword.trailing_comment.is_none() || keyword.trailing_is_bracket)
-        && !values.iter().any(|v| v.text.starts_with('#'))
-        && !values
-            .iter()
-            .any(|v| memchr::memmem::find(v.text.as_bytes(), b"$<").is_some());
+        && !values.iter().any(|v| v.text.starts_with('#'));
     if !force_one_per_line
         && allow_keyword_inline
         && !preserve_inline_keyword_layout
         && treat_as_regular_keyword
-        && base_indent + inline_width <= config.line_width as usize
+        && base_indent + inline_width + closing_paren_extra <= config.line_width as usize
         && can_inline_content
         && !has_section_tail_values
     {
@@ -2690,18 +3073,13 @@ fn emit_keyword_group(
             .iter()
             .any(|v| is_text_in_keyword_list(&v.text, sub_kws));
 
-        let has_group_subkeywords = sub_kws
-            .iter()
-            .any(|(_, kw_type)| matches!(kw_type, KwType::Group(..)));
         let can_inline_section_values = !force_one_per_line
             && allow_keyword_inline
             && !preserve_inline_keyword_layout
             && !has_subkeyword_values
-            && !has_group_subkeywords
-            && !continuation_is_explicit
             && (section_front == 0 || allow_plain_section_inline);
         if can_inline_section_values
-            && base_indent + inline_width <= config.line_width as usize
+            && base_indent + inline_width + closing_paren_extra <= config.line_width as usize
             && can_inline_content
         {
             let kw_text = if keyword.is_keyword {
@@ -2733,7 +3111,6 @@ fn emit_keyword_group(
             let can_inline_leading = !force_one_per_line
                 && allow_keyword_inline
                 && !preserve_inline_keyword_layout
-                && !continuation_is_explicit
                 && base_indent + leading_width <= config.line_width as usize
                 && !values[..leading_count]
                     .iter()
@@ -2764,7 +3141,42 @@ fn emit_keyword_group(
             }
         }
         emit_kw_arg(items, keyword, config);
-        emit_section_values(items, values, sub_kws, config, base_indent);
+        // Try packing section values on one continuation-indented line when
+        // there are no sub-keyword values interleaved and we are in cascade
+        // mode (vertical always uses one-per-line).
+        let packed_section = allow_keyword_inline
+            && !force_one_per_line
+            && !has_subkeyword_values
+            && !values.is_empty()
+            && {
+                let cont = config.effective_continuation_indent_width() as usize;
+                let value_col = base_indent + cont;
+                let pw: usize = values.iter().map(|v| arg_width(v)).sum::<usize>()
+                    + values.len().saturating_sub(1);
+                value_col + pw + closing_paren_extra < config.line_width as usize
+                    && !values.iter().any(|v| v.text.contains('\n'))
+                    && !values.iter().any(|v| v.text.starts_with('#'))
+                    && values
+                        .iter()
+                        .all(|v| v.trailing_comment.is_none() || v.trailing_is_bracket)
+            };
+        if packed_section {
+            let cont = config.effective_continuation_indent_width() as usize;
+            emit_values_with_genex_with_indent(
+                items,
+                values,
+                config,
+                true,
+                cont,
+                false,
+                true,
+                false,
+                base_indent,
+                None,
+            );
+        } else {
+            emit_section_values(items, values, sub_kws, config, base_indent);
+        }
     } else {
         emit_kw_arg(items, keyword, config);
         if let Some(KwType::Group(front_count, group_sub_keywords)) =
@@ -2813,6 +3225,10 @@ fn emit_keyword_group(
             // When alignArgGroups is enabled, pack tokens onto lines so that
             // same-token-count runs can be column-aligned.
             let continuation = config.effective_continuation_indent_width() as usize;
+            let value_column = base_indent + continuation;
+            let packed_width: usize = regular_values.iter().map(|v| arg_width(v)).sum::<usize>()
+                + regular_values.len().saturating_sub(1); // spaces between
+            let pack_keyword_values = value_column + packed_width < config.line_width as usize;
             emit_values_with_genex_with_indent(
                 items,
                 regular_values,
@@ -2820,9 +3236,11 @@ fn emit_keyword_group(
                 true,
                 continuation,
                 false,
-                config.align_arg_groups
-                    && !force_one_per_line
-                    && !(config.blank_line_between_sections && is_section_kw),
+                pack_keyword_values
+                    || (config.align_arg_groups
+                        && !force_one_per_line
+                        && !(config.blank_line_between_sections && is_section_kw)),
+                false,
                 base_indent,
                 None,
             );
@@ -3320,10 +3738,7 @@ fn emit_aligned_property_pairs(
                 val_items.extend(ir_helpers::gen_from_raw_string(&arg_inline_text(value)));
                 emitted_first_value = true;
             } else {
-                val_items.push_signal(Signal::NewLine);
-                for _ in 0..(key_width + 1) {
-                    val_items.push_space();
-                }
+                val_items.push_space();
                 val_items.extend(ir_helpers::gen_from_raw_string(&arg_inline_text(value)));
             }
             index += 1;
@@ -3525,18 +3940,20 @@ fn emit_section_values_inner(
                         sub_values.push(values[i]);
                         i += 1;
                     }
-                    // Try inline
+                    // Try to fit keyword + all values on one line.
                     let iw =
                         kw.text.len() + sub_values.iter().map(|v| 1 + arg_width(v)).sum::<usize>();
-                    if sub_indent + iw <= config.line_width as usize
+                    let can_inline = sub_indent + iw <= config.line_width as usize
                         && !sub_values.iter().any(|v| v.text.contains('\n'))
-                        && sub_values.len() == 1
+                        // Multi-value inline only under alignArgGroups; otherwise
+                        // only single-value keywords inline (original behavior).
+                        && (sub_values.len() == 1 || config.align_arg_groups)
                         && sub_values
                             .iter()
                             .all(|v| v.trailing_comment.is_none() || v.trailing_is_bracket)
                         && (kw.trailing_comment.is_none() || kw.trailing_is_bracket)
-                        && !sub_values.iter().any(|v| v.text.starts_with('#'))
-                    {
+                        && !sub_values.iter().any(|v| v.text.starts_with('#'));
+                    if can_inline {
                         push_wrapped_newline(
                             &mut val_items,
                             wrap_indent,
@@ -3561,7 +3978,44 @@ fn emit_section_values_inner(
                             config,
                         );
                         emit_sub_kw_arg(&mut val_items, kw, config);
+                    } else if config.align_arg_groups
+                        && !sub_values.iter().all(|v| v.new_line_before)
+                    {
+                        // alignArgGroups with packed source: keyword on own
+                        // line, values packed greedily.
+                        push_wrapped_newline(
+                            &mut val_items,
+                            wrap_indent,
+                            continuation_indent,
+                            config,
+                        );
+                        emit_sub_kw_arg(&mut val_items, kw, config);
+                        let val_indent_extra = continuation_indent;
+                        let available = config.line_width as usize
+                            - sub_indent.saturating_sub(val_indent_extra);
+                        let mut sub_items = PrintItems::new();
+                        let mut current_width = 0usize;
+                        let mut first_on_line = true;
+                        for sv in &sub_values {
+                            let w = arg_width(sv);
+                            if first_on_line {
+                                sub_items.push_signal(Signal::NewLine);
+                                emit_arg(&mut sub_items, sv, config);
+                                current_width = w;
+                                first_on_line = false;
+                            } else if current_width + 1 + w <= available {
+                                sub_items.push_space();
+                                emit_arg(&mut sub_items, sv, config);
+                                current_width += 1 + w;
+                            } else {
+                                sub_items.push_signal(Signal::NewLine);
+                                emit_arg(&mut sub_items, sv, config);
+                                current_width = w;
+                            }
+                        }
+                        val_items.push_indented_times(sub_items, 2);
                     } else {
+                        // Default: keyword on own line, values one-per-line.
                         push_wrapped_newline(
                             &mut val_items,
                             wrap_indent,
@@ -3724,6 +4178,7 @@ fn emit_section_values_inner(
                 continuation_indent,
                 true,
                 config.align_arg_groups && !config.blank_line_between_sections,
+                false,
                 base_indent,
                 None,
             );
@@ -4940,347 +5395,6 @@ fn genex_depth_delta(text: &str) -> i32 {
     depth
 }
 
-/// Split `text` at occurrences of `sep` that are at genex depth 0.
-fn split_at_depth0(text: &str, sep: char) -> Vec<&str> {
-    let mut result = Vec::new();
-    let mut depth: i32 = 0;
-    let mut start = 0;
-    let bytes = text.as_bytes();
-    let sep_byte = sep as u8;
-    let mut i = 0;
-    while i < bytes.len() {
-        if i + 1 < bytes.len() && bytes[i] == b'$' && bytes[i + 1] == b'<' {
-            depth += 1;
-            i += 2;
-        } else if bytes[i] == b'>' {
-            depth -= 1;
-            i += 1;
-        } else if bytes[i] == sep_byte && depth == 0 {
-            result.push(&text[start..i]);
-            start = i + 1;
-            i += 1;
-        } else {
-            i += 1;
-        }
-    }
-    if start <= text.len() {
-        result.push(&text[start..]);
-    }
-    result
-}
-
-fn split_condition_values(text: &str) -> Vec<&str> {
-    let mut values = Vec::new();
-    for part in split_at_depth0(text, ' ') {
-        for candidate in split_at_depth0(part, ';') {
-            let trimmed = candidate.trim();
-            if !trimmed.is_empty() {
-                values.push(trimmed);
-            }
-        }
-    }
-    values
-}
-
-/// Find the byte offset of the first `:` at genex depth 0, or `None`.
-fn find_depth0_colon(text: &str) -> Option<usize> {
-    let mut depth: i32 = 0;
-    let bytes = text.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        if i + 1 < bytes.len() && bytes[i] == b'$' && bytes[i + 1] == b'<' {
-            depth += 1;
-            i += 2;
-        } else if bytes[i] == b'>' {
-            depth -= 1;
-            i += 1;
-        } else if bytes[i] == b':' && depth == 0 {
-            return Some(i);
-        } else {
-            i += 1;
-        }
-    }
-    None
-}
-
-/// A parsed generator expression tree node.
-enum GenexNode {
-    /// Plain text (no genex).
-    Text(String),
-    /// `$<NAME>` — a genex with no colon (simple variable reference).
-    SimpleGenex { prefix: String, name: String },
-    /// `$<NAME:child1,child2,...>` — a named genex with comma-separated children.
-    NamedGenex {
-        prefix: String,
-        name: String,
-        children: Vec<GenexNode>,
-    },
-    /// `$<$<COND>:val1 val2 ...>` — condition genex wrapping space-separated values.
-    ConditionGenex {
-        condition: Box<GenexNode>,
-        values: Vec<GenexNode>,
-    },
-}
-
-/// Parse a text fragment into a `GenexNode`.
-/// The text may start with a non-genex prefix (e.g. `LOG_LEVEL=$<IF:...>`).
-fn parse_genex(text: &str) -> GenexNode {
-    let text = text.trim();
-    // Find the first `$<` in the text.
-    let genex_start = text.find("$<");
-    match genex_start {
-        None => GenexNode::Text(text.to_owned()),
-        Some(0) => parse_genex_inner(text),
-        Some(pos) => {
-            // There is a prefix before the genex (e.g. "LOG_LEVEL=").
-            let prefix = &text[..pos];
-            let rest = &text[pos..];
-            let mut node = parse_genex_inner(rest);
-            // Attach prefix to the parsed node.
-            match &mut node {
-                GenexNode::SimpleGenex { prefix: p, .. }
-                | GenexNode::NamedGenex { prefix: p, .. } => {
-                    *p = prefix.to_owned();
-                }
-                GenexNode::ConditionGenex { .. } | GenexNode::Text(_) => {
-                    // Condition genex or text shouldn't normally have a prefix,
-                    // but if they do, wrap in text.
-                    return GenexNode::Text(text.to_owned());
-                }
-            }
-            node
-        }
-    }
-}
-
-/// Parse text that starts with `$<` as a genex expression.
-fn parse_genex_inner(text: &str) -> GenexNode {
-    let text = text.trim();
-    // Must start with `$<` and end with `>`.
-    if !text.starts_with("$<") || !text.ends_with('>') {
-        return GenexNode::Text(text.to_owned());
-    }
-    // Strip outer `$<` and `>`.
-    let inner = &text[2..text.len() - 1];
-
-    // Find first depth-0 `:` within the stripped content.
-    match find_depth0_colon(inner) {
-        None => {
-            // No colon \u2192 SimpleGenex like `$<CXX_COMPILER_VERSION>`.
-            GenexNode::SimpleGenex {
-                prefix: String::new(),
-                name: inner.trim().to_owned(),
-            }
-        }
-        Some(colon_pos) => {
-            let before_colon = inner[..colon_pos].trim();
-            let after_colon = inner[colon_pos + 1..].trim();
-
-            if before_colon.starts_with("$<") {
-                // Condition genex: `$<$<COND>:values>`.
-                let condition = parse_genex(before_colon);
-                // Values split on depth-0 spaces and semicolons.
-                let values = split_condition_values(after_colon)
-                    .into_iter()
-                    .map(parse_genex)
-                    .collect();
-                GenexNode::ConditionGenex {
-                    condition: Box::new(condition),
-                    values,
-                }
-            } else {
-                // Named genex: `$<NAME:children>`.
-                let name = before_colon.to_owned();
-                let child_parts = split_at_depth0(after_colon, ',');
-                let children = child_parts
-                    .into_iter()
-                    .map(|s| s.trim())
-                    .filter(|s| !s.is_empty())
-                    .map(parse_genex)
-                    .collect();
-                GenexNode::NamedGenex {
-                    prefix: String::new(),
-                    name,
-                    children,
-                }
-            }
-        }
-    }
-}
-
-/// Reconstruct the flat (inline) text of a genex node.
-fn genex_inline_text(node: &GenexNode) -> String {
-    match node {
-        GenexNode::Text(s) => s.clone(),
-        GenexNode::SimpleGenex { prefix, name } => {
-            format!("{prefix}$<{name}>")
-        }
-        GenexNode::NamedGenex {
-            prefix,
-            name,
-            children,
-        } => {
-            let children_text: Vec<String> = children.iter().map(genex_inline_text).collect();
-            format!("{prefix}$<{name}:{}>", children_text.join(","))
-        }
-        GenexNode::ConditionGenex { condition, values } => {
-            let cond_text = genex_inline_text(condition);
-            let values_text: Vec<String> = values.iter().map(genex_inline_text).collect();
-            format!("$<{cond_text}:{}>", values_text.join(";"))
-        }
-    }
-}
-
-/// Returns true if a genex node should be formatted inline (single line).
-fn genex_is_inline(node: &GenexNode) -> bool {
-    match node {
-        GenexNode::Text(_) | GenexNode::SimpleGenex { .. } => true,
-        GenexNode::NamedGenex { children, .. } => {
-            // Inline only if exactly 1 child that is itself inline-simple.
-            children.len() == 1
-                && matches!(
-                    &children[0],
-                    GenexNode::Text(_) | GenexNode::SimpleGenex { .. }
-                )
-        }
-        GenexNode::ConditionGenex { .. } => false,
-    }
-}
-
-fn condition_genex_should_inline(
-    node: &GenexNode,
-    extra_indent: usize,
-    close_suffix: &str,
-    config: &Configuration,
-) -> bool {
-    let inline_text = genex_inline_text(node);
-    let total_width = extra_indent + inline_text.len() + close_suffix.len();
-    total_width <= config.line_width as usize
-}
-
-fn condition_genex_prefers_compact_close(condition: &GenexNode) -> bool {
-    match condition {
-        GenexNode::NamedGenex { name, children, .. } => {
-            matches!(name.to_ascii_uppercase().as_str(), "OR" | "AND" | "NOT")
-                && !children.is_empty()
-                && children.iter().all(genex_is_inline)
-        }
-        _ => false,
-    }
-}
-
-/// Format a genex node tree into PrintItems.
-fn format_genex_node(
-    items: &mut PrintItems,
-    node: &GenexNode,
-    config: &Configuration,
-    extra_indent: usize,
-) {
-    format_genex_impl(items, node, "", 0, config, extra_indent);
-}
-
-/// Internal: format a genex node, appending `close_suffix` after the closing `>`.
-/// This is used by ConditionGenex to merge condition's `>` with `:`.
-fn format_genex_impl(
-    items: &mut PrintItems,
-    node: &GenexNode,
-    close_suffix: &str,
-    _depth: usize,
-    config: &Configuration,
-    extra_indent: usize,
-) {
-    match node {
-        GenexNode::Text(s) => {
-            items.extend(ir_helpers::gen_from_raw_string(s));
-            if !close_suffix.is_empty() {
-                items.extend(ir_helpers::gen_from_raw_string(close_suffix));
-            }
-        }
-        GenexNode::SimpleGenex { prefix, name } => {
-            let text = format!("{prefix}$<{name}>{close_suffix}");
-            items.extend(ir_helpers::gen_from_raw_string(&text));
-        }
-        GenexNode::NamedGenex {
-            prefix,
-            name,
-            children,
-        } => {
-            if genex_is_inline(node) {
-                let text = format!("{}{close_suffix}", genex_inline_text(node));
-                items.extend(ir_helpers::gen_from_raw_string(&text));
-            } else {
-                // Multi-line: `$<NAME:` then children indented, then `>`.
-                let opener = format!("{prefix}$<{name}:");
-                items.extend(ir_helpers::gen_from_raw_string(&opener));
-                let genex_indent = config.effective_genex_indent_width() as usize;
-                let child_indent = extra_indent + genex_indent;
-                for (i, child) in children.iter().enumerate() {
-                    push_newline_with_visual_indent(items, child_indent, config);
-                    format_genex_impl(items, child, "", _depth + 1, config, child_indent);
-                    if i + 1 < children.len() {
-                        items.push_str_runtime_width_computed(",");
-                    }
-                }
-                let compact_close =
-                    close_suffix == ":" && condition_genex_prefers_compact_close(node);
-                if compact_close {
-                    let closer = format!(">{close_suffix}");
-                    items.extend(ir_helpers::gen_from_raw_string(&closer));
-                } else {
-                    if config.genex_closing_angle_newline {
-                        push_newline_with_visual_indent(items, extra_indent, config);
-                    }
-                    let closer = format!(">{close_suffix}");
-                    items.extend(ir_helpers::gen_from_raw_string(&closer));
-                }
-            }
-        }
-        GenexNode::ConditionGenex { condition, values } => {
-            if condition_genex_should_inline(node, extra_indent, close_suffix, config) {
-                let text = format!("{}{close_suffix}", genex_inline_text(node));
-                items.extend(ir_helpers::gen_from_raw_string(&text));
-                return;
-            } else if genex_is_inline(condition) {
-                // Condition fits inline: `$<inline_cond:`
-                let cond_text = genex_inline_text(condition);
-                let opener = format!("$<{cond_text}:");
-                items.extend(ir_helpers::gen_from_raw_string(&opener));
-            } else {
-                // Condition is multi-line: `$<` then condition with >: suffix.
-                items.extend(ir_helpers::gen_from_raw_string("$<"));
-                format_genex_impl(items, condition, ":", _depth + 1, config, extra_indent);
-            }
-            // Values indented relative to the `$<` opener column.
-            let genex_indent = config.effective_genex_indent_width() as usize;
-            let value_indent = extra_indent + genex_indent;
-            let packed_values = values
-                .iter()
-                .map(genex_inline_text)
-                .collect::<Vec<_>>()
-                .join(";");
-            let can_pack_values = values.len() <= 2
-                && !packed_values.is_empty()
-                && packed_values.len() <= 12
-                && values.iter().all(genex_is_inline)
-                && value_indent + packed_values.len() <= config.line_width as usize;
-            if can_pack_values {
-                push_newline_with_visual_indent(items, value_indent, config);
-                items.extend(ir_helpers::gen_from_raw_string(&packed_values));
-            } else {
-                for val in values {
-                    push_newline_with_visual_indent(items, value_indent, config);
-                    format_genex_impl(items, val, "", _depth + 1, config, value_indent);
-                }
-            }
-            if config.genex_closing_angle_newline {
-                push_newline_with_visual_indent(items, extra_indent, config);
-            }
-            let closer = format!(">{close_suffix}");
-            items.extend(ir_helpers::gen_from_raw_string(&closer));
-        }
-    }
-}
-
 /// Group a slice of `FormattedArg` values into genex groups and standalone args.
 /// A genex group is a sequence of consecutive args whose cumulative `$<`/`>`
 /// depth goes above 0 and returns to 0.
@@ -5323,7 +5437,7 @@ fn group_args_by_genex<'a>(args: &[&'a FormattedArg]) -> Vec<GenexArgGroup<'a>> 
     groups
 }
 
-/// Emits a generator-expression argument with wrapping behavior configured by `genexWrap`.
+/// Emits a generator-expression argument as an atomic token (never split across lines).
 fn emit_genex_value(
     items: &mut PrintItems,
     text: &str,
@@ -5332,12 +5446,7 @@ fn emit_genex_value(
     continuation_indent: usize,
 ) {
     push_wrapped_newline(items, wrap_indent, continuation_indent, config);
-    if matches!(config.genex_wrap, crate::configuration::GenexWrap::Never) {
-        items.extend(ir_helpers::gen_from_raw_string(text));
-        return;
-    }
-    let node = parse_genex(text);
-    format_genex_node(items, &node, config, continuation_indent);
+    items.extend(ir_helpers::gen_from_raw_string(text));
 }
 
 #[derive(Clone)]
@@ -5488,7 +5597,7 @@ fn apply_arg_group_alignment(
             let first_column_width = if let Some(override_width) = keyword_column_width_override {
                 override_width
             } else {
-                let keyword_width = keyword_line_indices
+                keyword_line_indices
                     .iter()
                     .map(|line_idx| {
                         if let ValueLayoutLine::Tokens(tokens) = &lines[*line_idx] {
@@ -5498,10 +5607,7 @@ fn apply_arg_group_alignment(
                         }
                     })
                     .max()
-                    .unwrap_or(0);
-                // Keep an explicit gap after keyword-style first columns so aligned
-                // keyword groups remain visually distinct from their values.
-                keyword_width + 1
+                    .unwrap_or(0)
             };
 
             for line_idx in &keyword_line_indices {
@@ -5594,6 +5700,7 @@ fn emit_values_with_genex_with_indent(
     continuation_indent: usize,
     skip_first_blank: bool,
     pack_tokens: bool,
+    greedy_pack: bool,
     column_start: usize,
     keyword_column_width: Option<usize>,
 ) {
@@ -5601,9 +5708,46 @@ fn emit_values_with_genex_with_indent(
     let indent_width = if wrap_indent { continuation_indent } else { 0 };
     let max_content_width = config.line_width as usize;
 
+    // When packing, genex groups become synthetic FormattedArgs so they can
+    // participate in width-based line packing. Pre-build them in a first pass
+    // so borrows into this vec don't conflict with mutation.
+    let synthetic_genex_args: Vec<FormattedArg> = if pack_tokens {
+        grouped_values
+            .iter()
+            .filter_map(|group| {
+                if let GenexArgGroup::Genex(args) = group {
+                    let joined = args
+                        .iter()
+                        .map(|a| a.text.as_str())
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    Some(FormattedArg {
+                        text: joined,
+                        is_keyword: false,
+                        is_bracket: false,
+                        trailing_comment: None,
+                        trailing_is_bracket: false,
+                        is_paren_group: false,
+                        paren_inner: Vec::new(),
+                        blank_line_before: args
+                            .first()
+                            .map(|a| a.blank_line_before)
+                            .unwrap_or(false),
+                        new_line_before: args.first().map(|a| a.new_line_before).unwrap_or(false),
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
     let mut lines: Vec<ValueLayoutLine<'_>> = Vec::new();
     let mut current_tokens: Vec<&FormattedArg> = Vec::new();
     let mut current_width = 0usize;
+    let mut synthetic_index = 0usize;
 
     fn flush_current_line<'a>(
         lines: &mut Vec<ValueLayoutLine<'a>>,
@@ -5648,14 +5792,15 @@ fn emit_values_with_genex_with_indent(
                         flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
                     }
                 } else {
-                    // Pack tokens into lines, respecting source newlines
-                    // and falling back to width-based packing.
-                    let source_break = arg.new_line_before && !current_tokens.is_empty();
+                    // Pack tokens into lines. When greedy_pack is true,
+                    // ignore source newlines and pack purely by width.
+                    // Otherwise, respect source newlines as line boundaries.
+                    let source_break =
+                        !greedy_pack && arg.new_line_before && !current_tokens.is_empty();
                     if current_tokens.is_empty() {
                         current_tokens.push(arg);
                         current_width = token_width;
                     } else if source_break {
-                        // Source had a newline here — start a new line.
                         flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
                         current_tokens.push(arg);
                         current_width = token_width;
@@ -5683,13 +5828,49 @@ fn emit_values_with_genex_with_indent(
                 }
             }
             GenexArgGroup::Genex(args) => {
-                flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
-                let joined = args
-                    .iter()
-                    .map(|arg| arg.text.as_str())
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                lines.push(ValueLayoutLine::Genex(joined));
+                if !pack_tokens {
+                    // Non-packing mode: genex gets its own line.
+                    flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
+                    let joined = args
+                        .iter()
+                        .map(|arg| arg.text.as_str())
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    lines.push(ValueLayoutLine::Genex(joined));
+                } else {
+                    // Packing mode: treat atomic genex like a regular token.
+                    // Borrow the pre-built synthetic arg (created in first pass).
+                    let arg = &synthetic_genex_args[synthetic_index];
+                    synthetic_index += 1;
+                    let token_width = arg.text.len();
+
+                    let source_break =
+                        !greedy_pack && arg.new_line_before && !current_tokens.is_empty();
+                    if current_tokens.is_empty() {
+                        current_tokens.push(arg);
+                        current_width = token_width;
+                    } else if source_break {
+                        flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
+                        current_tokens.push(arg);
+                        current_width = token_width;
+                    } else {
+                        let required = 1 + token_width;
+                        let available_width =
+                            max_content_width.saturating_sub(column_start + indent_width);
+                        let last_has_line_comment = current_tokens.last().is_some_and(|token| {
+                            token.trailing_comment.is_some() && !token.trailing_is_bracket
+                        });
+
+                        if last_has_line_comment || current_width + required > available_width {
+                            flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
+                            current_tokens.push(arg);
+                            current_width = token_width;
+                        } else {
+                            current_tokens.push(arg);
+                            current_width += required;
+                        }
+                    }
+                }
             }
         }
     }

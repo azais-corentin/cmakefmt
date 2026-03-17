@@ -18,7 +18,6 @@ pub struct Configuration {
     pub use_tabs: bool,
     pub indent_style: IndentStyle,
     pub continuation_indent_width: Option<u8>,
-    pub genex_indent_width: Option<u8>,
 
     pub new_line_kind: NewLineKind,
     pub final_newline: bool,
@@ -47,9 +46,6 @@ pub struct Configuration {
     pub align_property_values: bool,
     pub align_consecutive_set: bool,
     pub align_arg_groups: bool,
-
-    pub genex_wrap: GenexWrap,
-    pub genex_closing_angle_newline: bool,
 
     pub per_command_config: BTreeMap<String, CommandConfiguration>,
 
@@ -84,7 +80,6 @@ pub struct CommandConfiguration {
     pub indent_width: Option<u8>,
     pub indent_style: Option<IndentStyle>,
     pub continuation_indent_width: Option<u8>,
-    pub genex_indent_width: Option<u8>,
 
     pub command_case: Option<CaseStyle>,
     pub keyword_case: Option<CaseStyle>,
@@ -103,9 +98,6 @@ pub struct CommandConfiguration {
     pub align_property_values: Option<bool>,
     pub align_consecutive_set: Option<bool>,
     pub align_arg_groups: Option<bool>,
-
-    pub genex_wrap: Option<GenexWrap>,
-    pub genex_closing_angle_newline: Option<bool>,
 
     pub sort_arguments: Option<SortArguments>,
     pub sort_keyword_sections: Option<bool>,
@@ -165,13 +157,6 @@ pub enum CommentPreservation {
     Reflow,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum GenexWrap {
-    Cascade,
-    Never,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Default)]
 pub enum SortArguments {
     #[default]
@@ -199,7 +184,6 @@ impl Default for Configuration {
             use_tabs: false,
             indent_style: IndentStyle::Space,
             continuation_indent_width: None,
-            genex_indent_width: None,
             new_line_kind: NewLineKind::Auto,
             final_newline: true,
             max_blank_lines: 1,
@@ -221,8 +205,6 @@ impl Default for Configuration {
             align_property_values: false,
             align_consecutive_set: false,
             align_arg_groups: false,
-            genex_wrap: GenexWrap::Cascade,
-            genex_closing_angle_newline: true,
             per_command_config: BTreeMap::new(),
             sort_arguments: SortArguments::Disabled,
             sort_keyword_sections: false,
@@ -272,11 +254,6 @@ impl Configuration {
         self.continuation_indent_width.unwrap_or(self.indent_width)
     }
 
-    /// Returns the effective generator-expression indent width, inheriting from `indentWidth` when unset.
-    pub fn effective_genex_indent_width(&self) -> u8 {
-        self.genex_indent_width.unwrap_or(self.indent_width)
-    }
-
     /// Returns the effective comment width, inheriting from `lineWidth` when unset.
     pub fn effective_comment_width(&self) -> u32 {
         self.comment_width.unwrap_or(self.line_width)
@@ -321,9 +298,6 @@ impl Configuration {
         if let Some(v) = overrides.continuation_indent_width {
             cfg.continuation_indent_width = Some(v);
         }
-        if let Some(v) = overrides.genex_indent_width {
-            cfg.genex_indent_width = Some(v);
-        }
         if let Some(v) = overrides.command_case {
             cfg.command_case = v;
         }
@@ -365,12 +339,6 @@ impl Configuration {
         }
         if let Some(v) = overrides.align_arg_groups {
             cfg.align_arg_groups = v;
-        }
-        if let Some(v) = overrides.genex_wrap {
-            cfg.genex_wrap = v;
-        }
-        if let Some(v) = overrides.genex_closing_angle_newline {
-            cfg.genex_closing_angle_newline = v;
         }
         if let Some(ref v) = overrides.sort_arguments {
             cfg.sort_arguments = v.clone();
@@ -437,15 +405,6 @@ impl fmt::Display for CommentPreservation {
         match self {
             CommentPreservation::Preserve => write!(f, "preserve"),
             CommentPreservation::Reflow => write!(f, "reflow"),
-        }
-    }
-}
-
-impl fmt::Display for GenexWrap {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            GenexWrap::Cascade => write!(f, "cascade"),
-            GenexWrap::Never => write!(f, "never"),
         }
     }
 }
@@ -542,20 +501,6 @@ impl FromStr for CommentPreservation {
             "reflow" => Ok(CommentPreservation::Reflow),
             _ => Err(format!(
                 "Invalid commentPreservation value '{s}'. Expected one of: preserve, reflow"
-            )),
-        }
-    }
-}
-
-impl FromStr for GenexWrap {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_ascii_lowercase().as_str() {
-            "cascade" => Ok(GenexWrap::Cascade),
-            "never" => Ok(GenexWrap::Never),
-            _ => Err(format!(
-                "Invalid genexWrap value '{s}'. Expected one of: cascade, never"
             )),
         }
     }

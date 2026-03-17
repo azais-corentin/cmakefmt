@@ -123,7 +123,12 @@ def extract_pytest_benchmark_baseline(
 
 
 def now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return (
+        datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
 
 def load_history(path: Path) -> dict[str, Any]:
@@ -139,7 +144,9 @@ def load_history(path: Path) -> dict[str, Any]:
 def main() -> int:
     args = parse_args()
 
-    cmake_format_json = json.loads(Path(args.cmake_format_json).read_text(encoding="utf-8"))
+    cmake_format_json = json.loads(
+        Path(args.cmake_format_json).read_text(encoding="utf-8")
+    )
     gersemi_json = json.loads(Path(args.gersemi_json).read_text(encoding="utf-8"))
 
     history = load_history(Path(args.history_file))

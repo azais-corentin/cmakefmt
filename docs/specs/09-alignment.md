@@ -29,15 +29,13 @@ set_target_properties(MyTarget PROPERTIES
 
 Only takes effect when properties are rendered one-per-line.
 
-For properties with multiple values (e.g., `LINK_LIBRARIES lib1 lib2`), alignment is based on the first value token. Additional values wrap below at the alignment column:
+For properties with multiple values (e.g., `LINK_LIBRARIES lib1 lib2`), all values remain on the same line after the key at the alignment column. Standard cascade wrapping applies within the remaining line width.
 
 ```cmake
 # alignPropertyValues = true, multi-value property
 set_target_properties(MyTarget PROPERTIES
   CXX_STANDARD              17
-  LINK_LIBRARIES            lib1
-                            lib2
-                            lib3
+  LINK_LIBRARIES            lib1 lib2 lib3
   POSITION_INDEPENDENT_CODE ON
 )
 ```
@@ -85,7 +83,7 @@ structural patterns in the argument list and column-align them. The formatter lo
 groups of consecutive lines that share the same number of tokens and attempts to align
 corresponding columns.
 
-More precisely, two consecutive argument lines are candidates for columnar alignment when they contain the same number of CMake arguments (where each argument is a quoted string, unquoted word, or generator expression — each counted as a single argument regardless of internal content). Alignment pads each column with spaces to the maximum width of that column across all lines in the group.
+More precisely, two consecutive argument lines are candidates for columnar alignment when they contain the same number of CMake arguments (where each argument is a quoted string, unquoted word, or generator expression — each counted as a single argument regardless of internal content). Alignment pads each column with spaces to the maximum width of that column across all lines in the group. When multiple values are packed onto a single line by the wrapping stage, they use single-space separation — column alignment padding is not applied within a packed line, only across corresponding lines.
 
 A "token" in this context is a single CMake argument — a quoted string, unquoted argument,
 or generator expression (including its entire nested content as one token).
@@ -153,12 +151,9 @@ target_sources(MyLib
   FILE_SET HEADERS
     BASE_DIRS include
     FILES
-      include/mylib/core.h
-      include/mylib/utils.h
+      include/mylib/core.h include/mylib/utils.h
   FILE_SET CXX_MODULES
     BASE_DIRS src
-    FILES
-      src/core.cppm
-      src/utils.cppm
+    FILES src/core.cppm src/utils.cppm
 )
 ```

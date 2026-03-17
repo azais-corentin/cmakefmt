@@ -25,7 +25,6 @@ See the [CLI reference](/guide/cli) for details on these flags.
 | 2.1  | `indentWidth`                | `integer`                            | `2`           |
 | 2.2  | `indentStyle`                | `"space" \| "tab"`                   | `"space"`     |
 | 2.3  | `continuationIndentWidth`    | `integer \| null`                    | `null`        |
-| 2.4  | `genexIndentWidth`           | `integer \| null`                    | `null`        |
 | 3.1  | `maxBlankLines`              | `integer`                            | `1`           |
 | 3.2  | `minBlankLinesBetweenBlocks` | `integer`                            | `0`           |
 | 3.3  | `blankLineBetweenSections`   | `boolean`                            | `false`       |
@@ -47,8 +46,6 @@ See the [CLI reference](/guide/cli) for details on these flags.
 | 9.1  | `alignPropertyValues`        | `boolean`                            | `false`       |
 | 9.2  | `alignConsecutiveSet`        | `boolean`                            | `false`       |
 | 9.3  | `alignArgGroups`             | `boolean`                            | `false`       |
-| 10.1 | `genexWrap`                  | `"cascade" \| "never"`               | `"cascade"`   |
-| 10.2 | `genexClosingAngleNewline`   | `boolean`                            | `true`        |
 | 11.1 | `perCommandConfig`           | `table`                              | `{}`          |
 | 12.1 | `sortArguments`              | `boolean \| string[]`                | `false`       |
 | 12.2 | `sortKeywordSections`        | `boolean`                            | `false`       |
@@ -66,10 +63,10 @@ See the [CLI reference](/guide/cli) for details on these flags.
 
 Controls the maximum line length and how commands are broken across multiple lines when they exceed it.
 
-- **`lineWidth`** (`integer`, default: `80`) — Maximum columns per line. The formatter never breaks within a single token. Range: 40–320.
+- **`lineWidth`** (`integer`, default: `80`) — Maximum columns per line. The formatter never breaks within a single token; if a command exceeds lineWidth and contains an oversized token, the command still wraps to multi-line layout and the oversized token occupies its own line. Range: 40–320.
 - **`wrapStyle`** (`"cascade" | "vertical"`, default: `"cascade"`) — Wrapping strategy. `"cascade"` uses a three-step algorithm: fit on one line, then keywords on new lines with arguments packed inline, then one argument per line. `"vertical"` skips the packing step and goes directly to one-per-line.
 - **`firstArgSameLine`** (`boolean`, default: `true`) — Whether the first positional argument (typically the target name) stays on the same line as the command name when wrapping.
-- **`wrapArgThreshold`** (`integer`, default: `0`) — When > 0, forces one-argument-per-line wrapping whenever a command has more than this many arguments, regardless of line width. `0` disables the threshold. Keywords count toward the threshold — `target_link_libraries(MyTarget PRIVATE foo bar)` has 4 arguments, not 2.
+- **`wrapArgThreshold`** (`integer`, default: `0`) — When > 0, forces a command to multi-line layout (skips cascade Step 1) whenever it has more than this many arguments, regardless of line width. Within the multi-line layout, keyword groups follow normal cascade Step 2/3 rules. `0` disables the threshold. Keywords count toward the threshold — `target_link_libraries(MyTarget PRIVATE foo bar)` has 4 arguments, not 2.
 
 ```toml
 lineWidth = 120
@@ -79,12 +76,11 @@ firstArgSameLine = false
 
 ### Indentation
 
-Controls indent character, width, and specialized indent overrides for continuation lines and generator expressions.
+Controls indent character, width, and specialized indent overrides for continuation lines.
 
 - **`indentWidth`** (`integer`, default: `2`) — Spaces (or tab stops) per indentation level. Each nesting level increases indentation by this amount. Range: 1–8.
 - **`indentStyle`** (`"space" | "tab"`, default: `"space"`) — Whether to indent with spaces or hard tab characters.
-- **`continuationIndentWidth`** (`integer | null`, default: `null`) — Indentation for value lines under a keyword within a wrapped command, measured relative to the keyword. When `null`, inherits `indentWidth`. Range: 1–8. For commands without recognized keywords, `indentWidth` is used instead.
-- **`genexIndentWidth`** (`integer | null`, default: `null`) — Override indentation inside generator expressions (`$<...>`), relative to the column where `$<` starts. When `null`, inherits `indentWidth`. Range: 1–8.
+- **`continuationIndentWidth`** (`integer | null`, default: `null`) — Indentation for value lines under a keyword within a wrapped command, measured relative to the keyword. Applies when arguments are laid out one-per-line (Step 3 of the cascade algorithm); when keyword groups pack inline (Step 2), `continuationIndentWidth` is not used. When `null`, inherits `indentWidth`. Range: 1–8. For commands without recognized keywords, `indentWidth` is used instead.
 
 ```toml
 indentWidth = 4
@@ -126,7 +122,7 @@ literalCase = "upper"
 
 Controls placement of the closing parenthesis and spacing around parentheses.
 
-- **`closingParenNewline`** (`boolean`, default: `true`) — When a command spans multiple lines, place the closing `)` on its own line at the block's base indentation. When `false`, the `)` stays on the last argument's line. If the last argument has a trailing comment, `)` is placed before the `#` marker.
+- **`closingParenNewline`** (`boolean`, default: `true`) — When a command spans multiple lines, place the closing `)` on its own line at the block's base indentation. When `false`, the `)` stays on the last argument's line. The inline `)` is accounted for during wrapping, which can produce more compact layouts than `closingParenNewline = true`. If the last argument has a trailing comment, `)` is placed before the `#` marker.
 - **`spaceBeforeParen`** (`boolean | string[]`, default: `false`) — Insert a space between the command name and `(`. `false` = no space, `true` = space for all commands, or pass an array of command names to apply selectively (e.g., `["if", "elseif", "while"]`). Case-insensitive matching.
 - **`spaceInsideParen`** (`"insert" | "remove" | "preserve"`, default: `"remove"`) — Controls whitespace after `(` and before `)` on single-line invocations. Does not apply to multi-line commands or empty argument lists. When a multi-line command collapses to a single line, `"preserve"` mode treats it as `"remove"`.
 
@@ -180,9 +176,9 @@ collapseSpaces = false
 
 Controls column-alignment of property values, consecutive `set()` calls, and repeating argument patterns.
 
-- **`alignPropertyValues`** (`boolean`, default: `false`) — Column-align values in `PROPERTIES` key-value lists (e.g., in `set_target_properties`). Only takes effect when properties are rendered one-per-line.
+- **`alignPropertyValues`** (`boolean`, default: `false`) — Column-align values in `PROPERTIES` key-value lists (e.g., in `set_target_properties`). Only takes effect when properties are rendered one-per-line. When a property has multiple values, all values remain on the same line after the key at the alignment column.
 - **`alignConsecutiveSet`** (`boolean`, default: `false`) — Align the first value argument of consecutive `set()` commands that form a logical group (not separated by blank lines, comments, or non-`set` commands).
-- **`alignArgGroups`** (`boolean`, default: `false`) — When arguments are laid out one-per-line, detect repeating structural patterns (lines with the same token count) and column-align them. Keyword-as-first-token lines are aligned by keyword column (padded to the width of the longest keyword with values, plus one gap space). Valueless keywords are excluded from width calculation and not padded. Flow keywords preserve their line-width-aware value wrapping under alignment. Groups are broken by blank lines or comment lines.
+- **`alignArgGroups`** (`boolean`, default: `false`) — When arguments are laid out one-per-line, detect repeating structural patterns (lines with the same token count) and column-align them. Keyword-as-first-token lines are aligned by keyword column (padded to the width of the longest keyword with values, plus one gap space). Valueless keywords are excluded from width calculation and not padded. Flow keywords preserve their line-width-aware value wrapping under alignment. Groups are broken by blank lines or comment lines. When multiple values are packed onto a single line, they use single-space separation — column alignment applies across corresponding lines, not within a packed line.
 
 ```toml
 alignPropertyValues = true
@@ -192,21 +188,13 @@ alignArgGroups = true
 
 ### Generator Expressions
 
-Controls formatting of generator expressions (`$<...>`).
-
-- **`genexWrap`** (`"cascade" | "never"`, default: `"cascade"`) — `"cascade"` applies the cascading wrapping algorithm to generator expressions, splitting at `:` delimiters and wrapping `;`-separated list items. `"never"` keeps generator expressions on a single line regardless of length.
-- **`genexClosingAngleNewline`** (`boolean`, default: `true`) — Analogous to `closingParenNewline` but for the closing `>` of generator expressions. When `true`, the closing `>` is placed on its own line aligned with `$<`. Applies recursively at every nesting level.
-
-```toml
-genexWrap = "never"
-genexClosingAngleNewline = false
-```
+Generator expressions (`$<...>`) are treated as atomic tokens and are never split across lines. If a generator expression exceeds `lineWidth`, it stays on one line. There are no configuration options for generator expression formatting.
 
 ### Per-Command Overrides
 
 Allows overriding formatting options on a per-command basis.
 
-- **`perCommandConfig`** (`table`, default: `{}`) — A TOML table keyed by command name (case-insensitive). Each entry can override options from groups 1 (wrapping), 2 (indentation), 4 (casing), 5 (parentheses & spacing), 6 (comments), 9 (alignment), 10 (generator expressions), and 12 (sorting). File-level concerns (blank lines, line endings, whitespace normalization, suppression) cannot be overridden per-command. The overridable options are: `lineWidth`, `wrapStyle`, `firstArgSameLine`, `wrapArgThreshold`, `indentWidth`, `indentStyle`, `continuationIndentWidth`, `genexIndentWidth`, `commandCase`, `keywordCase`, `customKeywords`, `literalCase`, `closingParenNewline`, `spaceBeforeParen`, `spaceInsideParen`, `commentPreservation`, `commentWidth`, `alignTrailingComments`, `commentGap`, `alignPropertyValues`, `alignConsecutiveSet`, `alignArgGroups`, `genexWrap`, `genexClosingAngleNewline`, `sortArguments`, and `sortKeywordSections`.
+- **`perCommandConfig`** (`table`, default: `{}`) — A TOML table keyed by command name (case-insensitive). Each entry can override options from groups 1 (wrapping), 2 (indentation), 4 (casing), 5 (parentheses & spacing), 6 (comments), 9 (alignment), and 12 (sorting). File-level concerns (blank lines, line endings, whitespace normalization, suppression) cannot be overridden per-command. The overridable options are: `lineWidth`, `wrapStyle`, `firstArgSameLine`, `wrapArgThreshold`, `indentWidth`, `indentStyle`, `continuationIndentWidth`, `commandCase`, `keywordCase`, `customKeywords`, `literalCase`, `closingParenNewline`, `spaceBeforeParen`, `spaceInsideParen`, `commentPreservation`, `commentWidth`, `alignTrailingComments`, `commentGap`, `alignPropertyValues`, `alignConsecutiveSet`, `alignArgGroups`, `sortArguments`, and `sortKeywordSections`.
 
 ```toml
 [perCommandConfig.set]
@@ -298,7 +286,6 @@ wrapArgThreshold = 0
 indentWidth = 2
 indentStyle = "space"
 # continuationIndentWidth — inherits indentWidth
-# genexIndentWidth — inherits indentWidth
 maxBlankLines = 1
 minBlankLinesBetweenBlocks = 0
 blankLineBetweenSections = false
@@ -320,8 +307,6 @@ collapseSpaces = true
 alignPropertyValues = false
 alignConsecutiveSet = false
 alignArgGroups = false
-genexWrap = "cascade"
-genexClosingAngleNewline = true
 # perCommandConfig — empty table by default
 sortArguments = false
 sortKeywordSections = false

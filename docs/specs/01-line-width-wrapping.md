@@ -15,10 +15,9 @@ this width. Comments are also reflowed to respect this limit unless they are ins
 
 Default 80 matches common convention across build-system files and terminal widths.
 
-When a single token (command name, argument, string literal) exceeds `lineWidth`, the line
-is emitted as-is. The formatter never breaks within a single token.
-
-When indentation alone exceeds `lineWidth` due to deep nesting, the line is emitted at the computed indentation column regardless. The formatter never caps or reduces indentation.
+The formatter never breaks within a single token (command name, argument, string literal).
+If a command exceeds `lineWidth` and contains a token wider than `lineWidth`, the command
+still wraps to multi-line layout; the oversized token occupies its own line.
 
 ### 1.2 `wrapStyle`
 
@@ -35,7 +34,7 @@ Controls the overall line-wrapping philosophy. This is the master switch for wra
      arguments are packed onto that line as space allows.
   3. *One argument per line* — if step 2 still overflows for a keyword group, that group escalates to one argument per line. Each keyword group independently decides between Step 2 and Step 3 based on its own rendered width.
 
-  This applies recursively to all nesting levels, including generator expressions.
+  This applies recursively to all nesting levels.
 
 - **`"vertical"`** — Equivalent to step 1 → step 3 directly (skip step 2). Produces a
   strictly vertical style whenever a command does not fit on a single line.
@@ -93,7 +92,7 @@ opening line regardless of wrapping.
 
 When `firstArgSameLine = false`, the first argument is indented by `indentWidth` relative to the command (at the same level as keywords).
 
-If the command name plus the first argument together exceed `lineWidth` when `firstArgSameLine = true`, the opening line is emitted as-is (no individual token is split). The overflow is tolerated on the opening line; remaining arguments still wrap normally per the cascade algorithm.
+If the command name plus the first argument together exceed `lineWidth` when `firstArgSameLine = true`, the opening line is emitted as-is (no individual token is split). The overflow is tolerated on the opening line; remaining arguments wrap normally per the cascade algorithm, including keyword inline layout.
 
 ### 1.4 `wrapArgThreshold`
 
@@ -103,8 +102,10 @@ If the command name plus the first argument together exceed `lineWidth` when `fi
 | **Default** | `0` (disabled) |
 | **Range**   | `0 – 999`      |
 
-When set to a value > 0, forces wrapping to one-arg-per-line whenever a command invocation
-has **more than** this many arguments, regardless of whether it would fit within `lineWidth`.
+When set to a value > 0, forces the command to multi-line layout (skips Step 1 of the cascade)
+whenever a command invocation has **more than** this many arguments, regardless of whether it would
+fit within `lineWidth`. Within the multi-line layout, keyword groups follow normal cascade Step 2/3
+rules — each keyword group independently decides between inline and expanded layout.
 The command name is not counted. Only tokens inside the parentheses count — this includes
 keywords and value arguments, including the first positional argument (e.g., the target name). For example,
 `target_link_libraries(MyTarget PRIVATE foo bar)` has 4 arguments (`MyTarget`, `PRIVATE`, `foo`, `bar`).
@@ -117,7 +118,7 @@ Useful for keeping commands like `set()` compact while forcing long `target_link
 # Input:
 set(MY_VAR a b c d e)
 
-# Output (wrapArgThreshold = 4): 6 arguments > 4, forced one-per-line
+# Output (wrapArgThreshold = 4): 6 arguments > 4, forced multi-line
 set(MY_VAR
   a
   b

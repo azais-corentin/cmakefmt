@@ -17,7 +17,9 @@ from pathlib import Path
 from gersemi.configuration import OutcomeConfiguration
 from gersemi.runner import create_formatter
 
-FIXTURE = Path("crates/cmakefmt/tests/formatter/respositories/XNNPACK/CMakeLists.in.cmake")
+FIXTURE = Path(
+    "crates/cmakefmt/tests/formatter/respositories/XNNPACK/CMakeLists.in.cmake"
+)
 
 
 def test_gersemi(benchmark):

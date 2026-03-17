@@ -32,9 +32,6 @@ alignPropertyValues = true
 alignConsecutiveSet = true
 alignArgGroups = true
 
-genexWrap = "cascade"
-genexClosingAngleNewline = true
-
 # Non-default: enable sorting
 sortArguments = true
 sortKeywordSections = true

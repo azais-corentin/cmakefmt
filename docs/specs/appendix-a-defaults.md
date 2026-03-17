@@ -10,7 +10,6 @@ wrapArgThreshold = 0
 indentWidth = 2
 indentStyle = "space"
 # continuationIndentWidth — inherits indentWidth
-# genexIndentWidth — inherits indentWidth
 maxBlankLines = 1
 minBlankLinesBetweenBlocks = 0
 blankLineBetweenSections = false
@@ -32,8 +31,6 @@ collapseSpaces = true
 alignPropertyValues = false
 alignConsecutiveSet = false
 alignArgGroups = false
-genexWrap = "cascade"
-genexClosingAngleNewline = true
 # perCommandConfig — empty table by default
 sortArguments = false
 sortKeywordSections = false

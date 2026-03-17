@@ -20,7 +20,9 @@ if(A)
                                     if(S)
                                       if(T)
                                         if(U)
-                                          message(STATUS "deep")
+                                          message(STATUS
+                                            "deep"
+                                          )
                                         endif()
                                       endif()
                                     endif()

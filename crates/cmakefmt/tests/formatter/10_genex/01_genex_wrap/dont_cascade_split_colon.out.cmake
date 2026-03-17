@@ -1,4 +1,4 @@
-# cmakefmt: push { genexWrap = "never", genexClosingAngleNewline = true, lineWidth = 50 }
+# cmakefmt: push { lineWidth = 45 }
 target_compile_definitions(MyLib
   PRIVATE
     $<$<CONFIG:Debug>:DEBUG_MODE=1;VERBOSE_LOG=1>

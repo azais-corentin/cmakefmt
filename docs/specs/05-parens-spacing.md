@@ -23,13 +23,33 @@ target_link_libraries(MyTarget
     Boost::filesystem)
 ```
 
+When `closingParenNewline` is `false`, the inline `)` width — and, when the last argument
+has a trailing comment, the width of `) # comment` — is included in the cascade algorithm's
+line-width calculations (Steps 2 and 3 of Appendix C). This can produce more compact layouts
+than `closingParenNewline = true`:
+
+```cmake
+# closingParenNewline = false, lineWidth = 40
+# Values pack because "    Boost::filesystem Threads::Threads)" fits (39 < 40)
+target_link_libraries(MyTarget
+  PRIVATE
+    Boost::filesystem Threads::Threads)
+
+# closingParenNewline = false, lineWidth = 39
+# Values do NOT pack — "    Boost::filesystem Threads::Threads)" = 39, not < 39
+target_link_libraries(MyTarget
+  PRIVATE
+    Boost::filesystem
+    Threads::Threads)
+```
+
 When `false`, the `)` stays on the last argument's line. If the last argument has a trailing comment, `)` is inserted *before* the `#` marker (between the argument and the comment), separated by `commentGap` spaces from `)` to `#`. This prevents `)` from being swallowed into the comment text.
 
 ```cmake
-# closingParenNewline = false, last argument has trailing comment
+# closingParenNewline = false, lineWidth = 40, last argument has trailing comment
+# "  PRIVATE Boost::filesystem) # link fs" fits (38 < 40)
 target_link_libraries(MyTarget
-  PRIVATE
-    Boost::filesystem) # link filesystem
+  PRIVATE Boost::filesystem) # link fs
 ```
 
 ### 5.2 `spaceBeforeParen`

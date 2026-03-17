@@ -9,8 +9,8 @@ mod util;
 
 pub use configuration::{
     CaseStyle, CommandConfiguration, CommentPreservation, ConfigDiagnostic,
-    ConfigDiagnosticSeverity, ConfigLoadResult, Configuration, EndCommandArgs, GenexWrap,
-    IndentStyle, NewLineKind, SortArguments, SpaceBeforeParen, SpaceInsideParen, WrapStyle,
+    ConfigDiagnosticSeverity, ConfigLoadResult, Configuration, EndCommandArgs, IndentStyle,
+    NewLineKind, SortArguments, SpaceBeforeParen, SpaceInsideParen, WrapStyle,
     apply_inline_overrides, load_from_cli, load_from_header, load_from_json_map, load_from_toml,
     load_from_toml_path,
 };

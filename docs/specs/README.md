@@ -58,7 +58,6 @@ exits with a non-zero status code. The formatter never silently corrupts unparse
 | 2.1  | `indentWidth`                | `integer`                            | `2`           |
 | 2.2  | `indentStyle`                | `"space" \| "tab"`                   | `"space"`     |
 | 2.3  | `continuationIndentWidth`    | `integer \| null`                    | `null`        |
-| 2.4  | `genexIndentWidth`           | `integer \| null`                    | `null`        |
 | 3.1  | `maxBlankLines`              | `integer`                            | `1`           |
 | 3.2  | `minBlankLinesBetweenBlocks` | `integer`                            | `0`           |
 | 3.3  | `blankLineBetweenSections`   | `boolean`                            | `false`       |
@@ -80,8 +79,6 @@ exits with a non-zero status code. The formatter never silently corrupts unparse
 | 9.1  | `alignPropertyValues`        | `boolean`                            | `false`       |
 | 9.2  | `alignConsecutiveSet`        | `boolean`                            | `false`       |
 | 9.3  | `alignArgGroups`             | `boolean`                            | `false`       |
-| 10.1 | `genexWrap`                  | `"cascade" \| "never"`               | `"cascade"`   |
-| 10.2 | `genexClosingAngleNewline`   | `boolean`                            | `true`        |
 | 11.1 | `perCommandConfig`           | `table`                              | `{}`          |
 | 12.1 | `sortArguments`              | `boolean \| string[]`                | `false`       |
 | 12.2 | `sortKeywordSections`        | `boolean`                            | `false`       |

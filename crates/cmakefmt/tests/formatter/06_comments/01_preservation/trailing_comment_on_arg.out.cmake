@@ -5,3 +5,8 @@ target_link_libraries(MyTarget
     fmt::fmt
     spdlog::spdlog
 )
+target_link_libraries(MyTarget
+  PRIVATE
+    Boost::filesystem # filesystem support
+    Threads::Threads
+)

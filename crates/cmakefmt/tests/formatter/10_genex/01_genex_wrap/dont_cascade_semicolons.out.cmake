@@ -1,11 +1,6 @@
 # cmakefmt: push { lineWidth = 35 }
 target_compile_definitions(MyLib
   PRIVATE
-    $<$<CONFIG:Debug>:
-      A=1
-      B=2
-      C=3
-      D=4
-    >
+    $<$<CONFIG:Debug>:A=1;B=2;C=3;D=4>
 )
 # cmakefmt: pop

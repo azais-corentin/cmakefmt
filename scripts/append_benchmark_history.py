@@ -86,7 +86,9 @@ def main() -> int:
 
     if args.dedupe_by_commit:
         commit_sha = entry["commit_sha"]
-        entries = [existing for existing in entries if existing.get("commit_sha") != commit_sha]
+        entries = [
+            existing for existing in entries if existing.get("commit_sha") != commit_sha
+        ]
 
     entries.append(entry)
 
