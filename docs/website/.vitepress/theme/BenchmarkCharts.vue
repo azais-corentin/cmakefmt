@@ -316,7 +316,7 @@ function makeOpts(
 // -- Bar chart options --
 
 const BAR_COLORS = {
-  cmakefmt: "#22c55e",
+  cmakefmt: "#7C6FF0",
   gersemi: "#ef4444",
   cmake_format: "#f59e0b",
 };
@@ -498,8 +498,8 @@ async function createCharts(dark: boolean) {
         "MB/s",
         "Throughput",
         "MB/s",
-        "#22c55e",
-        "rgba(34,197,94,0.12)",
+        "#7C6FF0",
+        "rgba(124,111,240,0.12)",
         tWidth,
         dark,
         data.timestamps,
@@ -517,8 +517,8 @@ async function createCharts(dark: boolean) {
         "ms",
         "Timing",
         "ms",
-        "#6366f1",
-        "rgba(99,102,241,0.12)",
+        "#7C6FF0",
+        "rgba(124,111,240,0.12)",
         mWidth,
         dark,
         data.timestamps,
