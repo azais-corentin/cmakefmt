@@ -10,7 +10,7 @@ run = "cargo build -p cmakefmt-dprint --target wasm32-unknown-unknown"
 alias = "build"
 description = "Build all crates (debug)"
 run = [
-  "cargo build -p cmakefmt -p cmakefmt-cli",
+  "cargo build -p cmakefmt-rs -p cmakefmt-cli",
   "cargo build -p cmakefmt-dprint --target wasm32-unknown-unknown",
 ]
 
