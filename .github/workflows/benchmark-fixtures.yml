@@ -3,6 +3,11 @@ name: benchmark-fixtures
 on:
   push:
   workflow_dispatch:
+    inputs:
+      reset_history:
+        description: "Delete and re-create the benchmark-history branch (full re-benchmark)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -33,6 +38,21 @@ jobs:
         run: |
           echo "RUST_VERSION=$(rustc --version)" >> "$GITHUB_ENV"
 
+      - name: Reset history branch
+        if: inputs.reset_history == 'true'
+        env:
+          HISTORY_BRANCH: benchmark-history
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin "$HISTORY_BRANCH" >/dev/null 2>&1; then
+            echo "Deleting remote branch $HISTORY_BRANCH"
+            git push origin --delete "$HISTORY_BRANCH"
+            # Remove local tracking ref so worktree setup creates orphan
+            git branch -D -r "origin/$HISTORY_BRANCH" || true
+          else
+            echo "Branch $HISTORY_BRANCH does not exist on remote — nothing to reset"
+          fi
+
       - name: Save scripts from HEAD
         run: |
           mkdir -p "$RUNNER_TEMP/scripts"
@@ -41,6 +61,11 @@ jobs:
           cp scripts/collect_baseline_results.py "$RUNNER_TEMP/scripts/"
           cp scripts/bench_cmake_format_baseline.py "$RUNNER_TEMP/scripts/"
           cp scripts/bench_gersemi_baseline.py "$RUNNER_TEMP/scripts/"
+          # Save benchmark harness and fixtures from HEAD so old commits
+          # can be benchmarked against both XNNPACK and synthetic fixtures
+          mkdir -p "$RUNNER_TEMP/bench"
+          cp crates/cmakefmt/benches/formatter_fixtures_bench.rs "$RUNNER_TEMP/bench/"
+          cp -r crates/cmakefmt/tests/formatter/respositories/synthetic "$RUNNER_TEMP/bench/synthetic"
 
       - name: Plan commits to benchmark
         id: plan
@@ -205,19 +230,16 @@ jobs:
         if: steps.plan.outputs.skip != 'true' && steps.check_baselines.outputs.skip != 'true'
         env:
           HISTORY_FILE: benchmarks/cmakefmt-fixtures-history.json
-          FIXTURE: crates/cmakefmt/tests/formatter/respositories/XNNPACK/CMakeLists.in.cmake
         run: |
           set -euo pipefail
           cmake_format_version=$(python3 -c "from cmakelang import __version__; print(__version__)")
           gersemi_version=$(gersemi --version | head -1)
-          input_bytes=$(wc -c < "$FIXTURE")
 
           python3 "$RUNNER_TEMP/scripts/collect_baseline_results.py" \
             --cmake-format-json "$RUNNER_TEMP/cmake-format-bench.json" \
             --gersemi-json "$RUNNER_TEMP/gersemi-bench.json" \
             --cmake-format-version "$cmake_format_version" \
             --gersemi-version "$gersemi_version" \
-            --input-bytes "$input_bytes" \
             --runner "${RUNNER_OS}" \
             --rust-version "${RUST_VERSION}" \
             --history-file "$HISTORY_WORKTREE/$HISTORY_FILE"
@@ -239,6 +261,16 @@ jobs:
             commit_ts="$(git show -s --format=%aI "$sha")"
 
             git checkout "$sha" --
+
+            # Clean stale Criterion output to prevent cross-commit contamination
+            rm -rf target/criterion/formatter_fixtures
+
+            # Overlay HEAD's bench harness and synthetic fixture onto the old commit
+            cp "$RUNNER_TEMP/bench/formatter_fixtures_bench.rs" \
+              crates/cmakefmt/benches/formatter_fixtures_bench.rs
+            mkdir -p crates/cmakefmt/tests/formatter/respositories/synthetic
+            cp -r "$RUNNER_TEMP/bench/synthetic/." \
+              crates/cmakefmt/tests/formatter/respositories/synthetic/
 
             # Attempt benchmark; on failure, record skip and continue
             if ! cargo bench --bench formatter_fixtures_bench; then

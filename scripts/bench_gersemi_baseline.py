@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""pytest-benchmark test for gersemi.
+"""pytest-benchmark tests for gersemi.
 
 Measures only the in-memory formatting call — no file I/O, no argument parsing,
 no process startup.  This is the fairest comparison to cmakefmt's format_text()
@@ -14,16 +14,26 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from gersemi.configuration import OutcomeConfiguration
 from gersemi.runner import create_formatter
 
-FIXTURE = Path(
-    "crates/cmakefmt/tests/formatter/respositories/XNNPACK/CMakeLists.in.cmake"
-)
+FIXTURES = {
+    "xnnpack": Path(
+        "crates/cmakefmt/tests/formatter/respositories/XNNPACK/CMakeLists.in.cmake"
+    ),
+    "synthetic": Path(
+        "crates/cmakefmt/tests/formatter/respositories/synthetic/CMakeLists.in.cmake"
+    ),
+}
 
 
-def test_gersemi(benchmark):
+@pytest.mark.parametrize("fixture_name", FIXTURES.keys())
+def test_gersemi(benchmark, fixture_name):
+    fixture_path = FIXTURES[fixture_name]
     cfg = OutcomeConfiguration()
     formatter = create_formatter(cfg, known_definitions={}, lines_to_format=())
-    source = FIXTURE.read_text(encoding="utf-8")
+    source = fixture_path.read_text(encoding="utf-8")
+    benchmark.extra_info["fixture_name"] = fixture_name
+    benchmark.extra_info["input_bytes"] = len(source.encode("utf-8"))
     benchmark(formatter.format, source)

@@ -11,7 +11,6 @@ Usage:
         --gersemi-json gersemi-bench.json \
         --cmake-format-version "0.6.13" \
         --gersemi-version "0.17.1" \
-        --input-bytes 351753 \
         --runner Linux \
         --rust-version "rustc 1.82.0" \
         --history-file benchmarks/cmakefmt-fixtures-history.json
@@ -54,12 +53,6 @@ def parse_args() -> argparse.Namespace:
         help="gersemi version string.",
     )
     parser.add_argument(
-        "--input-bytes",
-        required=True,
-        type=int,
-        help="Size of the benchmark fixture in bytes.",
-    )
-    parser.add_argument(
         "--runner",
         required=True,
         help="Runner identifier (e.g. Linux).",
@@ -83,45 +76,6 @@ def throughput_gb_per_s(input_bytes: int, mean_seconds: float) -> float:
     return float(input_bytes) / mean_seconds / BYTES_PER_DECIMAL_GIGABYTE
 
 
-def extract_pytest_benchmark_baseline(
-    bench_json: dict[str, Any],
-    tool_version: str,
-    input_bytes: int,
-    runner: str,
-    rust_version: str,
-) -> dict[str, Any]:
-    """Extract baseline stats from pytest-benchmark JSON output."""
-    benchmarks = bench_json.get("benchmarks")
-    if not benchmarks or not isinstance(benchmarks, list):
-        raise ValueError("pytest-benchmark JSON missing 'benchmarks' array")
-
-    stats = benchmarks[0].get("stats")
-    if not stats:
-        raise ValueError("pytest-benchmark JSON missing 'stats' in first benchmark")
-
-    mean_s = float(stats["mean"])
-    median_s = float(stats["median"])
-    min_s = float(stats["min"])
-    max_s = float(stats["max"])
-    stddev_s = float(stats["stddev"])
-    iterations = int(stats["iterations"])
-
-    return {
-        "tool_version": tool_version,
-        "runner": runner,
-        "rust_version": rust_version,
-        "timestamp": now_iso(),
-        "input_bytes": input_bytes,
-        "mean_seconds": mean_s,
-        "median_seconds": median_s,
-        "min_seconds": min_s,
-        "max_seconds": max_s,
-        "stddev_seconds": stddev_s,
-        "iterations": iterations,
-        "throughput_gb_per_s": throughput_gb_per_s(input_bytes, mean_s),
-    }
-
-
 def now_iso() -> str:
     return (
         datetime.now(timezone.utc)
@@ -129,6 +83,69 @@ def now_iso() -> str:
         .isoformat()
         .replace("+00:00", "Z")
     )
+
+
+def extract_baseline(
+    bench_json: dict[str, Any],
+    tool_version: str,
+    runner: str,
+    rust_version: str,
+) -> dict[str, Any]:
+    """Extract baseline stats from pytest-benchmark JSON with per-fixture detail."""
+    benchmarks = bench_json.get("benchmarks")
+    if not benchmarks or not isinstance(benchmarks, list):
+        raise ValueError("pytest-benchmark JSON missing 'benchmarks' array")
+
+    timestamp = now_iso()
+    fixtures: list[dict[str, Any]] = []
+    total_input_bytes = 0
+    total_mean = 0.0
+    total_median = 0.0
+
+    for bench in benchmarks:
+        stats = bench.get("stats")
+        extra = bench.get("extra_info", {})
+        if not stats:
+            raise ValueError("pytest-benchmark JSON missing 'stats' in a benchmark")
+
+        fixture_name = extra.get("fixture_name", bench.get("name", "unknown"))
+        input_bytes = int(extra.get("input_bytes", 0))
+        mean_s = float(stats["mean"])
+        median_s = float(stats["median"])
+        min_s = float(stats["min"])
+        max_s = float(stats["max"])
+        stddev_s = float(stats["stddev"])
+        iterations = int(stats["iterations"])
+
+        fixtures.append(
+            {
+                "fixture_name": fixture_name,
+                "input_bytes": input_bytes,
+                "mean_seconds": mean_s,
+                "median_seconds": median_s,
+                "min_seconds": min_s,
+                "max_seconds": max_s,
+                "stddev_seconds": stddev_s,
+                "iterations": iterations,
+                "throughput_gb_per_s": throughput_gb_per_s(input_bytes, mean_s),
+            }
+        )
+
+        total_input_bytes += input_bytes
+        total_mean += mean_s
+        total_median += median_s
+
+    return {
+        "tool_version": tool_version,
+        "runner": runner,
+        "rust_version": rust_version,
+        "timestamp": timestamp,
+        "input_bytes": total_input_bytes,
+        "mean_seconds": total_mean,
+        "median_seconds": total_median,
+        "throughput_gb_per_s": throughput_gb_per_s(total_input_bytes, total_mean),
+        "fixtures": fixtures,
+    }
 
 
 def load_history(path: Path) -> dict[str, Any]:
@@ -152,17 +169,15 @@ def main() -> int:
     history = load_history(Path(args.history_file))
 
     history["baselines"] = {
-        "cmake_format": extract_pytest_benchmark_baseline(
+        "cmake_format": extract_baseline(
             cmake_format_json,
             args.cmake_format_version,
-            args.input_bytes,
             args.runner,
             args.rust_version,
         ),
-        "gersemi": extract_pytest_benchmark_baseline(
+        "gersemi": extract_baseline(
             gersemi_json,
             args.gersemi_version,
-            args.input_bytes,
             args.runner,
             args.rust_version,
         ),
