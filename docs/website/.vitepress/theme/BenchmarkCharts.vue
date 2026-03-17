@@ -164,10 +164,10 @@ function parseEntries(
     }
   }
 
-  // Ensure stable display order: cmake_format, gersemi.
+  // Ensure stable display order: gersemi, cmake_format (cmakefmt is added first separately).
   const BASELINE_ORDER: Record<string, number> = {
-    cmake_format: 0,
-    gersemi: 1,
+    gersemi: 0,
+    cmake_format: 1,
   };
   baselines.sort((a, b) =>
     (BASELINE_ORDER[a.label.split(" ")[0]] ?? 99)
@@ -539,14 +539,14 @@ async function createCharts(dark: boolean) {
     const cmakefmtThroughput = data.throughputs[lastIdx];
     const cmakefmtTiming = data.timings[lastIdx];
 
-    const toolNames = [...data.baselines.map((b) => b.label), "cmakefmt"];
+    const toolNames = ["cmakefmt", ...data.baselines.map((b) => b.label)];
     const throughputValues = [
-      ...data.baselines.map((b) => b.throughputMBps),
       cmakefmtThroughput,
+      ...data.baselines.map((b) => b.throughputMBps),
     ];
     const timingValues = [
-      ...data.baselines.map((b) => b.timingMs),
       cmakefmtTiming,
+      ...data.baselines.map((b) => b.timingMs),
     ];
 
     const barWidth = throughputBarContainer.value?.clientWidth ?? 600;
