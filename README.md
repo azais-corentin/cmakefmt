@@ -11,7 +11,7 @@
 <p>opinionated cmake formatting</p>
 
 [![CI](https://github.com/azais-corentin/cmakefmt/actions/workflows/ci.yml/badge.svg)](https://github.com/azais-corentin/cmakefmt/actions/workflows/ci.yml)
-[![Crates.io](https://img.shields.io/crates/v/cmakefmt)](https://crates.io/crates/cmakefmt)
+[![Crates.io](https://img.shields.io/crates/v/cmakefmt-cli)](https://crates.io/crates/cmakefmt-cli)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 [Documentation](https://azais-corentin.github.io/cmakefmt/)
@@ -23,7 +23,7 @@
 cmakefmt takes your CMake source files (`CMakeLists.txt` and `*.cmake`), applies a
 consistent set of formatting rules, and outputs the result. It normalizes command
 casing, keyword casing, indentation, argument wrapping, alignment, and more -- with
-over 40 configuration options across 15 categories. If a file cannot be parsed, the
+nearly 40 configuration options. If a file cannot be parsed, the
 formatter returns it unchanged -- it never silently corrupts your code.
 
 ## Before / After
@@ -38,9 +38,9 @@ formatter returns it unchanged -- it never silently corrupts your code.
 - **Argument wrapping** -- multiple strategies (cascade, vertical) with `firstArgSameLine`, `wrapArgThreshold`, and per-command overrides
 - **Alignment** -- aligns property values, condition arguments, and keyword groups
 - **Comment formatting** -- reflowing, indentation, and trailing comment alignment
-- **Sorting** -- alphabetical sorting of file lists under configurable keywords
+- **Sorting** -- alphabetical sorting of argument lists under configurable keywords
 - **Blank line control** -- `maxBlankLines`, `minBlankLinesBetweenBlocks`, `blankLineBetweenSections` for structural spacing
-- **Generator expressions** -- dedicated wrapping and indentation for `$<...>` expressions
+- **Generator expressions** -- `$<...>` expressions are recognized and treated atomically, never broken across lines
 - **Line endings & final newline** -- LF/CRLF/auto normalization, trailing whitespace removal
 - **Per-command overrides** -- fine-grained control over individual commands (e.g. `spaceBeforeParen` for `if`)
 - **Inline pragmas** -- `# cmakefmt: off/on/skip` to suppress formatting, `push { ... }`/`pop` for scoped config overrides
@@ -52,7 +52,7 @@ formatter returns it unchanged -- it never silently corrupts your code.
 ### cargo install
 
 ```bash
-cargo install cmakefmt
+cargo install cmakefmt-cli
 ```
 
 ### Prebuilt Binaries
@@ -112,7 +112,7 @@ cat CMakeLists.txt | cmakefmt --stdin
 
 Create a `.cmakefmt.toml` (or `cmakefmt.toml`) in your project root. The formatter
 discovers config by walking from the formatted file's directory upward to the
-filesystem root. All keys use `camelCase`.
+filesystem root. All keys use `camelCase` (`snake_case` is also accepted).
 
 ```toml
 lineWidth = 120

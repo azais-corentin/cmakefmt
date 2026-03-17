@@ -7,7 +7,7 @@ cmakefmt is an opinionated formatter for CMake files (`CMakeLists.txt` and `*.cm
 ### cargo install
 
 ```bash
-cargo install cmakefmt
+cargo install cmakefmt-cli
 ```
 
 ### Prebuilt Binaries
@@ -66,7 +66,7 @@ See the full list of flags in the [CLI Reference](/guide/cli).
 
 ## Configuration
 
-Create a `.cmakefmt.toml` (or `cmakefmt.toml`) in your project root. The formatter discovers config by walking from the formatted file's directory upward to the filesystem root. All keys use `camelCase`.
+Create a `.cmakefmt.toml` (or `cmakefmt.toml`) in your project root. The formatter discovers config by walking from the formatted file's directory upward to the filesystem root. All keys use `camelCase` (`snake_case` is also accepted).
 
 Example configuration:
 

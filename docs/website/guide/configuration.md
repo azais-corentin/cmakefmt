@@ -1,6 +1,6 @@
 # Configuration Reference
 
-cmakefmt is configured through a TOML file. All keys use `camelCase`.
+cmakefmt is configured through a TOML file. All keys use `camelCase` (`snake_case` is also accepted).
 
 ## Config File Discovery
 
