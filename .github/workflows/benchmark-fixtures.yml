@@ -39,7 +39,7 @@ jobs:
           echo "RUST_VERSION=$(rustc --version)" >> "$GITHUB_ENV"
 
       - name: Reset history branch
-        if: inputs.reset_history == 'true'
+        if: inputs.reset_history == true || inputs.reset_history == 'true'
         env:
           HISTORY_BRANCH: benchmark-history
         run: |
