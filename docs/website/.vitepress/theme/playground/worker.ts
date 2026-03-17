@@ -31,7 +31,7 @@ self.addEventListener("message", async (event: MessageEvent<ToWorker>) => {
         } catch (err) {
           post({
             type: "error",
-            message: `Failed to fetch WASM from "${msg.url}": ${err instanceof Error ? err.message : String(err)}`,
+            message: "Failed to load cmakefmt WASM plugin.",
           });
           return;
         }
@@ -41,7 +41,7 @@ self.addEventListener("message", async (event: MessageEvent<ToWorker>) => {
           const detail = body || `HTTP ${response.status} ${response.statusText}`;
           post({
             type: "error",
-            message: `Failed to fetch WASM from "${msg.url}": ${detail}`,
+            message: "Failed to load cmakefmt WASM plugin.",
           });
           return;
         }
