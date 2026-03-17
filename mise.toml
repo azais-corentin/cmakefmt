@@ -43,9 +43,9 @@ run = '''
 file="target/wasm32-unknown-unknown/release-wasm/cmakefmt_dprint.wasm"
 bytes=$(stat -c %s "$file")
 if [ "$bytes" -ge 1048576 ]; then
-  printf "%s: %.2f MiB (%d bytes)\n" "$file" "$(echo "scale=2; $bytes/1048576" | bc)" "$bytes"
+  awk "BEGIN{printf \"%s: %.2f MiB (%d bytes)\\n\", \"$file\", $bytes/1048576, $bytes}"
 else
-  printf "%s: %.2f KiB (%d bytes)\n" "$file" "$(echo "scale=2; $bytes/1024" | bc)" "$bytes"
+  awk "BEGIN{printf \"%s: %.2f KiB (%d bytes)\\n\", \"$file\", $bytes/1024, $bytes}"
 fi
 '''
 
