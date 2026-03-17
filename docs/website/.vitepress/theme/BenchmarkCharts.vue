@@ -677,9 +677,9 @@ onUnmounted(() => {
         <div ref="throughputBarContainer" class="chart-container bar-chart" />
         <div ref="timingBarContainer" class="chart-container bar-chart" />
         <p class="comparison-description">
-          Each tool formats the same ~350 KB CMake file (<code
-          >XNNPACK/CMakeLists.txt</code>) in memory using its public API.
-          cmakefmt is measured with
+          Each tool formats two test fixtures (~680 KB total: a real-world
+          <code>XNNPACK/CMakeLists.txt</code> and a synthetic stress-test file)
+          in memory using its public API. cmakefmt is measured with
           <a
             href="https://bheisler.github.io/criterion.rs/book/"
             target="_blank"
