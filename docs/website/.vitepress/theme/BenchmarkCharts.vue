@@ -253,7 +253,14 @@ function makeOpts(
     title,
     cursor: { drag: { x: true, y: false } },
     scales: {
-      x: { time: false },
+      x: {
+        time: false,
+        range: (
+          _u: uPlot,
+          _min: number,
+          _max: number,
+        ): uPlot.Range.MinMax => [0, commitShas.length - 1],
+      },
       y: {
         range: (
           _u: uPlot,
@@ -268,68 +275,28 @@ function makeOpts(
         grid: { stroke: gridColor(dark) },
         ticks: { stroke: gridColor(dark) },
         space: 70,
-        // Generate ticks at regular time intervals, labeled by nearest commit SHA.
         splits: (u: uPlot) => {
-          if (timestamps.length === 0) return [];
-          const [minTs, maxTs] = [u.scales.x.min!, u.scales.x.max!];
-          const rangeS = maxTs - minTs;
-          if (rangeS <= 0) return [timestamps[0]];
-
-          // Canonical intervals in seconds.
-          const intervals = [
-            86_400, // 1 day
-            3 * 86_400, // 3 days
-            7 * 86_400, // 1 week
-            14 * 86_400, // 2 weeks
-            30 * 86_400, // ~1 month
-            60 * 86_400, // ~2 months
-            91 * 86_400, // ~3 months
-            182 * 86_400, // ~6 months
-            365 * 86_400, // ~1 year
-          ];
-
+          const n = commitShas.length;
+          if (n === 0) return [];
           const pxWidth = u.bbox.width / devicePixelRatio;
           const maxTicks = Math.max(2, Math.floor(pxWidth / 70));
-          const idealStep = rangeS / maxTicks;
-
-          // Pick smallest interval >= idealStep.
-          let step = intervals[intervals.length - 1];
-          for (const iv of intervals) {
-            if (iv >= idealStep) {
-              step = iv;
-              break;
-            }
-          }
-
-          // Generate ticks from a rounded start.
-          const start = Math.floor(minTs / step) * step;
+          const step = Math.max(1, Math.ceil(n / maxTicks));
           const result: number[] = [];
-          for (let t = start; t <= maxTs + step; t += step) {
-            if (t >= minTs && t <= maxTs) {
-              result.push(t);
-            }
+          for (let i = 0; i < n; i += step) {
+            result.push(i);
+          }
+          // Always show the most recent commit by replacing the last
+          // generated tick. This avoids overlap that would occur when
+          // appending a close neighbor.
+          if (result[result.length - 1] !== n - 1) {
+            result[result.length - 1] = n - 1;
           }
           return result;
         },
         values: (_u: uPlot, splits: number[]) => {
-          let lastSha = "";
-          return splits.map((t) => {
-            // Find nearest data-point timestamp via linear scan (sorted, small N).
-            let bestIdx = 0;
-            let bestDist = Infinity;
-            for (let i = 0; i < timestamps.length; i++) {
-              const d = Math.abs(timestamps[i] - t);
-              if (d < bestDist) {
-                bestDist = d;
-                bestIdx = i;
-              }
-            }
-            const sha = commitShas[bestIdx]?.slice(0, 7) ?? "";
-            // Deduplicate: don't repeat the same SHA on adjacent ticks.
-            if (sha === lastSha) return "";
-            lastSha = sha;
-            return sha;
-          });
+          return splits.map((i) =>
+            commitShas[Math.round(i)]?.slice(0, 7) ?? ""
+          );
         },
       },
       {
@@ -506,7 +473,7 @@ async function createCharts(dark: boolean) {
 
   if (!data || data.timestamps.length === 0) return;
 
-  const xValues = data.timestamps;
+  const xValues = data.timestamps.map((_, i) => i);
   const tWidth = throughputContainer.value?.clientWidth ?? 600;
   const mWidth = timingContainer.value?.clientWidth ?? 600;
 
