@@ -7,7 +7,7 @@
 {%- endmacro commit_line -%}
 
 {% if version.tag -%}
-## [{{ version.tag }}]({{ repository_url }}/compare/{{ from.id }}..{{ version.tag }}) - {{ date }}
+## [{{ version.tag }}]({{ repository_url }}/compare/{{ from.id }}..{{ version.tag }}) - {{ date | truncate(length=10, end="") }}
 {%- else -%}
 ## Unreleased ([{{ from.id | truncate(length=7, end="") }}..{{ version.id | truncate(length=7, end="") }}]({{ repository_url }}/compare/{{ from.id }}..{{ version.id }}))
 {%- endif %}
