@@ -1,10 +1,10 @@
 # Configuration Reference (JSON)
 
-When using cmakefmt as a dprint plugin, configuration is provided via JSON in your `.dprintrc.json` file. All keys use `camelCase` (note: `snake_case` is also accepted but `camelCase` is recommended for JSON configuration).
+When using cmakefmt as a dprint plugin, configuration is provided via JSON in your `dprint.json` file. All keys use `camelCase` (note: `snake_case` is also accepted but `camelCase` is recommended for JSON configuration).
 
 ## Basic Setup
 
-First, add the cmakefmt plugin to your `.dprintrc.json`:
+First, add the cmakefmt plugin to your `dprint.json`:
 
 ```json
 {
@@ -349,7 +349,7 @@ Controls disabling formatting entirely, skipping files by pattern, and skipping 
 
 ## Complete Example
 
-Here's a complete example `.dprintrc.json` with commonly used options:
+Here's a complete example `dprint.json` with commonly used options:
 
 ```json
 {
