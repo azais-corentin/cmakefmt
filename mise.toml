@@ -70,6 +70,18 @@ run = "cog bump --auto"
 description = "Preview next version without making changes"
 run = "cog bump --auto --dry-run"
 
+[tasks."release:patch"]
+description = "Bump patch version, update changelog, tag, and push"
+run = "cog bump --patch"
+
+[tasks."release:minor"]
+description = "Bump minor version, update changelog, tag, and push"
+run = "cog bump --minor"
+
+[tasks."release:major"]
+description = "Bump major version, update changelog, tag, and push"
+run = "cog bump --major"
+
 [tools]
 actionlint = "latest"
 bun = "latest"
