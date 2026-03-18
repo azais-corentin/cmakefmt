@@ -2,6 +2,33 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [v0.1.1](https://github.com/azais-corentin/cmakefmt/compare/0d9d720c6ba783d2967c046c8bb326efc59667de..v0.1.1) - 2026-03-18T09:50:56
+
+
+
+
+### Added
+
+- add release:patch, release:minor, and release:major tasks to mise.toml - ([2eaa6e6](https://github.com/azais-corentin/cmakefmt/commit/2eaa6e67523a5b675eb449f32aa0fda6ae174224))
+
+
+
+
+
+
+
+<details>
+<summary><h3 style="display:inline">Internal Changes</h3></summary>
+
+
+- **documentation:** use absolute URLs for README images - ([0d9d720](https://github.com/azais-corentin/cmakefmt/commit/0d9d720c6ba783d2967c046c8bb326efc59667de))
+- **miscellaneous chores(release):** stop publishing cmakefmt-cli to crates.io - ([8b25eaa](https://github.com/azais-corentin/cmakefmt/commit/8b25eaadfef67a93a90241926c64c9208da78ec9))
+
+</details>
+
+
+- - -
+
 ## [v0.1.0](https://github.com/azais-corentin/cmakefmt/compare/236dd7b0f132bb30f13e32e6d41d267e52172955..v0.1.0) - 2026-03-18T09:05:52
 
 
