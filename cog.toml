@@ -5,8 +5,6 @@ skip_untracked = false
 pre_bump_hooks = [
   # Update workspace version in all Cargo.toml files
   "cargo set-version {{version}}",
-  # Update internal workspace dependency version pin
-  """sed -i '/cmakefmt-rs/s/version = "[^"]*"/version = "{{version}}"/' Cargo.toml""",
   # Regenerate Cargo.lock with new version
   "cargo check",
   # Stage all version-bumped files for the version commit
