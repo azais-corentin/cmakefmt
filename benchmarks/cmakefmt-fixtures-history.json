@@ -5005,33 +5005,33 @@
       "tool_version": "0.6.13",
       "runner": "Linux",
       "rust_version": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
-      "timestamp": "2026-03-18T08:30:28Z",
+      "timestamp": "2026-03-18T08:41:31Z",
       "input_bytes": 678811,
-      "mean_seconds": 25.398833527800008,
-      "median_seconds": 25.40437843800001,
-      "throughput_gb_per_s": 2.6726069890454418e-05,
+      "mean_seconds": 25.41749475459997,
+      "median_seconds": 25.425434510999935,
+      "throughput_gb_per_s": 2.6706447923123937e-05,
       "fixtures": [
         {
           "fixture_name": "xnnpack",
           "input_bytes": 351753,
-          "mean_seconds": 13.229848451200002,
-          "median_seconds": 13.243661618000004,
-          "min_seconds": 13.116770921000011,
-          "max_seconds": 13.360068751,
-          "stddev_seconds": 0.09080467880016668,
+          "mean_seconds": 13.26698604099999,
+          "median_seconds": 13.280002068999977,
+          "min_seconds": 13.097196685000029,
+          "max_seconds": 13.379616949999985,
+          "stddev_seconds": 0.12074605251289086,
           "iterations": 1,
-          "throughput_gb_per_s": 2.658783290658893e-05
+          "throughput_gb_per_s": 2.651340695716047e-05
         },
         {
           "fixture_name": "synthetic",
           "input_bytes": 327058,
-          "mean_seconds": 12.168985076600006,
-          "median_seconds": 12.160716820000005,
-          "min_seconds": 12.048938992000018,
-          "max_seconds": 12.325569969000014,
-          "stddev_seconds": 0.11284633262680997,
+          "mean_seconds": 12.150508713599981,
+          "median_seconds": 12.145432441999958,
+          "min_seconds": 12.073522725000032,
+          "max_seconds": 12.207663719999971,
+          "stddev_seconds": 0.05136165016441123,
           "iterations": 1,
-          "throughput_gb_per_s": 2.6876358048043516e-05
+          "throughput_gb_per_s": 2.6917226900461066e-05
         }
       ]
     },
@@ -5039,33 +5039,33 @@
       "tool_version": "gersemi 0.26.1",
       "runner": "Linux",
       "rust_version": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
-      "timestamp": "2026-03-18T08:30:28Z",
+      "timestamp": "2026-03-18T08:41:31Z",
       "input_bytes": 678811,
-      "mean_seconds": 1.9426311415999864,
-      "median_seconds": 1.9315899179999576,
-      "throughput_gb_per_s": 0.00034942866170719315,
+      "mean_seconds": 1.9726548446000036,
+      "median_seconds": 1.9679838540000105,
+      "throughput_gb_per_s": 0.00034411037585120114,
       "fixtures": [
         {
           "fixture_name": "xnnpack",
           "input_bytes": 351753,
-          "mean_seconds": 0.7474039189999985,
-          "median_seconds": 0.7487971509999909,
-          "min_seconds": 0.7304235560000052,
-          "max_seconds": 0.7638415169999746,
-          "stddev_seconds": 0.015685107092084254,
+          "mean_seconds": 0.7641654466000091,
+          "median_seconds": 0.7721363630000155,
+          "min_seconds": 0.7455509760000041,
+          "max_seconds": 0.7773302740000076,
+          "stddev_seconds": 0.01521890518194835,
           "iterations": 1,
-          "throughput_gb_per_s": 0.00047063306875703005
+          "throughput_gb_per_s": 0.00046031000428644063
         },
         {
           "fixture_name": "synthetic",
           "input_bytes": 327058,
-          "mean_seconds": 1.1952272225999878,
-          "median_seconds": 1.1827927669999667,
-          "min_seconds": 1.1706867070000158,
-          "max_seconds": 1.2352811089999705,
-          "stddev_seconds": 0.025707378465041033,
+          "mean_seconds": 1.2084893979999947,
+          "median_seconds": 1.195847490999995,
+          "min_seconds": 1.180183403000001,
+          "max_seconds": 1.2728631609999752,
+          "stddev_seconds": 0.03710521434450334,
           "iterations": 1,
-          "throughput_gb_per_s": 0.00027363667243835696
+          "throughput_gb_per_s": 0.00027063373542313975
         }
       ]
     }
