@@ -66,7 +66,7 @@ Download prebuilt binaries for your platform from
 
 ### dprint Plugin
 
-Add cmakefmt as a WASM plugin in your `.dprintrc.json`:
+Add cmakefmt as a WASM plugin in your `dprint.json`:
 
 ```json
 {
@@ -159,7 +159,7 @@ discovery (walking upward to find `.cmakefmt.toml`).
 ### dprint
 
 If you use [dprint](https://dprint.dev/), add the cmakefmt WASM plugin to your
-`.dprintrc.json` (see the Installation section above), then use dprint's editor
+`dprint.json` (see the Installation section above), then use dprint's editor
 extensions for VS Code, Neovim, or other supported editors.
 
 ## Documentation

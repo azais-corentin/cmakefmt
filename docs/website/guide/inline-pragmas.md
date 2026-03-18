@@ -2,7 +2,7 @@
 
 cmakefmt recognizes inline comment directives (pragmas) that control formatting locally within a file. All pragmas use the `cmakefmt:` prefix.
 
-See also: [Configuration Reference](/guide/configuration) for the full list of formatting options.
+See also: [Configuration Reference (TOML)](/guide/configuration-toml) for the full list of formatting options.
 
 ## Syntax
 
@@ -119,7 +119,7 @@ A `push` override always takes priority over `perCommandConfig`.
 
 ## Settable Options
 
-All formatting options listed in the [Configuration Reference](/guide/configuration) are settable via `push`. The following cannot be set — they control configuration infrastructure, not formatting behavior — and produce a warning if used:
+All formatting options listed in the [Configuration Reference](/guide/configuration-toml) are settable via `push`. The following cannot be set — they control configuration infrastructure, not formatting behavior — and produce a warning if used:
 
 - `disableFormatting`
 - `extends`
