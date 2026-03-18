@@ -1,0 +1,101 @@
+{%- macro commit_line(commit, repository_url) -%}
+{% if commit.scope -%}
+- **{{ commit.scope }}:** {{ commit.summary }} - ([{{ commit.id | truncate(length=7, end="") }}]({{ repository_url }}/commit/{{ commit.id }}))
+{%- else -%}
+- {{ commit.summary }} - ([{{ commit.id | truncate(length=7, end="") }}]({{ repository_url }}/commit/{{ commit.id }}))
+{%- endif -%}
+{%- endmacro commit_line -%}
+
+{% if version.tag -%}
+## [{{ version.tag }}]({{ repository_url }}/compare/{{ from.id }}..{{ version.tag }}) - {{ date }}
+{%- else -%}
+## Unreleased ([{{ from.id | truncate(length=7, end="") }}..{{ version.id | truncate(length=7, end="") }}]({{ repository_url }}/compare/{{ from.id }}..{{ version.id }}))
+{%- endif %}
+
+{# --- Breaking Changes --- #}
+{%- set breaking = commits | filter(attribute="breaking_change", value=true) -%}
+{% if breaking | length > 0 %}
+### Breaking Changes
+{% for commit in breaking %}
+{{ self::commit_line(commit=commit, repository_url=repository_url) }}
+{%- if commit.body %}
+{{ commit.body | indent(prefix="  ") }}
+{% endif %}
+{%- endfor %}
+{% endif %}
+
+{# --- Added (Features, non-breaking) --- #}
+{%- set_global has_features = false -%}
+{%- for commit in commits -%}
+{%- if commit.type == "Features" and not commit.breaking_change -%}
+{%- set_global has_features = true -%}
+{%- endif -%}
+{%- endfor -%}
+{% if has_features %}
+### Added
+{% for commit in commits -%}
+{%- if commit.type == "Features" and not commit.breaking_change %}
+{{ self::commit_line(commit=commit, repository_url=repository_url) }}
+{%- endif -%}
+{%- endfor %}
+{% endif %}
+
+{# --- Fixed (Bug Fixes, non-breaking) --- #}
+{%- set_global has_fixes = false -%}
+{%- for commit in commits -%}
+{%- if commit.type == "Bug Fixes" and not commit.breaking_change -%}
+{%- set_global has_fixes = true -%}
+{%- endif -%}
+{%- endfor -%}
+{% if has_fixes %}
+### Fixed
+{% for commit in commits -%}
+{%- if commit.type == "Bug Fixes" and not commit.breaking_change %}
+{{ self::commit_line(commit=commit, repository_url=repository_url) }}
+{%- endif -%}
+{%- endfor %}
+{% endif %}
+
+{# --- Performance (Performance Improvements, non-breaking) --- #}
+{%- set_global has_perf = false -%}
+{%- for commit in commits -%}
+{%- if commit.type == "Performance Improvements" and not commit.breaking_change -%}
+{%- set_global has_perf = true -%}
+{%- endif -%}
+{%- endfor -%}
+{% if has_perf %}
+### Performance
+{% for commit in commits -%}
+{%- if commit.type == "Performance Improvements" and not commit.breaking_change %}
+{{ self::commit_line(commit=commit, repository_url=repository_url) }}
+{%- endif -%}
+{%- endfor %}
+{% endif %}
+
+{# --- Internal changes --- #}
+{%- set_global has_internal = false -%}
+{%- for commit in commits -%}
+{%- if not commit.breaking_change -%}
+{%- if commit.type == "Documentation" or commit.type == "Tests" or commit.type == "Continuous Integration" or commit.type == "Miscellaneous Chores" or commit.type == "Build system" or commit.type == "Style" or commit.type == "Refactoring" or commit.type == "Revert" -%}
+{%- set_global has_internal = true -%}
+{%- endif -%}
+{%- endif -%}
+{%- endfor -%}
+{% if has_internal %}
+<details>
+<summary><h3 style="display:inline">Internal Changes</h3></summary>
+
+{% for commit in commits | sort(attribute="type") -%}
+{%- if not commit.breaking_change -%}
+{%- if commit.type == "Documentation" or commit.type == "Tests" or commit.type == "Continuous Integration" or commit.type == "Miscellaneous Chores" or commit.type == "Build system" or commit.type == "Style" or commit.type == "Refactoring" or commit.type == "Revert" %}
+{% if commit.scope -%}
+- **{{ commit.type | lower }}({{ commit.scope }}):** {{ commit.summary }} - ([{{ commit.id | truncate(length=7, end="") }}]({{ repository_url }}/commit/{{ commit.id }}))
+{%- else -%}
+- **{{ commit.type | lower }}:** {{ commit.summary }} - ([{{ commit.id | truncate(length=7, end="") }}]({{ repository_url }}/commit/{{ commit.id }}))
+{%- endif -%}
+{%- endif -%}
+{%- endif -%}
+{%- endfor %}
+
+</details>
+{% endif %}
