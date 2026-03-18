@@ -4,3 +4,6 @@
 /target
 devenv.local.nix
 devenv.local.yaml
+
+# Downloaded during CI for GitHub Pages build
+docs/website/public/cmakefmt-dprint.wasm

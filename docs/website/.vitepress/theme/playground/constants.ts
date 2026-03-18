@@ -1,6 +1,4 @@
-export const WASM_URL: string = import.meta.env.DEV
-  ? "/cmakefmt/cmakefmt-dprint.wasm"
-  : "https://github.com/azais-corentin/cmakefmt/releases/latest/download/cmakefmt-dprint.wasm";
+export const WASM_URL: string = "/cmakefmt/cmakefmt-dprint.wasm";
 
 export const DEFAULT_INPUT: string = `cmake_minimum_required(VERSION 3.20)
 project(MyProject LANGUAGES CXX)
