@@ -199,18 +199,18 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Install cocogitto
-        run: |
-          curl -sSL https://github.com/cocogitto/cocogitto/releases/download/7.0.0/cocogitto-7.0.0-x86_64-unknown-linux-musl.tar.gz | tar xz
-          chmod +x cog
-          sudo mv cog /usr/local/bin/
+      - name: Set up mise
+        uses: jdx/mise-action@c1ecc8f748cd28cdeabf76dab3cccde4ce692fe4 # v4.0.0
+        with:
+          install: false
+          cache: false
 
       - name: Generate changelog
         id: changelog
         env:
           TAG_NAME: ${{ github.ref_name }}
         run: |
-          NOTES=$(cog changelog --at "$TAG_NAME")
+          NOTES=$(mise x cog -- cog changelog --at "$TAG_NAME")
           echo "content<<EOF" >> "$GITHUB_OUTPUT"
           echo "$NOTES" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
