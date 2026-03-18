@@ -173,14 +173,6 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
-      - name: Wait for crates.io propagation
-        run: sleep 30
-
-      - name: Publish cmakefmt-cli
-        run: cargo publish -p cmakefmt-cli
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
   release:
     needs: [build-cli, build-wasm, publish-crate]
     runs-on: ubuntu-latest
