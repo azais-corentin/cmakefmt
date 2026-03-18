@@ -1,5 +1,5 @@
 [workspace.package]
-version = "0.0.0"
+version = "0.1.0"
 authors = ["Corentin AZAIS <azaiscorentin@gmail.com>"]
 edition = "2024"
 homepage = "https://github.com/azais-corentin/cmakefmt"
@@ -12,7 +12,7 @@ resolver = "3"
 
 [workspace.dependencies]
 # Internal
-cmakefmt = { package = "cmakefmt-rs", path = "crates/cmakefmt", version = "0.0.0" }
+cmakefmt = { package = "cmakefmt-rs", path = "crates/cmakefmt", version = "0.1.0" }
 
 # External
 anyhow = "1.0.102"
