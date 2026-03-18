@@ -1,9 +1,9 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/logos/cmakefmt-logo-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="docs/logos/cmakefmt-logo-light.svg">
-  <img src="docs/logos/cmakefmt-logo-light.svg" alt="cmakefmt" height="160">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/azais-corentin/cmakefmt/HEAD/docs/logos/cmakefmt-logo-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/azais-corentin/cmakefmt/HEAD/docs/logos/cmakefmt-logo-light.svg">
+  <img src="https://raw.githubusercontent.com/azais-corentin/cmakefmt/HEAD/docs/logos/cmakefmt-logo-light.svg" alt="cmakefmt" height="160">
 </picture>
 
 <h1 style="color: #C5BCF7;">cmakefmt</h1>
@@ -11,7 +11,7 @@
 <p>opinionated cmake formatting</p>
 
 [![CI](https://github.com/azais-corentin/cmakefmt/actions/workflows/ci.yml/badge.svg)](https://github.com/azais-corentin/cmakefmt/actions/workflows/ci.yml)
-[![Crates.io](https://img.shields.io/crates/v/cmakefmt-cli)](https://crates.io/crates/cmakefmt-cli)
+[![Crates.io](https://img.shields.io/crates/v/cmakefmt-rs)](https://crates.io/crates/cmakefmt-rs)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 [Documentation](https://azais-corentin.github.io/cmakefmt/)
@@ -28,8 +28,8 @@ formatter returns it unchanged -- it never silently corrupts your code.
 
 ## Before / After
 
-<img src="docs/screenshots/input.svg" alt="Before formatting" style="max-width: 100%; height: auto;">
-<img src="docs/screenshots/output.svg" alt="After formatting" style="max-width: 100%; height: auto;">
+<img src="https://raw.githubusercontent.com/azais-corentin/cmakefmt/HEAD/docs/screenshots/input.svg" alt="Before formatting" style="max-width: 100%; height: auto;">
+<img src="https://raw.githubusercontent.com/azais-corentin/cmakefmt/HEAD/docs/screenshots/output.svg" alt="After formatting" style="max-width: 100%; height: auto;">
 
 ## Features
 
