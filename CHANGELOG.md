@@ -2,6 +2,30 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [v0.1.2](https://github.com/azais-corentin/cmakefmt/compare/36cef39984d04edb05aa4ce793c7eecc85a584ef..v0.1.2) - 2026-03-18T10:02:14
+
+
+
+
+
+
+
+
+
+
+<details>
+<summary><h3 style="display:inline">Internal Changes</h3></summary>
+
+
+- **continuous integration:** pin cocogitto to v7.0.0 in release workflow - ([f61993b](https://github.com/azais-corentin/cmakefmt/commit/f61993b14ddba52a6614be96e4d1881258aaedaa))
+- **continuous integration:** add retry logic to cargo publish in release workflow - ([5577115](https://github.com/azais-corentin/cmakefmt/commit/55771150e1d7eced0a9f9097d64a2a9e7955f9ab))
+- **continuous integration:** filter benchmark-fixtures workflow to main branch pushes only - ([36cef39](https://github.com/azais-corentin/cmakefmt/commit/36cef39984d04edb05aa4ce793c7eecc85a584ef))
+
+</details>
+
+
+- - -
+
 ## [v0.1.1](https://github.com/azais-corentin/cmakefmt/compare/0d9d720c6ba783d2967c046c8bb326efc59667de..v0.1.1) - 2026-03-18T09:50:56
 
 
