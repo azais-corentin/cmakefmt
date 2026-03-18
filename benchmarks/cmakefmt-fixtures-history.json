@@ -4080,6 +4080,924 @@
         "weighted_total_seconds": 0.01990419743333334,
         "aggregate_throughput_gb_per_s": 0.034103912115702927
       }
+    },
+    {
+      "commit_sha": "f2bedf824e20a931fc9b9fc449dba9adc55eee2e",
+      "commit_timestamp": "2026-03-17T16:55:03+01:00",
+      "runner": "Linux",
+      "rust_version": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+      "fixtures": [
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__synthetic__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "fixture_stem": "respositories__synthetic__cmakelists",
+          "variant": "in",
+          "path": "respositories__synthetic__cmakelists__in",
+          "input_bytes": 327058,
+          "throughput_bytes_per_iteration": 327058,
+          "mean_seconds": 0.013537479342499999,
+          "median_seconds": 0.01354661425,
+          "mean_confidence_interval_lower_seconds": 0.01348617504975,
+          "mean_confidence_interval_upper_seconds": 0.0135889532875,
+          "median_confidence_interval_lower_seconds": 0.013469989,
+          "median_confidence_interval_upper_seconds": 0.01362748275,
+          "throughput_gb_per_s": 0.024159445914958746
+        },
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__xnnpack__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "fixture_stem": "respositories__xnnpack__cmakelists",
+          "variant": "in",
+          "path": "respositories__xnnpack__cmakelists__in",
+          "input_bytes": 351753,
+          "throughput_bytes_per_iteration": 351753,
+          "mean_seconds": 0.0058568242466666654,
+          "median_seconds": 0.005875473722222222,
+          "mean_confidence_interval_lower_seconds": 0.005835666270555557,
+          "mean_confidence_interval_upper_seconds": 0.005877234554083333,
+          "median_confidence_interval_lower_seconds": 0.005846548722222222,
+          "median_confidence_interval_upper_seconds": 0.005904102222222222,
+          "throughput_gb_per_s": 0.06005865724930974
+        }
+      ],
+      "aggregate": {
+        "total_input_bytes": 678811,
+        "weighted_total_seconds": 0.019394303589166665,
+        "aggregate_throughput_gb_per_s": 0.03500053491888064
+      }
+    },
+    {
+      "commit_sha": "5f89237375243afd929a53387596d7df37aba2e2",
+      "commit_timestamp": "2026-03-17T19:41:55+01:00",
+      "runner": "Linux",
+      "rust_version": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+      "fixtures": [
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__synthetic__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "fixture_stem": "respositories__synthetic__cmakelists",
+          "variant": "in",
+          "path": "respositories__synthetic__cmakelists__in",
+          "input_bytes": 327058,
+          "throughput_bytes_per_iteration": 327058,
+          "mean_seconds": 0.01380142783,
+          "median_seconds": 0.0138033195,
+          "mean_confidence_interval_lower_seconds": 0.013790210015,
+          "mean_confidence_interval_upper_seconds": 0.013811092633,
+          "median_confidence_interval_lower_seconds": 0.01379555075,
+          "median_confidence_interval_upper_seconds": 0.013812292,
+          "throughput_gb_per_s": 0.023697403198318215
+        },
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__xnnpack__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "fixture_stem": "respositories__xnnpack__cmakelists",
+          "variant": "in",
+          "path": "respositories__xnnpack__cmakelists__in",
+          "input_bytes": 351753,
+          "throughput_bytes_per_iteration": 351753,
+          "mean_seconds": 0.005926334899999998,
+          "median_seconds": 0.005925901833333334,
+          "mean_confidence_interval_lower_seconds": 0.005922857198444444,
+          "mean_confidence_interval_upper_seconds": 0.005929840227777775,
+          "median_confidence_interval_lower_seconds": 0.005922727111111111,
+          "median_confidence_interval_upper_seconds": 0.005929723444444444,
+          "throughput_gb_per_s": 0.05935422245543365
+        }
+      ],
+      "aggregate": {
+        "total_input_bytes": 678811,
+        "weighted_total_seconds": 0.01972776273,
+        "aggregate_throughput_gb_per_s": 0.03440891951562923
+      }
+    },
+    {
+      "commit_sha": "4d8afbc0a30394e07de442eac3fe100e66f37a08",
+      "commit_timestamp": "2026-03-17T19:51:14+01:00",
+      "runner": "Linux",
+      "rust_version": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+      "fixtures": [
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__synthetic__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "fixture_stem": "respositories__synthetic__cmakelists",
+          "variant": "in",
+          "path": "respositories__synthetic__cmakelists__in",
+          "input_bytes": 327058,
+          "throughput_bytes_per_iteration": 327058,
+          "mean_seconds": 0.0136380549775,
+          "median_seconds": 0.01363787975,
+          "mean_confidence_interval_lower_seconds": 0.01363198371,
+          "mean_confidence_interval_upper_seconds": 0.013644301994999998,
+          "median_confidence_interval_lower_seconds": 0.01362732975,
+          "median_confidence_interval_upper_seconds": 0.01364661825,
+          "throughput_gb_per_s": 0.02398127889494351
+        },
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__xnnpack__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "fixture_stem": "respositories__xnnpack__cmakelists",
+          "variant": "in",
+          "path": "respositories__xnnpack__cmakelists__in",
+          "input_bytes": 351753,
+          "throughput_bytes_per_iteration": 351753,
+          "mean_seconds": 0.005969591012222225,
+          "median_seconds": 0.005969622666666667,
+          "mean_confidence_interval_lower_seconds": 0.005966492837111113,
+          "mean_confidence_interval_upper_seconds": 0.00597268629002778,
+          "median_confidence_interval_lower_seconds": 0.005967333777777778,
+          "median_confidence_interval_upper_seconds": 0.005971767055555556,
+          "throughput_gb_per_s": 0.058924137228131036
+        }
+      ],
+      "aggregate": {
+        "total_input_bytes": 678811,
+        "weighted_total_seconds": 0.019607645989722224,
+        "aggregate_throughput_gb_per_s": 0.03461970908470163
+      }
+    },
+    {
+      "commit_sha": "91c8707c5e92db669d28755f8209a83cb103f0cf",
+      "commit_timestamp": "2026-03-17T19:57:01+01:00",
+      "runner": "Linux",
+      "rust_version": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+      "fixtures": [
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__synthetic__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "fixture_stem": "respositories__synthetic__cmakelists",
+          "variant": "in",
+          "path": "respositories__synthetic__cmakelists__in",
+          "input_bytes": 327058,
+          "throughput_bytes_per_iteration": 327058,
+          "mean_seconds": 0.0135698290225,
+          "median_seconds": 0.013566559625,
+          "mean_confidence_interval_lower_seconds": 0.01355896399,
+          "mean_confidence_interval_upper_seconds": 0.01358003346375,
+          "median_confidence_interval_lower_seconds": 0.01355941,
+          "median_confidence_interval_upper_seconds": 0.01357524225,
+          "throughput_gb_per_s": 0.02410185120665178
+        },
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__xnnpack__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "fixture_stem": "respositories__xnnpack__cmakelists",
+          "variant": "in",
+          "path": "respositories__xnnpack__cmakelists__in",
+          "input_bytes": 351753,
+          "throughput_bytes_per_iteration": 351753,
+          "mean_seconds": 0.0059735303888888884,
+          "median_seconds": 0.005969951888888888,
+          "mean_confidence_interval_lower_seconds": 0.005963683114249996,
+          "mean_confidence_interval_upper_seconds": 0.00598656277944444,
+          "median_confidence_interval_lower_seconds": 0.005963326666666667,
+          "median_confidence_interval_upper_seconds": 0.005974744666666667,
+          "throughput_gb_per_s": 0.0588852784032506
+        }
+      ],
+      "aggregate": {
+        "total_input_bytes": 678811,
+        "weighted_total_seconds": 0.019543359411388888,
+        "aggregate_throughput_gb_per_s": 0.03473358831053494
+      }
+    },
+    {
+      "commit_sha": "976640f101fd3364acfd943d22cf308e3307bc04",
+      "commit_timestamp": "2026-03-17T19:57:27+01:00",
+      "runner": "Linux",
+      "rust_version": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+      "fixtures": [
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__synthetic__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "fixture_stem": "respositories__synthetic__cmakelists",
+          "variant": "in",
+          "path": "respositories__synthetic__cmakelists__in",
+          "input_bytes": 327058,
+          "throughput_bytes_per_iteration": 327058,
+          "mean_seconds": 0.01373870335,
+          "median_seconds": 0.013736608625,
+          "mean_confidence_interval_lower_seconds": 0.0137302544618125,
+          "mean_confidence_interval_upper_seconds": 0.01374698479925,
+          "median_confidence_interval_lower_seconds": 0.01372767075,
+          "median_confidence_interval_upper_seconds": 0.01374401725,
+          "throughput_gb_per_s": 0.023805594434062806
+        },
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__xnnpack__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "fixture_stem": "respositories__xnnpack__cmakelists",
+          "variant": "in",
+          "path": "respositories__xnnpack__cmakelists__in",
+          "input_bytes": 351753,
+          "throughput_bytes_per_iteration": 351753,
+          "mean_seconds": 0.006036660893333333,
+          "median_seconds": 0.0060319195,
+          "mean_confidence_interval_lower_seconds": 0.00603264939111111,
+          "mean_confidence_interval_upper_seconds": 0.0060408402395555555,
+          "median_confidence_interval_lower_seconds": 0.006027507333333334,
+          "median_confidence_interval_upper_seconds": 0.006036658444444444,
+          "throughput_gb_per_s": 0.05826946489382286
+        }
+      ],
+      "aggregate": {
+        "total_input_bytes": 678811,
+        "weighted_total_seconds": 0.019775364243333333,
+        "aggregate_throughput_gb_per_s": 0.03432609339819572
+      }
+    },
+    {
+      "commit_sha": "b221ad91a76881f4b458ee217f81eab2da6561ba",
+      "commit_timestamp": "2026-03-17T20:11:40+01:00",
+      "runner": "Linux",
+      "rust_version": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+      "fixtures": [
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__synthetic__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "fixture_stem": "respositories__synthetic__cmakelists",
+          "variant": "in",
+          "path": "respositories__synthetic__cmakelists__in",
+          "input_bytes": 327058,
+          "throughput_bytes_per_iteration": 327058,
+          "mean_seconds": 0.01390734989,
+          "median_seconds": 0.013909992,
+          "mean_confidence_interval_lower_seconds": 0.0139005800050625,
+          "mean_confidence_interval_upper_seconds": 0.013914166967125,
+          "median_confidence_interval_lower_seconds": 0.01389887175,
+          "median_confidence_interval_upper_seconds": 0.01391604825,
+          "throughput_gb_per_s": 0.023516917499513634
+        },
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__xnnpack__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "fixture_stem": "respositories__xnnpack__cmakelists",
+          "variant": "in",
+          "path": "respositories__xnnpack__cmakelists__in",
+          "input_bytes": 351753,
+          "throughput_bytes_per_iteration": 351753,
+          "mean_seconds": 0.006046541863333332,
+          "median_seconds": 0.006039074388888889,
+          "mean_confidence_interval_lower_seconds": 0.006034696991111112,
+          "mean_confidence_interval_upper_seconds": 0.006065370995861114,
+          "median_confidence_interval_lower_seconds": 0.006034390555555556,
+          "median_confidence_interval_upper_seconds": 0.006042527444444444,
+          "throughput_gb_per_s": 0.058174243716570574
+        }
+      ],
+      "aggregate": {
+        "total_input_bytes": 678811,
+        "weighted_total_seconds": 0.01995389175333333,
+        "aggregate_throughput_gb_per_s": 0.03401897777092048
+      }
+    },
+    {
+      "commit_sha": "7c91c549b03d823b996072e71f76cea9ed55c3ce",
+      "commit_timestamp": "2026-03-17T21:03:10+01:00",
+      "runner": "Linux",
+      "rust_version": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+      "fixtures": [
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__synthetic__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "fixture_stem": "respositories__synthetic__cmakelists",
+          "variant": "in",
+          "path": "respositories__synthetic__cmakelists__in",
+          "input_bytes": 327058,
+          "throughput_bytes_per_iteration": 327058,
+          "mean_seconds": 0.013938046977499998,
+          "median_seconds": 0.01383593725,
+          "mean_confidence_interval_lower_seconds": 0.013901120220750001,
+          "mean_confidence_interval_upper_seconds": 0.01397610790675,
+          "median_confidence_interval_lower_seconds": 0.013820091375,
+          "median_confidence_interval_upper_seconds": 0.01385501775,
+          "throughput_gb_per_s": 0.02346512395373364
+        },
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__xnnpack__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "fixture_stem": "respositories__xnnpack__cmakelists",
+          "variant": "in",
+          "path": "respositories__xnnpack__cmakelists__in",
+          "input_bytes": 351753,
+          "throughput_bytes_per_iteration": 351753,
+          "mean_seconds": 0.006083314662222223,
+          "median_seconds": 0.006054840777777778,
+          "mean_confidence_interval_lower_seconds": 0.00606913969,
+          "mean_confidence_interval_upper_seconds": 0.006097756225555555,
+          "median_confidence_interval_lower_seconds": 0.006043229055555556,
+          "median_confidence_interval_upper_seconds": 0.006070395888888889,
+          "throughput_gb_per_s": 0.05782258842936547
+        }
+      ],
+      "aggregate": {
+        "total_input_bytes": 678811,
+        "weighted_total_seconds": 0.02002136163972222,
+        "aggregate_throughput_gb_per_s": 0.033904337387984866
+      }
+    },
+    {
+      "commit_sha": "c9477212c124357eddfbed310b7107a88de555b1",
+      "commit_timestamp": "2026-03-17T21:05:44+01:00",
+      "runner": "Linux",
+      "rust_version": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+      "fixtures": [
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__synthetic__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "fixture_stem": "respositories__synthetic__cmakelists",
+          "variant": "in",
+          "path": "respositories__synthetic__cmakelists__in",
+          "input_bytes": 327058,
+          "throughput_bytes_per_iteration": 327058,
+          "mean_seconds": 0.013882242015,
+          "median_seconds": 0.01387090725,
+          "mean_confidence_interval_lower_seconds": 0.01386831329325,
+          "mean_confidence_interval_upper_seconds": 0.013897810092499999,
+          "median_confidence_interval_lower_seconds": 0.01386014225,
+          "median_confidence_interval_upper_seconds": 0.01388390775,
+          "throughput_gb_per_s": 0.023559450962359556
+        },
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__xnnpack__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "fixture_stem": "respositories__xnnpack__cmakelists",
+          "variant": "in",
+          "path": "respositories__xnnpack__cmakelists__in",
+          "input_bytes": 351753,
+          "throughput_bytes_per_iteration": 351753,
+          "mean_seconds": 0.00604960422333333,
+          "median_seconds": 0.006043765833333334,
+          "mean_confidence_interval_lower_seconds": 0.006045015055611111,
+          "mean_confidence_interval_upper_seconds": 0.006054348041999995,
+          "median_confidence_interval_lower_seconds": 0.00603763,
+          "median_confidence_interval_upper_seconds": 0.006056019777777778,
+          "throughput_gb_per_s": 0.05814479543030076
+        }
+      ],
+      "aggregate": {
+        "total_input_bytes": 678811,
+        "weighted_total_seconds": 0.019931846238333332,
+        "aggregate_throughput_gb_per_s": 0.03405660428457936
+      }
+    },
+    {
+      "commit_sha": "cc76d088b2ef3469b7b0cc2229c82c3330c4ff65",
+      "commit_timestamp": "2026-03-17T21:30:59+01:00",
+      "runner": "Linux",
+      "rust_version": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+      "fixtures": [
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__synthetic__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "fixture_stem": "respositories__synthetic__cmakelists",
+          "variant": "in",
+          "path": "respositories__synthetic__cmakelists__in",
+          "input_bytes": 327058,
+          "throughput_bytes_per_iteration": 327058,
+          "mean_seconds": 0.014053680192500001,
+          "median_seconds": 0.014042306,
+          "mean_confidence_interval_lower_seconds": 0.014044391956875001,
+          "mean_confidence_interval_upper_seconds": 0.01406419353125,
+          "median_confidence_interval_lower_seconds": 0.014037262875,
+          "median_confidence_interval_upper_seconds": 0.014055472,
+          "throughput_gb_per_s": 0.02327205369128439
+        },
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__xnnpack__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "fixture_stem": "respositories__xnnpack__cmakelists",
+          "variant": "in",
+          "path": "respositories__xnnpack__cmakelists__in",
+          "input_bytes": 351753,
+          "throughput_bytes_per_iteration": 351753,
+          "mean_seconds": 0.006092261937777778,
+          "median_seconds": 0.006082258055555556,
+          "mean_confidence_interval_lower_seconds": 0.0060831064055555575,
+          "mean_confidence_interval_upper_seconds": 0.006106600471805555,
+          "median_confidence_interval_lower_seconds": 0.006077218666666667,
+          "median_confidence_interval_upper_seconds": 0.006088234888888888,
+          "throughput_gb_per_s": 0.057737668470687245
+        }
+      ],
+      "aggregate": {
+        "total_input_bytes": 678811,
+        "weighted_total_seconds": 0.020145942130277778,
+        "aggregate_throughput_gb_per_s": 0.03369467635766709
+      }
+    },
+    {
+      "commit_sha": "1d567665b06b3323659d9bd66f02e53ca1dce79c",
+      "commit_timestamp": "2026-03-17T21:31:43+01:00",
+      "runner": "Linux",
+      "rust_version": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+      "fixtures": [
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__synthetic__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "fixture_stem": "respositories__synthetic__cmakelists",
+          "variant": "in",
+          "path": "respositories__synthetic__cmakelists__in",
+          "input_bytes": 327058,
+          "throughput_bytes_per_iteration": 327058,
+          "mean_seconds": 0.01388386817,
+          "median_seconds": 0.013878575,
+          "mean_confidence_interval_lower_seconds": 0.013876315522687501,
+          "mean_confidence_interval_upper_seconds": 0.01389266229825,
+          "median_confidence_interval_lower_seconds": 0.013871423125,
+          "median_confidence_interval_upper_seconds": 0.013882863,
+          "throughput_gb_per_s": 0.023556691549888147
+        },
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__xnnpack__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "fixture_stem": "respositories__xnnpack__cmakelists",
+          "variant": "in",
+          "path": "respositories__xnnpack__cmakelists__in",
+          "input_bytes": 351753,
+          "throughput_bytes_per_iteration": 351753,
+          "mean_seconds": 0.00603299009111111,
+          "median_seconds": 0.006026898333333334,
+          "mean_confidence_interval_lower_seconds": 0.006025003447055556,
+          "mean_confidence_interval_upper_seconds": 0.006045373313138887,
+          "median_confidence_interval_lower_seconds": 0.006022858,
+          "median_confidence_interval_upper_seconds": 0.006030981,
+          "throughput_gb_per_s": 0.058304919233709
+        }
+      ],
+      "aggregate": {
+        "total_input_bytes": 678811,
+        "weighted_total_seconds": 0.01991685826111111,
+        "aggregate_throughput_gb_per_s": 0.034082232805031316
+      }
+    },
+    {
+      "commit_sha": "b9631c94c8285a895f6ef7397970d7c57a8d2934",
+      "commit_timestamp": "2026-03-17T21:49:32+01:00",
+      "runner": "Linux",
+      "rust_version": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+      "fixtures": [
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__synthetic__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "fixture_stem": "respositories__synthetic__cmakelists",
+          "variant": "in",
+          "path": "respositories__synthetic__cmakelists__in",
+          "input_bytes": 327058,
+          "throughput_bytes_per_iteration": 327058,
+          "mean_seconds": 0.013849809215,
+          "median_seconds": 0.013834307625,
+          "mean_confidence_interval_lower_seconds": 0.013831608467125,
+          "mean_confidence_interval_upper_seconds": 0.013869778585,
+          "median_confidence_interval_lower_seconds": 0.0138287565,
+          "median_confidence_interval_upper_seconds": 0.01384343275,
+          "throughput_gb_per_s": 0.023614621322420867
+        },
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__xnnpack__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "fixture_stem": "respositories__xnnpack__cmakelists",
+          "variant": "in",
+          "path": "respositories__xnnpack__cmakelists__in",
+          "input_bytes": 351753,
+          "throughput_bytes_per_iteration": 351753,
+          "mean_seconds": 0.006002710529999998,
+          "median_seconds": 0.006001674444444444,
+          "mean_confidence_interval_lower_seconds": 0.005997997525138888,
+          "mean_confidence_interval_upper_seconds": 0.006008234099999999,
+          "median_confidence_interval_lower_seconds": 0.005996439222222222,
+          "median_confidence_interval_upper_seconds": 0.006006838555555556,
+          "throughput_gb_per_s": 0.05859902759628826
+        }
+      ],
+      "aggregate": {
+        "total_input_bytes": 678811,
+        "weighted_total_seconds": 0.019852519744999998,
+        "aggregate_throughput_gb_per_s": 0.0341926873121969
+      }
+    },
+    {
+      "commit_sha": "ee41c7f9789b12038e05b228f8546813d8f6145c",
+      "commit_timestamp": "2026-03-17T22:03:58+01:00",
+      "runner": "Linux",
+      "rust_version": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+      "fixtures": [
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__synthetic__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "fixture_stem": "respositories__synthetic__cmakelists",
+          "variant": "in",
+          "path": "respositories__synthetic__cmakelists__in",
+          "input_bytes": 327058,
+          "throughput_bytes_per_iteration": 327058,
+          "mean_seconds": 0.013477233617499999,
+          "median_seconds": 0.01344399325,
+          "mean_confidence_interval_lower_seconds": 0.013420951798125,
+          "mean_confidence_interval_upper_seconds": 0.013533326472625,
+          "median_confidence_interval_lower_seconds": 0.01341498275,
+          "median_confidence_interval_upper_seconds": 0.0134869495,
+          "throughput_gb_per_s": 0.024267443103109805
+        },
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__xnnpack__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "fixture_stem": "respositories__xnnpack__cmakelists",
+          "variant": "in",
+          "path": "respositories__xnnpack__cmakelists__in",
+          "input_bytes": 351753,
+          "throughput_bytes_per_iteration": 351753,
+          "mean_seconds": 0.005947482761111113,
+          "median_seconds": 0.005962402388888889,
+          "mean_confidence_interval_lower_seconds": 0.005918043941111113,
+          "mean_confidence_interval_upper_seconds": 0.005982094203333335,
+          "median_confidence_interval_lower_seconds": 0.005936065,
+          "median_confidence_interval_upper_seconds": 0.005978803111111111,
+          "throughput_gb_per_s": 0.0591431726881181
+        }
+      ],
+      "aggregate": {
+        "total_input_bytes": 678811,
+        "weighted_total_seconds": 0.019424716378611113,
+        "aggregate_throughput_gb_per_s": 0.03494573546244672
+      }
+    },
+    {
+      "commit_sha": "895e1dc75720d401412cc1e346a04e3abaafe5c0",
+      "commit_timestamp": "2026-03-17T22:15:35+01:00",
+      "runner": "Linux",
+      "rust_version": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+      "fixtures": [
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__synthetic__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "fixture_stem": "respositories__synthetic__cmakelists",
+          "variant": "in",
+          "path": "respositories__synthetic__cmakelists__in",
+          "input_bytes": 327058,
+          "throughput_bytes_per_iteration": 327058,
+          "mean_seconds": 0.0138656152775,
+          "median_seconds": 0.0138505225,
+          "mean_confidence_interval_lower_seconds": 0.0138527525141875,
+          "mean_confidence_interval_upper_seconds": 0.013882071377562498,
+          "median_confidence_interval_lower_seconds": 0.013841948,
+          "median_confidence_interval_upper_seconds": 0.0138613285,
+          "throughput_gb_per_s": 0.023587701912566643
+        },
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__xnnpack__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "fixture_stem": "respositories__xnnpack__cmakelists",
+          "variant": "in",
+          "path": "respositories__xnnpack__cmakelists__in",
+          "input_bytes": 351753,
+          "throughput_bytes_per_iteration": 351753,
+          "mean_seconds": 0.006021943205555555,
+          "median_seconds": 0.0060164235,
+          "mean_confidence_interval_lower_seconds": 0.006015804364444444,
+          "mean_confidence_interval_upper_seconds": 0.006030143488888889,
+          "median_confidence_interval_lower_seconds": 0.006010707277777778,
+          "median_confidence_interval_upper_seconds": 0.006020515777777778,
+          "throughput_gb_per_s": 0.05841187603288746
+        }
+      ],
+      "aggregate": {
+        "total_input_bytes": 678811,
+        "weighted_total_seconds": 0.019887558483055554,
+        "aggregate_throughput_gb_per_s": 0.034132445195741615
+      }
+    },
+    {
+      "commit_sha": "95472606580617c31e14fd37870de94ee65a3f48",
+      "commit_timestamp": "2026-03-17T22:21:56+01:00",
+      "runner": "Linux",
+      "rust_version": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+      "fixtures": [
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__synthetic__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "fixture_stem": "respositories__synthetic__cmakelists",
+          "variant": "in",
+          "path": "respositories__synthetic__cmakelists__in",
+          "input_bytes": 327058,
+          "throughput_bytes_per_iteration": 327058,
+          "mean_seconds": 0.0138704788125,
+          "median_seconds": 0.01385225,
+          "mean_confidence_interval_lower_seconds": 0.013854044427437501,
+          "mean_confidence_interval_upper_seconds": 0.01389776376,
+          "median_confidence_interval_lower_seconds": 0.01384583775,
+          "median_confidence_interval_upper_seconds": 0.013862393,
+          "throughput_gb_per_s": 0.023579431137247916
+        },
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__xnnpack__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "fixture_stem": "respositories__xnnpack__cmakelists",
+          "variant": "in",
+          "path": "respositories__xnnpack__cmakelists__in",
+          "input_bytes": 351753,
+          "throughput_bytes_per_iteration": 351753,
+          "mean_seconds": 0.006028364836666669,
+          "median_seconds": 0.006028863777777778,
+          "mean_confidence_interval_lower_seconds": 0.006023755665555555,
+          "mean_confidence_interval_upper_seconds": 0.00603259631266667,
+          "median_confidence_interval_lower_seconds": 0.006024760333333333,
+          "median_confidence_interval_upper_seconds": 0.006033050777777778,
+          "throughput_gb_per_s": 0.05834965360100845
+        }
+      ],
+      "aggregate": {
+        "total_input_bytes": 678811,
+        "weighted_total_seconds": 0.019898843649166668,
+        "aggregate_throughput_gb_per_s": 0.034113087773742445
+      }
+    },
+    {
+      "commit_sha": "1097b70e7e31c9098d97d48db12346daae01135a",
+      "commit_timestamp": "2026-03-17T22:37:46+01:00",
+      "runner": "Linux",
+      "rust_version": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+      "fixtures": [
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__synthetic__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "fixture_stem": "respositories__synthetic__cmakelists",
+          "variant": "in",
+          "path": "respositories__synthetic__cmakelists__in",
+          "input_bytes": 327058,
+          "throughput_bytes_per_iteration": 327058,
+          "mean_seconds": 0.01387934485,
+          "median_seconds": 0.013874644375,
+          "mean_confidence_interval_lower_seconds": 0.013873197806875,
+          "mean_confidence_interval_upper_seconds": 0.013885860013125,
+          "median_confidence_interval_lower_seconds": 0.013868170125,
+          "median_confidence_interval_upper_seconds": 0.01388121325,
+          "throughput_gb_per_s": 0.02356436874612277
+        },
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__xnnpack__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "fixture_stem": "respositories__xnnpack__cmakelists",
+          "variant": "in",
+          "path": "respositories__xnnpack__cmakelists__in",
+          "input_bytes": 351753,
+          "throughput_bytes_per_iteration": 351753,
+          "mean_seconds": 0.006014405376666668,
+          "median_seconds": 0.006013728444444444,
+          "mean_confidence_interval_lower_seconds": 0.0060105000644444465,
+          "mean_confidence_interval_upper_seconds": 0.006018262513333332,
+          "median_confidence_interval_lower_seconds": 0.006009513444444444,
+          "median_confidence_interval_upper_seconds": 0.006020911444444444,
+          "throughput_gb_per_s": 0.05848508339072917
+        }
+      ],
+      "aggregate": {
+        "total_input_bytes": 678811,
+        "weighted_total_seconds": 0.019893750226666666,
+        "aggregate_throughput_gb_per_s": 0.034121821791553646
+      }
+    },
+    {
+      "commit_sha": "34b62b3a2a893c9dd6bd643efec750bf8c84222b",
+      "commit_timestamp": "2026-03-17T22:51:00+01:00",
+      "runner": "Linux",
+      "rust_version": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+      "fixtures": [
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__synthetic__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "fixture_stem": "respositories__synthetic__cmakelists",
+          "variant": "in",
+          "path": "respositories__synthetic__cmakelists__in",
+          "input_bytes": 327058,
+          "throughput_bytes_per_iteration": 327058,
+          "mean_seconds": 0.013842463255000001,
+          "median_seconds": 0.013835421,
+          "mean_confidence_interval_lower_seconds": 0.0138310641770625,
+          "mean_confidence_interval_upper_seconds": 0.013857391575,
+          "median_confidence_interval_lower_seconds": 0.01382452375,
+          "median_confidence_interval_upper_seconds": 0.013840176875,
+          "throughput_gb_per_s": 0.0236271532006317
+        },
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__xnnpack__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "fixture_stem": "respositories__xnnpack__cmakelists",
+          "variant": "in",
+          "path": "respositories__xnnpack__cmakelists__in",
+          "input_bytes": 351753,
+          "throughput_bytes_per_iteration": 351753,
+          "mean_seconds": 0.006022477035555559,
+          "median_seconds": 0.006016652,
+          "mean_confidence_interval_lower_seconds": 0.006015651516666665,
+          "mean_confidence_interval_upper_seconds": 0.006029317068888891,
+          "median_confidence_interval_lower_seconds": 0.006011874111111111,
+          "median_confidence_interval_upper_seconds": 0.006024684388888888,
+          "throughput_gb_per_s": 0.05840669842712844
+        }
+      ],
+      "aggregate": {
+        "total_input_bytes": 678811,
+        "weighted_total_seconds": 0.01986494029055556,
+        "aggregate_throughput_gb_per_s": 0.034171308348846574
+      }
+    },
+    {
+      "commit_sha": "cd8179d22eecd362d4398ec56c8c73d5fbcea05b",
+      "commit_timestamp": "2026-03-17T22:56:01+01:00",
+      "runner": "Linux",
+      "rust_version": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+      "fixtures": [
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__synthetic__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "fixture_stem": "respositories__synthetic__cmakelists",
+          "variant": "in",
+          "path": "respositories__synthetic__cmakelists__in",
+          "input_bytes": 327058,
+          "throughput_bytes_per_iteration": 327058,
+          "mean_seconds": 0.013637003467499999,
+          "median_seconds": 0.01367834975,
+          "mean_confidence_interval_lower_seconds": 0.013604889868,
+          "mean_confidence_interval_upper_seconds": 0.013665142687375,
+          "median_confidence_interval_lower_seconds": 0.013672131375,
+          "median_confidence_interval_upper_seconds": 0.0136853785,
+          "throughput_gb_per_s": 0.02398312802218256
+        },
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__xnnpack__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "fixture_stem": "respositories__xnnpack__cmakelists",
+          "variant": "in",
+          "path": "respositories__xnnpack__cmakelists__in",
+          "input_bytes": 351753,
+          "throughput_bytes_per_iteration": 351753,
+          "mean_seconds": 0.006033762522222221,
+          "median_seconds": 0.006032145888888888,
+          "mean_confidence_interval_lower_seconds": 0.006029759412055552,
+          "mean_confidence_interval_upper_seconds": 0.006039165763333332,
+          "median_confidence_interval_lower_seconds": 0.006027001333333334,
+          "median_confidence_interval_upper_seconds": 0.006036510777777778,
+          "throughput_gb_per_s": 0.05829745514585651
+        }
+      ],
+      "aggregate": {
+        "total_input_bytes": 678811,
+        "weighted_total_seconds": 0.01967076598972222,
+        "aggregate_throughput_gb_per_s": 0.03450862057708744
+      }
+    },
+    {
+      "commit_sha": "208082d3ae9bce2ff86119e6c7dc16d53121ecdc",
+      "commit_timestamp": "2026-03-17T23:06:33+01:00",
+      "runner": "Linux",
+      "rust_version": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+      "fixtures": [
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__synthetic__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "fixture_stem": "respositories__synthetic__cmakelists",
+          "variant": "in",
+          "path": "respositories__synthetic__cmakelists__in",
+          "input_bytes": 327058,
+          "throughput_bytes_per_iteration": 327058,
+          "mean_seconds": 0.0136517630325,
+          "median_seconds": 0.0136389775,
+          "mean_confidence_interval_lower_seconds": 0.013636791528437501,
+          "mean_confidence_interval_upper_seconds": 0.013672008251874998,
+          "median_confidence_interval_lower_seconds": 0.01363240275,
+          "median_confidence_interval_upper_seconds": 0.01364373875,
+          "throughput_gb_per_s": 0.023957198731137583
+        },
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__xnnpack__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "fixture_stem": "respositories__xnnpack__cmakelists",
+          "variant": "in",
+          "path": "respositories__xnnpack__cmakelists__in",
+          "input_bytes": 351753,
+          "throughput_bytes_per_iteration": 351753,
+          "mean_seconds": 0.005984340511111111,
+          "median_seconds": 0.005983487,
+          "mean_confidence_interval_lower_seconds": 0.005979639897777779,
+          "mean_confidence_interval_upper_seconds": 0.0059892966987222206,
+          "median_confidence_interval_lower_seconds": 0.005979734666666667,
+          "median_confidence_interval_upper_seconds": 0.005989113666666667,
+          "throughput_gb_per_s": 0.058778907942638126
+        }
+      ],
+      "aggregate": {
+        "total_input_bytes": 678811,
+        "weighted_total_seconds": 0.01963610354361111,
+        "aggregate_throughput_gb_per_s": 0.03456953659326476
+      }
     }
   ],
   "baselines": {
@@ -4087,33 +5005,33 @@
       "tool_version": "0.6.13",
       "runner": "Linux",
       "rust_version": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
-      "timestamp": "2026-03-17T23:41:19Z",
+      "timestamp": "2026-03-18T08:08:18Z",
       "input_bytes": 678811,
-      "mean_seconds": 25.4054775604,
-      "median_seconds": 25.406526839999998,
-      "throughput_gb_per_s": 2.6719080496958484e-05,
+      "mean_seconds": 25.371864241600008,
+      "median_seconds": 25.36786849600003,
+      "throughput_gb_per_s": 2.6754478643591882e-05,
       "fixtures": [
         {
           "fixture_name": "xnnpack",
           "input_bytes": 351753,
-          "mean_seconds": 13.211964449000002,
-          "median_seconds": 13.208510152000002,
-          "min_seconds": 13.148228942999992,
-          "max_seconds": 13.298640972000015,
-          "stddev_seconds": 0.05797128375377926,
+          "mean_seconds": 13.304137826000003,
+          "median_seconds": 13.329207058000009,
+          "min_seconds": 13.179505941000002,
+          "max_seconds": 13.353262018999999,
+          "stddev_seconds": 0.07156911163410051,
           "iterations": 1,
-          "throughput_gb_per_s": 2.662382277501691e-05
+          "throughput_gb_per_s": 2.643936830784903e-05
         },
         {
           "fixture_name": "synthetic",
           "input_bytes": 327058,
-          "mean_seconds": 12.1935131114,
-          "median_seconds": 12.198016687999996,
-          "min_seconds": 12.114173402999995,
-          "max_seconds": 12.287403368000014,
-          "stddev_seconds": 0.06361581189415104,
+          "mean_seconds": 12.067726415600003,
+          "median_seconds": 12.03866143800002,
+          "min_seconds": 11.978657349000002,
+          "max_seconds": 12.208681647999981,
+          "stddev_seconds": 0.09460351840920557,
           "iterations": 1,
-          "throughput_gb_per_s": 2.6822294527589907e-05
+          "throughput_gb_per_s": 2.710187393519385e-05
         }
       ]
     },
@@ -4121,33 +5039,33 @@
       "tool_version": "gersemi 0.26.1",
       "runner": "Linux",
       "rust_version": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
-      "timestamp": "2026-03-17T23:41:19Z",
+      "timestamp": "2026-03-18T08:08:18Z",
       "input_bytes": 678811,
-      "mean_seconds": 1.9712459056000058,
-      "median_seconds": 1.9736168570000245,
-      "throughput_gb_per_s": 0.00034435632716933116,
+      "mean_seconds": 1.9038839456000063,
+      "median_seconds": 1.8934866710000335,
+      "throughput_gb_per_s": 0.0003565401145215675,
       "fixtures": [
         {
           "fixture_name": "xnnpack",
           "input_bytes": 351753,
-          "mean_seconds": 0.757528837000018,
-          "median_seconds": 0.7607551170000306,
-          "min_seconds": 0.7396199860000365,
-          "max_seconds": 0.7726638760000242,
-          "stddev_seconds": 0.01567604171834757,
+          "mean_seconds": 0.7368966227999977,
+          "median_seconds": 0.7388957500000117,
+          "min_seconds": 0.7220315989999904,
+          "max_seconds": 0.7529651030000082,
+          "stddev_seconds": 0.012070289339924222,
           "iterations": 1,
-          "throughput_gb_per_s": 0.0004643427191405937
+          "throughput_gb_per_s": 0.0004773437536780106
         },
         {
           "fixture_name": "synthetic",
           "input_bytes": 327058,
-          "mean_seconds": 1.2137170685999876,
-          "median_seconds": 1.212861739999994,
-          "min_seconds": 1.1639076129999921,
-          "max_seconds": 1.2526618989999747,
-          "stddev_seconds": 0.03224532675470355,
+          "mean_seconds": 1.1669873228000085,
+          "median_seconds": 1.1545909210000218,
+          "min_seconds": 1.142637069000017,
+          "max_seconds": 1.2010893629999941,
+          "stddev_seconds": 0.025075233801658988,
           "iterations": 1,
-          "throughput_gb_per_s": 0.0002694680732942634
+          "throughput_gb_per_s": 0.0002802584000786522
         }
       ]
     }
