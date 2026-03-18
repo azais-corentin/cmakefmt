@@ -95,7 +95,7 @@ spaceBeforeParen = true
 spaceBeforeParen = true
 ```
 
-For a full list of options and their defaults, see the [Configuration Reference](/guide/configuration).
+For a full list of options and their defaults, see the [Configuration Reference (TOML)](/guide/configuration-toml) for CLI usage or [Configuration Reference (JSON)](/guide/configuration-json) for dprint plugin usage.
 
 ## Editor Integration
 

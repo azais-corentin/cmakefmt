@@ -16,7 +16,7 @@ export default defineConfig({
     },
     nav: [
       { text: "Guide", link: "/guide/getting-started" },
-      { text: "Configuration", link: "/guide/configuration" },
+      { text: "Configuration", link: "/guide/configuration-toml" },
       { text: "CLI", link: "/guide/cli" },
       { text: "Inline Pragmas", link: "/guide/inline-pragmas" },
       { text: "Benchmarks", link: "/benchmarks" },
@@ -28,7 +28,13 @@ export default defineConfig({
           text: "Guide",
           items: [
             { text: "Getting Started", link: "/guide/getting-started" },
-            { text: "Configuration", link: "/guide/configuration" },
+            {
+              text: "Configuration",
+              items: [
+                { text: "TOML (CLI)", link: "/guide/configuration-toml" },
+                { text: "JSON (dprint)", link: "/guide/configuration-json" },
+              ],
+            },
             { text: "CLI Reference", link: "/guide/cli" },
             { text: "Inline Pragmas", link: "/guide/inline-pragmas" },
           ],

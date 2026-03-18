@@ -1,6 +1,6 @@
-# Configuration Reference
+# Configuration Reference (TOML)
 
-cmakefmt is configured through a TOML file. All keys use `camelCase` (`snake_case` is also accepted).
+cmakefmt is configured through a TOML file when using the CLI. All keys use `camelCase` (`snake_case` is also accepted).
 
 ## Config File Discovery
 
@@ -312,3 +312,4 @@ endCommandArgs = "remove"
 
 - [Inline Pragmas](/guide/inline-pragmas) — control formatting locally within a file using comment directives
 - [CLI Reference](/guide/cli) — command-line flags and usage
+- [Configuration (JSON)](/guide/configuration-json) — JSON configuration for dprint plugin users

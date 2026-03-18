@@ -83,7 +83,7 @@ Without `--color` or `--no-color`, color is auto-detected based on whether stdou
 
 ## Format Override Flags
 
-These CLI flags override values from the [configuration file](/guide/configuration). The Config Key column shows the equivalent `.cmakefmt.toml` option:
+These CLI flags override values from the [configuration file](/guide/configuration-toml). The Config Key column shows the equivalent `.cmakefmt.toml` option:
 
 | Flag                                       | Config Key            | Description                                                                           |
 | ------------------------------------------ | --------------------- | ------------------------------------------------------------------------------------- |
