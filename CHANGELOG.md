@@ -2,6 +2,28 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [v0.1.4](https://github.com/azais-corentin/cmakefmt/compare/e0d9c91c9682c2cb99719a3ba870654aaf4a8c62..v0.1.4) - 2026-03-18T10:32:20
+
+
+
+
+
+
+
+
+
+
+<details>
+<summary><h3 style="display:inline">Internal Changes</h3></summary>
+
+
+- **continuous integration:** install cocogitto using mise in release workflow - ([e0d9c91](https://github.com/azais-corentin/cmakefmt/commit/e0d9c91c9682c2cb99719a3ba870654aaf4a8c62))
+
+</details>
+
+
+- - -
+
 ## [v0.1.3](https://github.com/azais-corentin/cmakefmt/compare/023b2ed4742f403574faf6a5775d8f3e88cd4335..v0.1.3) - 2026-03-18T10:26:21
 
 
