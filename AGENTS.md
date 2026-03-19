@@ -273,6 +273,18 @@ When updating specs (`docs/specs/`):
 - You **MUST** update the documentation website (`docs/website/`) to reflect the spec change. User-facing docs that contradict the spec are a bug.
 - A spec change is not complete until code and docs are consistent with it.
 
+### Resolving formatting issues
+
+When a formatting bug is reported as a GitHub issue:
+
+1. Fetch the issue details: `gh issue view <number> --repo azais-corentin/cmakefmt`.
+2. Verify the expected output makes sense according to `docs/specs/` and does not contradict existing test fixtures. If it does, ask the user what to do.
+3. Add a test fixture pair: `crates/cmakefmt/tests/formatter/issues/{issue_number}.in.cmake` (input) and `{issue_number}.out.cmake` (expected output). If the issue requires non-default config, prefer inline `# cmakefmt: push { ... }` pragmas in the fixture. Only fall back to a `.cmakefmt.toml` in the `issues/` directory when the config option cannot be expressed as a pragma (e.g. `ignorePatterns`, `ignoreCommands`, `extends`).
+4. Run `cargo test -- issues__{issue_number}` and verify the new test **fails** (red-green testing — the bug must be reproduced before fixing).
+5. Draft a detailed fix plan identifying which pipeline stage(s) are involved, and ask the user to validate the plan before proceeding.
+6. Once the plan is validated, implement the fix, then verify the test passes with `cargo test -- issues__{issue_number}`.
+7. Run the full fixture suite (`cargo test --test formatter_tests`) to confirm no regressions.
+
 Avoid:
 
 - Editing fixture expected files unless explicitly requested.
