@@ -2,6 +2,43 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [v0.1.5](https://github.com/azais-corentin/cmakefmt/compare/22b2159ead7117d8458979e40b6350da8cd82172..v0.1.5) - 2026-03-19
+
+
+
+
+
+
+### Fixed
+
+- restore CHANGELOG.md and exclude from dprint - ([5210a24](https://github.com/azais-corentin/cmakefmt/commit/5210a24c6aab111eabab78c1b292d5e0e07f3b62))
+- treat target_include_directories keyword as group header (#4) - ([2d42b04](https://github.com/azais-corentin/cmakefmt/commit/2d42b04da4c3a8ff6000c542d0fc98fcd083ebf4))
+- use day-precision dates in changelog instead of second-precision - ([92a29a2](https://github.com/azais-corentin/cmakefmt/commit/92a29a20b75f8c013fed0d911fad9b6855f5fa23))
+- serve WASM plugin same-origin from GitHub Pages - ([22b2159](https://github.com/azais-corentin/cmakefmt/commit/22b2159ead7117d8458979e40b6350da8cd82172))
+
+
+
+
+
+<details>
+<summary><h3 style="display:inline">Internal Changes</h3></summary>
+
+
+- **documentation(website):** make Configuration sidebar item clickable - ([d962a54](https://github.com/azais-corentin/cmakefmt/commit/d962a54576a9e7d52e58d6e258737714fde6eed9))
+- **documentation:** add resolving formatting issues workflow to AGENTS.md - ([cdd0997](https://github.com/azais-corentin/cmakefmt/commit/cdd0997c6a3b68aa834b7f3d47a36464af2957dc))
+- **documentation(website):** fix errors and add missing behavioral details to config pages - ([058c361](https://github.com/azais-corentin/cmakefmt/commit/058c3617f82c92de5a03ffb780800955cd1bc321))
+- **documentation:** remove screenshots from pull request - ([0a70269](https://github.com/azais-corentin/cmakefmt/commit/0a7026973618219ca4b2fd347f22616a4cd6eb69))
+- **documentation:** correct dprint configuration filename from .dprintrc.json to dprint.json - ([815d631](https://github.com/azais-corentin/cmakefmt/commit/815d631cfaa3c789a4d4652f1a487dc4941e3194))
+- **documentation:** split configuration documentation into TOML and JSON sections with screenshots - ([00ec746](https://github.com/azais-corentin/cmakefmt/commit/00ec746e9825c18226a9a20f233e4224a7f88b4e))
+- **documentation:** verify website builds successfully - ([41e2cfd](https://github.com/azais-corentin/cmakefmt/commit/41e2cfd9d04be04e3c12513f49e5866b98146673))
+- **documentation:** split configuration into TOML and JSON sections - ([46df933](https://github.com/azais-corentin/cmakefmt/commit/46df9331374a7450dd19940069a6d322130dbe3c))
+- **miscellaneous chores(website):** remove package-lock.json - ([b6e360c](https://github.com/azais-corentin/cmakefmt/commit/b6e360c174cb2a1f2a6520476086d9ccae0641b6))
+
+</details>
+
+
+- - -
+
 ## [v0.1.4](https://github.com/azais-corentin/cmakefmt/compare/e0d9c91c9682c2cb99719a3ba870654aaf4a8c62..v0.1.4) - 2026-03-18
 
 
