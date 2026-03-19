@@ -30,6 +30,7 @@ export default defineConfig({
             { text: "Getting Started", link: "/guide/getting-started" },
             {
               text: "Configuration",
+              link: "/guide/configuration-toml",
               items: [
                 { text: "TOML (CLI)", link: "/guide/configuration-toml" },
                 { text: "JSON (dprint)", link: "/guide/configuration-json" },
