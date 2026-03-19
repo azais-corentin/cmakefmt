@@ -255,7 +255,7 @@ static TARGET_INCLUDE_DIRECTORIES_KW: &[(&str, KwType)] = &[
     ("PRIVATE", KwType::MultiValue),
 ];
 
-static TARGET_INCLUDE_DIRECTORIES_SPEC: CommandSpec = spec! { front: 2, back: 0, kw: TARGET_INCLUDE_DIRECTORIES_KW, sections: &[], cmd_line: &[], pair: &[], };
+static TARGET_INCLUDE_DIRECTORIES_SPEC: CommandSpec = spec! { front: 1, back: 0, kw: TARGET_INCLUDE_DIRECTORIES_KW, sections: &[], cmd_line: &[], pair: &[], };
 
 // ---------------------------------------------------------------------------
 // 8. target_link_directories

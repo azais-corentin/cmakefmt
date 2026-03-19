@@ -2679,9 +2679,11 @@ target_compile_options(synthetic_objects
 target_compile_features(synthetic_core PUBLIC cxx_std_20)
 target_compile_features(synthetic_shared PUBLIC cxx_std_17 PRIVATE cxx_std_20)
 
-target_include_directories(synthetic_core PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_core
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -2692,9 +2694,11 @@ target_include_directories(synthetic_core PUBLIC
     ${Boost_INCLUDE_DIRS}
 )
 
-target_include_directories(synthetic_shared PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_shared
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -2705,9 +2709,11 @@ target_include_directories(synthetic_shared PUBLIC
     ${Boost_INCLUDE_DIRS}
 )
 
-target_include_directories(synthetic_objects PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_objects
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -4427,9 +4433,11 @@ set_target_properties(synthetic_module_000 PROPERTIES
   OUTPUT_NAME           "mod000"
 )
 
-target_include_directories(synthetic_module_000 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod000>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_000
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod000>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod000
 )
@@ -4524,9 +4532,11 @@ set_target_properties(synthetic_module_001 PROPERTIES
   OUTPUT_NAME           "mod001"
 )
 
-target_include_directories(synthetic_module_001 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod001>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_001
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod001>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod001
 )
@@ -4625,9 +4635,11 @@ set_target_properties(synthetic_module_002 PROPERTIES
   OUTPUT_NAME           "mod002"
 )
 
-target_include_directories(synthetic_module_002 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod002>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_002
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod002>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod002
 )
@@ -4726,9 +4738,11 @@ set_target_properties(synthetic_module_003 PROPERTIES
   OUTPUT_NAME           "mod003"
 )
 
-target_include_directories(synthetic_module_003 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod003>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_003
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod003>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod003
 )
@@ -4827,9 +4841,11 @@ set_target_properties(synthetic_module_004 PROPERTIES
   OUTPUT_NAME           "mod004"
 )
 
-target_include_directories(synthetic_module_004 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod004>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_004
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod004>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod004
 )
@@ -4928,9 +4944,11 @@ set_target_properties(synthetic_module_005 PROPERTIES
   OUTPUT_NAME           "mod005"
 )
 
-target_include_directories(synthetic_module_005 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod005>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_005
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod005>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod005
 )
@@ -5029,9 +5047,11 @@ set_target_properties(synthetic_module_006 PROPERTIES
   OUTPUT_NAME           "mod006"
 )
 
-target_include_directories(synthetic_module_006 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod006>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_006
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod006>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod006
 )
@@ -5130,9 +5150,11 @@ set_target_properties(synthetic_module_007 PROPERTIES
   OUTPUT_NAME           "mod007"
 )
 
-target_include_directories(synthetic_module_007 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod007>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_007
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod007>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod007
 )
@@ -5231,9 +5253,11 @@ set_target_properties(synthetic_module_008 PROPERTIES
   OUTPUT_NAME           "mod008"
 )
 
-target_include_directories(synthetic_module_008 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod008>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_008
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod008>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod008
 )
@@ -5332,9 +5356,11 @@ set_target_properties(synthetic_module_009 PROPERTIES
   OUTPUT_NAME           "mod009"
 )
 
-target_include_directories(synthetic_module_009 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod009>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_009
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod009>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod009
 )
@@ -5433,9 +5459,11 @@ set_target_properties(synthetic_module_010 PROPERTIES
   OUTPUT_NAME           "mod010"
 )
 
-target_include_directories(synthetic_module_010 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod010>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_010
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod010>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod010
 )
@@ -5534,9 +5562,11 @@ set_target_properties(synthetic_module_011 PROPERTIES
   OUTPUT_NAME           "mod011"
 )
 
-target_include_directories(synthetic_module_011 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod011>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_011
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod011>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod011
 )
@@ -5635,9 +5665,11 @@ set_target_properties(synthetic_module_012 PROPERTIES
   OUTPUT_NAME           "mod012"
 )
 
-target_include_directories(synthetic_module_012 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod012>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_012
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod012>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod012
 )
@@ -5736,9 +5768,11 @@ set_target_properties(synthetic_module_013 PROPERTIES
   OUTPUT_NAME           "mod013"
 )
 
-target_include_directories(synthetic_module_013 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod013>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_013
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod013>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod013
 )
@@ -5837,9 +5871,11 @@ set_target_properties(synthetic_module_014 PROPERTIES
   OUTPUT_NAME           "mod014"
 )
 
-target_include_directories(synthetic_module_014 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod014>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_014
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod014>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod014
 )
@@ -5938,9 +5974,11 @@ set_target_properties(synthetic_module_015 PROPERTIES
   OUTPUT_NAME           "mod015"
 )
 
-target_include_directories(synthetic_module_015 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod015>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_015
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod015>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod015
 )
@@ -6039,9 +6077,11 @@ set_target_properties(synthetic_module_016 PROPERTIES
   OUTPUT_NAME           "mod016"
 )
 
-target_include_directories(synthetic_module_016 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod016>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_016
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod016>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod016
 )
@@ -6140,9 +6180,11 @@ set_target_properties(synthetic_module_017 PROPERTIES
   OUTPUT_NAME           "mod017"
 )
 
-target_include_directories(synthetic_module_017 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod017>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_017
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod017>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod017
 )
@@ -6241,9 +6283,11 @@ set_target_properties(synthetic_module_018 PROPERTIES
   OUTPUT_NAME           "mod018"
 )
 
-target_include_directories(synthetic_module_018 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod018>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_018
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod018>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod018
 )
@@ -6342,9 +6386,11 @@ set_target_properties(synthetic_module_019 PROPERTIES
   OUTPUT_NAME           "mod019"
 )
 
-target_include_directories(synthetic_module_019 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod019>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_019
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod019>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod019
 )
@@ -6443,9 +6489,11 @@ set_target_properties(synthetic_module_020 PROPERTIES
   OUTPUT_NAME           "mod020"
 )
 
-target_include_directories(synthetic_module_020 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod020>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_020
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod020>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod020
 )
@@ -6544,9 +6592,11 @@ set_target_properties(synthetic_module_021 PROPERTIES
   OUTPUT_NAME           "mod021"
 )
 
-target_include_directories(synthetic_module_021 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod021>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_021
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod021>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod021
 )
@@ -6645,9 +6695,11 @@ set_target_properties(synthetic_module_022 PROPERTIES
   OUTPUT_NAME           "mod022"
 )
 
-target_include_directories(synthetic_module_022 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod022>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_022
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod022>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod022
 )
@@ -6746,9 +6798,11 @@ set_target_properties(synthetic_module_023 PROPERTIES
   OUTPUT_NAME           "mod023"
 )
 
-target_include_directories(synthetic_module_023 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod023>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_023
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod023>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod023
 )
@@ -6847,9 +6901,11 @@ set_target_properties(synthetic_module_024 PROPERTIES
   OUTPUT_NAME           "mod024"
 )
 
-target_include_directories(synthetic_module_024 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod024>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_024
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod024>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod024
 )
@@ -6948,9 +7004,11 @@ set_target_properties(synthetic_module_025 PROPERTIES
   OUTPUT_NAME           "mod025"
 )
 
-target_include_directories(synthetic_module_025 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod025>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_025
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod025>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod025
 )
@@ -7049,9 +7107,11 @@ set_target_properties(synthetic_module_026 PROPERTIES
   OUTPUT_NAME           "mod026"
 )
 
-target_include_directories(synthetic_module_026 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod026>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_026
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod026>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod026
 )
@@ -7150,9 +7210,11 @@ set_target_properties(synthetic_module_027 PROPERTIES
   OUTPUT_NAME           "mod027"
 )
 
-target_include_directories(synthetic_module_027 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod027>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_027
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod027>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod027
 )
@@ -7251,9 +7313,11 @@ set_target_properties(synthetic_module_028 PROPERTIES
   OUTPUT_NAME           "mod028"
 )
 
-target_include_directories(synthetic_module_028 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod028>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_028
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod028>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod028
 )
@@ -7352,9 +7416,11 @@ set_target_properties(synthetic_module_029 PROPERTIES
   OUTPUT_NAME           "mod029"
 )
 
-target_include_directories(synthetic_module_029 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod029>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_029
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod029>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod029
 )
@@ -7453,9 +7519,11 @@ set_target_properties(synthetic_module_030 PROPERTIES
   OUTPUT_NAME           "mod030"
 )
 
-target_include_directories(synthetic_module_030 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod030>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_030
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod030>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod030
 )
@@ -7554,9 +7622,11 @@ set_target_properties(synthetic_module_031 PROPERTIES
   OUTPUT_NAME           "mod031"
 )
 
-target_include_directories(synthetic_module_031 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod031>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_031
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod031>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod031
 )
@@ -7655,9 +7725,11 @@ set_target_properties(synthetic_module_032 PROPERTIES
   OUTPUT_NAME           "mod032"
 )
 
-target_include_directories(synthetic_module_032 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod032>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_032
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod032>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod032
 )
@@ -7756,9 +7828,11 @@ set_target_properties(synthetic_module_033 PROPERTIES
   OUTPUT_NAME           "mod033"
 )
 
-target_include_directories(synthetic_module_033 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod033>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_033
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod033>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod033
 )
@@ -7857,9 +7931,11 @@ set_target_properties(synthetic_module_034 PROPERTIES
   OUTPUT_NAME           "mod034"
 )
 
-target_include_directories(synthetic_module_034 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod034>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_034
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod034>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod034
 )
@@ -7958,9 +8034,11 @@ set_target_properties(synthetic_module_035 PROPERTIES
   OUTPUT_NAME           "mod035"
 )
 
-target_include_directories(synthetic_module_035 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod035>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_035
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod035>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod035
 )
@@ -8059,9 +8137,11 @@ set_target_properties(synthetic_module_036 PROPERTIES
   OUTPUT_NAME           "mod036"
 )
 
-target_include_directories(synthetic_module_036 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod036>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_036
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod036>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod036
 )
@@ -8160,9 +8240,11 @@ set_target_properties(synthetic_module_037 PROPERTIES
   OUTPUT_NAME           "mod037"
 )
 
-target_include_directories(synthetic_module_037 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod037>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_037
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod037>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod037
 )
@@ -8261,9 +8343,11 @@ set_target_properties(synthetic_module_038 PROPERTIES
   OUTPUT_NAME           "mod038"
 )
 
-target_include_directories(synthetic_module_038 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod038>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_038
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod038>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod038
 )
@@ -8362,9 +8446,11 @@ set_target_properties(synthetic_module_039 PROPERTIES
   OUTPUT_NAME           "mod039"
 )
 
-target_include_directories(synthetic_module_039 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod039>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_039
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod039>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod039
 )
@@ -8463,9 +8549,11 @@ set_target_properties(synthetic_module_040 PROPERTIES
   OUTPUT_NAME           "mod040"
 )
 
-target_include_directories(synthetic_module_040 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod040>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_040
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod040>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod040
 )
@@ -8564,9 +8652,11 @@ set_target_properties(synthetic_module_041 PROPERTIES
   OUTPUT_NAME           "mod041"
 )
 
-target_include_directories(synthetic_module_041 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod041>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_041
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod041>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod041
 )
@@ -8665,9 +8755,11 @@ set_target_properties(synthetic_module_042 PROPERTIES
   OUTPUT_NAME           "mod042"
 )
 
-target_include_directories(synthetic_module_042 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod042>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_042
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod042>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod042
 )
@@ -8766,9 +8858,11 @@ set_target_properties(synthetic_module_043 PROPERTIES
   OUTPUT_NAME           "mod043"
 )
 
-target_include_directories(synthetic_module_043 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod043>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_043
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod043>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod043
 )
@@ -8867,9 +8961,11 @@ set_target_properties(synthetic_module_044 PROPERTIES
   OUTPUT_NAME           "mod044"
 )
 
-target_include_directories(synthetic_module_044 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod044>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_044
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod044>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod044
 )
@@ -8968,9 +9064,11 @@ set_target_properties(synthetic_module_045 PROPERTIES
   OUTPUT_NAME           "mod045"
 )
 
-target_include_directories(synthetic_module_045 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod045>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_045
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod045>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod045
 )
@@ -9069,9 +9167,11 @@ set_target_properties(synthetic_module_046 PROPERTIES
   OUTPUT_NAME           "mod046"
 )
 
-target_include_directories(synthetic_module_046 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod046>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_046
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod046>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod046
 )
@@ -9170,9 +9270,11 @@ set_target_properties(synthetic_module_047 PROPERTIES
   OUTPUT_NAME           "mod047"
 )
 
-target_include_directories(synthetic_module_047 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod047>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_047
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod047>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod047
 )
@@ -9271,9 +9373,11 @@ set_target_properties(synthetic_module_048 PROPERTIES
   OUTPUT_NAME           "mod048"
 )
 
-target_include_directories(synthetic_module_048 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod048>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_048
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod048>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod048
 )
@@ -9372,9 +9476,11 @@ set_target_properties(synthetic_module_049 PROPERTIES
   OUTPUT_NAME           "mod049"
 )
 
-target_include_directories(synthetic_module_049 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod049>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_049
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod049>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod049
 )
@@ -9473,9 +9579,11 @@ set_target_properties(synthetic_module_050 PROPERTIES
   OUTPUT_NAME           "mod050"
 )
 
-target_include_directories(synthetic_module_050 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod050>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_050
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod050>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod050
 )
@@ -9574,9 +9682,11 @@ set_target_properties(synthetic_module_051 PROPERTIES
   OUTPUT_NAME           "mod051"
 )
 
-target_include_directories(synthetic_module_051 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod051>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_051
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod051>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod051
 )
@@ -9675,9 +9785,11 @@ set_target_properties(synthetic_module_052 PROPERTIES
   OUTPUT_NAME           "mod052"
 )
 
-target_include_directories(synthetic_module_052 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod052>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_052
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod052>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod052
 )
@@ -9776,9 +9888,11 @@ set_target_properties(synthetic_module_053 PROPERTIES
   OUTPUT_NAME           "mod053"
 )
 
-target_include_directories(synthetic_module_053 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod053>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_053
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod053>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod053
 )
@@ -9877,9 +9991,11 @@ set_target_properties(synthetic_module_054 PROPERTIES
   OUTPUT_NAME           "mod054"
 )
 
-target_include_directories(synthetic_module_054 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod054>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_054
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod054>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod054
 )
@@ -9978,9 +10094,11 @@ set_target_properties(synthetic_module_055 PROPERTIES
   OUTPUT_NAME           "mod055"
 )
 
-target_include_directories(synthetic_module_055 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod055>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_055
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod055>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod055
 )
@@ -10079,9 +10197,11 @@ set_target_properties(synthetic_module_056 PROPERTIES
   OUTPUT_NAME           "mod056"
 )
 
-target_include_directories(synthetic_module_056 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod056>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_056
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod056>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod056
 )
@@ -10180,9 +10300,11 @@ set_target_properties(synthetic_module_057 PROPERTIES
   OUTPUT_NAME           "mod057"
 )
 
-target_include_directories(synthetic_module_057 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod057>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_057
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod057>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod057
 )
@@ -10281,9 +10403,11 @@ set_target_properties(synthetic_module_058 PROPERTIES
   OUTPUT_NAME           "mod058"
 )
 
-target_include_directories(synthetic_module_058 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod058>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_058
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod058>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod058
 )
@@ -10382,9 +10506,11 @@ set_target_properties(synthetic_module_059 PROPERTIES
   OUTPUT_NAME           "mod059"
 )
 
-target_include_directories(synthetic_module_059 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod059>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_059
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod059>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod059
 )
@@ -10483,9 +10609,11 @@ set_target_properties(synthetic_module_060 PROPERTIES
   OUTPUT_NAME           "mod060"
 )
 
-target_include_directories(synthetic_module_060 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod060>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_060
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod060>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod060
 )
@@ -10584,9 +10712,11 @@ set_target_properties(synthetic_module_061 PROPERTIES
   OUTPUT_NAME           "mod061"
 )
 
-target_include_directories(synthetic_module_061 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod061>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_061
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod061>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod061
 )
@@ -10685,9 +10815,11 @@ set_target_properties(synthetic_module_062 PROPERTIES
   OUTPUT_NAME           "mod062"
 )
 
-target_include_directories(synthetic_module_062 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod062>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_062
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod062>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod062
 )
@@ -10786,9 +10918,11 @@ set_target_properties(synthetic_module_063 PROPERTIES
   OUTPUT_NAME           "mod063"
 )
 
-target_include_directories(synthetic_module_063 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod063>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_063
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod063>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod063
 )
@@ -10887,9 +11021,11 @@ set_target_properties(synthetic_module_064 PROPERTIES
   OUTPUT_NAME           "mod064"
 )
 
-target_include_directories(synthetic_module_064 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod064>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_064
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod064>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod064
 )
@@ -10988,9 +11124,11 @@ set_target_properties(synthetic_module_065 PROPERTIES
   OUTPUT_NAME           "mod065"
 )
 
-target_include_directories(synthetic_module_065 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod065>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_065
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod065>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod065
 )
@@ -11089,9 +11227,11 @@ set_target_properties(synthetic_module_066 PROPERTIES
   OUTPUT_NAME           "mod066"
 )
 
-target_include_directories(synthetic_module_066 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod066>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_066
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod066>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod066
 )
@@ -11190,9 +11330,11 @@ set_target_properties(synthetic_module_067 PROPERTIES
   OUTPUT_NAME           "mod067"
 )
 
-target_include_directories(synthetic_module_067 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod067>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_067
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod067>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod067
 )
@@ -11291,9 +11433,11 @@ set_target_properties(synthetic_module_068 PROPERTIES
   OUTPUT_NAME           "mod068"
 )
 
-target_include_directories(synthetic_module_068 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod068>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_068
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod068>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod068
 )
@@ -11392,9 +11536,11 @@ set_target_properties(synthetic_module_069 PROPERTIES
   OUTPUT_NAME           "mod069"
 )
 
-target_include_directories(synthetic_module_069 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod069>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_069
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod069>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod069
 )
@@ -11493,9 +11639,11 @@ set_target_properties(synthetic_module_070 PROPERTIES
   OUTPUT_NAME           "mod070"
 )
 
-target_include_directories(synthetic_module_070 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod070>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_070
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod070>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod070
 )
@@ -11594,9 +11742,11 @@ set_target_properties(synthetic_module_071 PROPERTIES
   OUTPUT_NAME           "mod071"
 )
 
-target_include_directories(synthetic_module_071 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod071>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_071
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod071>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod071
 )
@@ -11695,9 +11845,11 @@ set_target_properties(synthetic_module_072 PROPERTIES
   OUTPUT_NAME           "mod072"
 )
 
-target_include_directories(synthetic_module_072 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod072>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_072
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod072>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod072
 )
@@ -11796,9 +11948,11 @@ set_target_properties(synthetic_module_073 PROPERTIES
   OUTPUT_NAME           "mod073"
 )
 
-target_include_directories(synthetic_module_073 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod073>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_073
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod073>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod073
 )
@@ -11897,9 +12051,11 @@ set_target_properties(synthetic_module_074 PROPERTIES
   OUTPUT_NAME           "mod074"
 )
 
-target_include_directories(synthetic_module_074 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod074>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(synthetic_module_074
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/mod074>
+    $<INSTALL_INTERFACE:include>
+
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/modules/mod074
 )

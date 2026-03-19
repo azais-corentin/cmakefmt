@@ -7428,8 +7428,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
   set_target_properties(end2end-bench
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO
   )
-  target_include_directories(end2end-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(end2end-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(end2end-bench
     PRIVATE XNNPACK benchmark bench-models bench-utils
@@ -7439,9 +7439,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
   set_target_properties(f32-dwconv-e2e-bench
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO
   )
-  target_include_directories(f32-dwconv-e2e-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
-    src
+  target_include_directories(f32-dwconv-e2e-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" src
   )
   target_link_libraries(f32-dwconv-e2e-bench
     PRIVATE XNNPACK benchmark bench-models bench-utils
@@ -7451,9 +7450,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
   set_target_properties(f32-gemm-e2e-bench
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS YES
   )
-  target_include_directories(f32-gemm-e2e-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
-    src
+  target_include_directories(f32-gemm-e2e-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" src
   )
   target_link_libraries(f32-gemm-e2e-bench
     PRIVATE XNNPACK fp16 benchmark bench-models bench-utils
@@ -7463,9 +7461,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
   set_target_properties(qs8-gemm-e2e-bench
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS YES
   )
-  target_include_directories(qs8-gemm-e2e-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
-    src
+  target_include_directories(qs8-gemm-e2e-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" src
   )
   target_link_libraries(qs8-gemm-e2e-bench
     PRIVATE XNNPACK fp16 benchmark bench-models bench-utils
@@ -7476,8 +7473,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
   set_target_properties(average-pooling-bench
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO
   )
-  target_include_directories(average-pooling-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(average-pooling-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(average-pooling-bench
     PRIVATE XNNPACK benchmark bench-utils
@@ -7487,8 +7484,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
   set_target_properties(bankers-rounding-bench
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO
   )
-  target_include_directories(bankers-rounding-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(bankers-rounding-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(bankers-rounding-bench
     PRIVATE XNNPACK benchmark bench-utils
@@ -7498,8 +7495,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
   set_target_properties(ceiling-bench
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO
   )
-  target_include_directories(ceiling-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(ceiling-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(ceiling-bench PRIVATE XNNPACK benchmark bench-utils)
 
@@ -7507,8 +7504,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
   set_target_properties(channel-shuffle-bench
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO
   )
-  target_include_directories(channel-shuffle-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(channel-shuffle-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(channel-shuffle-bench
     PRIVATE XNNPACK benchmark bench-utils
@@ -7518,8 +7515,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
   set_target_properties(convolution-bench
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO
   )
-  target_include_directories(convolution-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(convolution-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(convolution-bench
     PRIVATE XNNPACK fp16 benchmark bench-utils
@@ -7529,8 +7526,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
   set_target_properties(deconvolution-bench
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO
   )
-  target_include_directories(deconvolution-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(deconvolution-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(deconvolution-bench
     PRIVATE XNNPACK benchmark bench-utils
@@ -7554,8 +7551,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
   set_target_properties(global-average-pooling-bench
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO
   )
-  target_include_directories(global-average-pooling-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(global-average-pooling-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(global-average-pooling-bench
     PRIVATE XNNPACK fp16 benchmark bench-utils
@@ -7565,8 +7562,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
   set_target_properties(hardswish-bench
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO
   )
-  target_include_directories(hardswish-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(hardswish-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(hardswish-bench
     PRIVATE XNNPACK fp16 benchmark bench-utils
@@ -7576,8 +7573,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
   set_target_properties(max-pooling-bench
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO
   )
-  target_include_directories(max-pooling-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(max-pooling-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(max-pooling-bench PRIVATE XNNPACK benchmark bench-utils)
 
@@ -7592,8 +7589,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
   set_target_properties(sigmoid-bench
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO
   )
-  target_include_directories(sigmoid-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(sigmoid-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(sigmoid-bench PRIVATE XNNPACK benchmark bench-utils)
 
@@ -7601,8 +7598,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
   set_target_properties(softmax-bench
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO
   )
-  target_include_directories(softmax-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(softmax-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(softmax-bench PRIVATE XNNPACK benchmark bench-utils)
 
@@ -7610,8 +7607,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
   set_target_properties(square-root-bench
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO
   )
-  target_include_directories(square-root-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(square-root-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(square-root-bench PRIVATE XNNPACK benchmark bench-utils)
 
@@ -7619,8 +7616,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
   set_target_properties(truncation-bench
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO
   )
-  target_include_directories(truncation-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(truncation-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(truncation-bench PRIVATE XNNPACK benchmark bench-utils)
 
@@ -7630,8 +7627,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS YES
   )
   target_include_directories(f16-dwconv-bench PRIVATE src)
-  target_include_directories(f16-dwconv-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(f16-dwconv-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(f16-dwconv-bench
     PRIVATE XNNPACK cpuinfo fp16 benchmark bench-utils
@@ -7642,8 +7639,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS YES
   )
   target_include_directories(f16-gemm-bench PRIVATE src)
-  target_include_directories(f16-gemm-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(f16-gemm-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(f16-gemm-bench
     PRIVATE XNNPACK cpuinfo fp16 benchmark bench-utils
@@ -7654,8 +7651,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS YES
   )
   target_include_directories(f16-igemm-bench PRIVATE src)
-  target_include_directories(f16-igemm-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(f16-igemm-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(f16-igemm-bench
     PRIVATE XNNPACK cpuinfo fp16 benchmark bench-utils
@@ -7666,8 +7663,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS YES
   )
   target_include_directories(f16-vrelu-bench PRIVATE src)
-  target_include_directories(f16-vrelu-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(f16-vrelu-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(f16-vrelu-bench
     PRIVATE XNNPACK cpuinfo fp16 benchmark bench-utils
@@ -7678,8 +7675,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS YES
   )
   target_include_directories(f32-conv-hwc-bench PRIVATE src)
-  target_include_directories(f32-conv-hwc-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(f32-conv-hwc-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(f32-conv-hwc-bench
     PRIVATE XNNPACK cpuinfo fp16 benchmark bench-utils
@@ -7690,8 +7687,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS YES
   )
   target_include_directories(f32-dwconv-bench PRIVATE src)
-  target_include_directories(f32-dwconv-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(f32-dwconv-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(f32-dwconv-bench
     PRIVATE XNNPACK cpuinfo fp16 benchmark bench-utils
@@ -7702,8 +7699,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS YES
   )
   target_include_directories(f32-dwconv2d-chw-bench PRIVATE src)
-  target_include_directories(f32-dwconv2d-chw-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(f32-dwconv2d-chw-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(f32-dwconv2d-chw-bench
     PRIVATE XNNPACK cpuinfo fp16 benchmark bench-utils
@@ -7714,8 +7711,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS YES
   )
   target_include_directories(f32-gemm-bench PRIVATE src)
-  target_include_directories(f32-gemm-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(f32-gemm-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(f32-gemm-bench
     PRIVATE XNNPACK cpuinfo fp16 benchmark bench-utils
@@ -7726,8 +7723,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS YES
   )
   target_include_directories(f32-igemm-bench PRIVATE src)
-  target_include_directories(f32-igemm-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(f32-igemm-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(f32-igemm-bench
     PRIVATE XNNPACK cpuinfo fp16 benchmark bench-utils
@@ -7744,8 +7741,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
       CXX_EXTENSIONS YES
   )
   target_include_directories(f32-im2col-gemm-bench PRIVATE src)
-  target_include_directories(f32-im2col-gemm-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(f32-im2col-gemm-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(f32-im2col-gemm-bench
     PRIVATE XNNPACK cpuinfo fp16 benchmark bench-utils
@@ -7756,8 +7753,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS YES
   )
   target_include_directories(f32-rmax-bench PRIVATE src)
-  target_include_directories(f32-rmax-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(f32-rmax-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(f32-rmax-bench
     PRIVATE XNNPACK cpuinfo fp16 benchmark bench-utils
@@ -7768,8 +7765,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS YES
   )
   target_include_directories(f32-spmm-bench PRIVATE src)
-  target_include_directories(f32-spmm-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(f32-spmm-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(f32-spmm-bench
     PRIVATE XNNPACK cpuinfo fp16 benchmark bench-utils
@@ -7780,8 +7777,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS YES
   )
   target_include_directories(f32-softmax-bench PRIVATE src)
-  target_include_directories(f32-softmax-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(f32-softmax-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(f32-softmax-bench
     PRIVATE XNNPACK fp16 benchmark bench-utils
@@ -7792,8 +7789,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS YES
   )
   target_include_directories(f32-velu-bench PRIVATE src)
-  target_include_directories(f32-velu-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(f32-velu-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(f32-velu-bench
     PRIVATE XNNPACK fp16 benchmark bench-utils
@@ -7804,8 +7801,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS YES
   )
   target_include_directories(f32-vhswish-bench PRIVATE src)
-  target_include_directories(f32-vhswish-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(f32-vhswish-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(f32-vhswish-bench
     PRIVATE XNNPACK fp16 benchmark bench-utils
@@ -7816,8 +7813,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS YES
   )
   target_include_directories(f32-vrelu-bench PRIVATE src)
-  target_include_directories(f32-vrelu-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(f32-vrelu-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(f32-vrelu-bench
     PRIVATE XNNPACK cpuinfo fp16 benchmark bench-utils
@@ -7828,8 +7825,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS YES
   )
   target_include_directories(f32-vsigmoid-bench PRIVATE src)
-  target_include_directories(f32-vsigmoid-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(f32-vsigmoid-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(f32-vsigmoid-bench
     PRIVATE XNNPACK benchmark bench-utils
@@ -7840,8 +7837,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS YES
   )
   target_include_directories(f32-vsqrt-bench PRIVATE src)
-  target_include_directories(f32-vsqrt-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(f32-vsqrt-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(f32-vsqrt-bench
     PRIVATE XNNPACK fp16 benchmark bench-utils
@@ -7852,8 +7849,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS YES
   )
   target_include_directories(qs8-gemm-bench PRIVATE src)
-  target_include_directories(qs8-gemm-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(qs8-gemm-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(qs8-gemm-bench
     PRIVATE XNNPACK cpuinfo fp16 benchmark bench-utils
@@ -7864,8 +7861,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS YES
   )
   target_include_directories(qs8-requantization-bench PRIVATE src)
-  target_include_directories(qs8-requantization-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(qs8-requantization-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(qs8-requantization-bench
     PRIVATE XNNPACK cpuinfo fp16 benchmark bench-utils
@@ -7876,8 +7873,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS YES
   )
   target_include_directories(qu8-gemm-bench PRIVATE src)
-  target_include_directories(qu8-gemm-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(qu8-gemm-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(qu8-gemm-bench
     PRIVATE XNNPACK cpuinfo fp16 benchmark bench-utils
@@ -7888,8 +7885,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS YES
   )
   target_include_directories(qu8-requantization-bench PRIVATE src)
-  target_include_directories(qu8-requantization-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(qu8-requantization-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(qu8-requantization-bench
     PRIVATE XNNPACK cpuinfo fp16 benchmark bench-utils
@@ -7900,8 +7897,8 @@ if(XNNPACK_BUILD_BENCHMARKS)
     PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS YES
   )
   target_include_directories(rounding-bench PRIVATE src)
-  target_include_directories(rounding-bench PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
+  target_include_directories(rounding-bench
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
   )
   target_link_libraries(rounding-bench
     PRIVATE XNNPACK cpuinfo fp16 benchmark bench-utils
