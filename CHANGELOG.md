@@ -1,35 +1,65 @@
 # Changelog
-
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
----
-
+- - -
 ## [v0.1.4](https://github.com/azais-corentin/cmakefmt/compare/e0d9c91c9682c2cb99719a3ba870654aaf4a8c62..v0.1.4) - 2026-03-18
+
+
+
+
+
+
+
+
+
 
 <details>
 <summary><h3 style="display:inline">Internal Changes</h3></summary>
+
 
 - **continuous integration:** install cocogitto using mise in release workflow - ([e0d9c91](https://github.com/azais-corentin/cmakefmt/commit/e0d9c91c9682c2cb99719a3ba870654aaf4a8c62))
 
 </details>
 
----
+
+- - -
 
 ## [v0.1.3](https://github.com/azais-corentin/cmakefmt/compare/023b2ed4742f403574faf6a5775d8f3e88cd4335..v0.1.3) - 2026-03-18
 
+
+
+
+
+
+
+
+
+
 <details>
 <summary><h3 style="display:inline">Internal Changes</h3></summary>
+
 
 - **continuous integration:** replace manual cocogitto install with mise-action in release workflow - ([023b2ed](https://github.com/azais-corentin/cmakefmt/commit/023b2ed4742f403574faf6a5775d8f3e88cd4335))
 
 </details>
 
----
+
+- - -
 
 ## [v0.1.2](https://github.com/azais-corentin/cmakefmt/compare/36cef39984d04edb05aa4ce793c7eecc85a584ef..v0.1.2) - 2026-03-18
 
+
+
+
+
+
+
+
+
+
 <details>
 <summary><h3 style="display:inline">Internal Changes</h3></summary>
+
 
 - **continuous integration:** pin cocogitto to v7.0.0 in release workflow - ([f61993b](https://github.com/azais-corentin/cmakefmt/commit/f61993b14ddba52a6614be96e4d1881258aaedaa))
 - **continuous integration:** add retry logic to cargo publish in release workflow - ([5577115](https://github.com/azais-corentin/cmakefmt/commit/55771150e1d7eced0a9f9097d64a2a9e7955f9ab))
@@ -37,35 +67,48 @@ All notable changes to this project will be documented in this file. See [conven
 
 </details>
 
----
+
+- - -
 
 ## [v0.1.1](https://github.com/azais-corentin/cmakefmt/compare/0d9d720c6ba783d2967c046c8bb326efc59667de..v0.1.1) - 2026-03-18
+
+
+
 
 ### Added
 
 - add release:patch, release:minor, and release:major tasks to mise.toml - ([2eaa6e6](https://github.com/azais-corentin/cmakefmt/commit/2eaa6e67523a5b675eb449f32aa0fda6ae174224))
 
+
+
+
+
+
+
 <details>
 <summary><h3 style="display:inline">Internal Changes</h3></summary>
+
 
 - **documentation:** use absolute URLs for README images - ([0d9d720](https://github.com/azais-corentin/cmakefmt/commit/0d9d720c6ba783d2967c046c8bb326efc59667de))
 - **miscellaneous chores(release):** stop publishing cmakefmt-cli to crates.io - ([8b25eaa](https://github.com/azais-corentin/cmakefmt/commit/8b25eaadfef67a93a90241926c64c9208da78ec9))
 
 </details>
 
----
+
+- - -
 
 ## [v0.1.0](https://github.com/azais-corentin/cmakefmt/compare/236dd7b0f132bb30f13e32e6d41d267e52172955..v0.1.0) - 2026-03-18
+
 
 ### Breaking Changes
 
 - refactor cascade wrapping, alignment scoping, and atomic genex - ([29b21d2](https://github.com/azais-corentin/cmakefmt/commit/29b21d21c4800ab2d6ad8da67bcbb5a9857844c7))
-  Overhaul the cascade wrapping algorithm, alignment system, and generator
+Overhaul the cascade wrapping algorithm, alignment system, and generator
   expression handling. This is a breaking change that removes three config
   options related to genex formatting.
 
 - remove magicTrailingNewline option - ([375f7c4](https://github.com/azais-corentin/cmakefmt/commit/375f7c449bfb383a636cfecdab408d0b00a3a9b3))
-  Drop the `magicTrailingNewline` configuration option and all associated
+Drop the `magicTrailingNewline` configuration option and all associated
   logic. The input-layout signal that prevented single-line collapse when
   the closing `)` appeared on its own line is no longer supported.
 
@@ -77,6 +120,8 @@ All notable changes to this project will be documented in this file. See [conven
   - Update affected fixture expectations (alignment, wrapping, synthetic)
 
 - **config:** support command list for spaceBeforeParen - ([141c18d](https://github.com/azais-corentin/cmakefmt/commit/141c18d9c2a00c3d727a0004bca843820c757e0c))
+
+
 
 ### Added
 
@@ -106,6 +151,8 @@ All notable changes to this project will be documented in this file. See [conven
 - **generation:** improve command layout and boolean handling - ([135cd56](https://github.com/azais-corentin/cmakefmt/commit/135cd56826d9ca8c021001cc546e40d7202aafff))
 - **formatter:** migrate to fixture-based tests and stabilize command formatting - ([e18160d](https://github.com/azais-corentin/cmakefmt/commit/e18160dffd20315d831a7d9e4c501b62e05ed7ac))
 - **core:** bootstrap cmakefmt formatter and cli defaults - ([236dd7b](https://github.com/azais-corentin/cmakefmt/commit/236dd7b0f132bb30f13e32e6d41d267e52172955))
+
+
 
 ### Fixed
 
@@ -142,6 +189,8 @@ All notable changes to this project will be documented in this file. See [conven
 - **generation:** normalize option and condition genex formatting - ([666c4a0](https://github.com/azais-corentin/cmakefmt/commit/666c4a059e9997f2fb583e2df5921b451e5045bd))
 - **formatter:** correct keyword and comment handling in command formatting - ([99e09a5](https://github.com/azais-corentin/cmakefmt/commit/99e09a55d4f6c8477ae22de7d4f5328d7c415985))
 
+
+
 ### Performance
 
 - eliminate allocations across formatter pipeline (-20%) - ([fc55bd1](https://github.com/azais-corentin/cmakefmt/commit/fc55bd14482cb3e63babc1cfb4c6dc37f806559d))
@@ -152,8 +201,11 @@ All notable changes to this project will be documented in this file. See [conven
 - reduce formatter allocation overhead - ([8f927be](https://github.com/azais-corentin/cmakefmt/commit/8f927bec89c17f4a14789c714eeb4a9e2fa72e11))
 - **printer:** optimize indentation and static fragments - ([9c6b6a6](https://github.com/azais-corentin/cmakefmt/commit/9c6b6a6118cad7cf1bce1c6dd0cf5238756da7c4))
 
+
+
 <details>
 <summary><h3 style="display:inline">Internal Changes</h3></summary>
+
 
 - **build system:** consolidate dependencies into workspace.dependencies - ([b221ad9](https://github.com/azais-corentin/cmakefmt/commit/b221ad91a76881f4b458ee217f81eab2da6561ba))
 - **build system:** post-restructure build and tooling fixes - ([02f13d1](https://github.com/azais-corentin/cmakefmt/commit/02f13d149f5a4a420251cfd0ade68c42a6b9ae4a))
@@ -266,6 +318,7 @@ All notable changes to this project will be documented in this file. See [conven
 
 </details>
 
----
+
+- - -
 
 Changelog generated by [cocogitto](https://github.com/cocogitto/cocogitto).
