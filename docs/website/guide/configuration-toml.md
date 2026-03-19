@@ -51,7 +51,7 @@ See the [CLI reference](/guide/cli) for details on these flags.
 | 12.2 | `sortKeywordSections`        | `boolean`                            | `false`       |
 | 14.1 | `indentBlockBody`            | `boolean`                            | `true`        |
 | 14.2 | `endCommandArgs`             | `"remove" \| "preserve" \| "match"`  | `"remove"`    |
-| 15.2 | `extends`                    | `string`                             | —             |
+| 15.1 | `extends`                    | `string`                             | —             |
 | 16.1 | `disableFormatting`          | `boolean`                            | `false`       |
 | 16.2 | `ignorePatterns`             | `string[]`                           | `[]`          |
 | 16.3 | `ignoreCommands`             | `string[]`                           | `[]`          |
@@ -63,9 +63,9 @@ See the [CLI reference](/guide/cli) for details on these flags.
 Controls the maximum line length and how commands are broken across multiple lines when they exceed it.
 
 - **`lineWidth`** (`integer`, default: `80`) — Maximum columns per line. The formatter never breaks within a single token; if a command exceeds lineWidth and contains an oversized token, the command still wraps to multi-line layout and the oversized token occupies its own line. Range: 40–320.
-- **`wrapStyle`** (`"cascade" | "vertical"`, default: `"cascade"`) — Wrapping strategy. `"cascade"` uses a three-step algorithm: fit on one line, then keywords on new lines with arguments packed inline, then one argument per line. `"vertical"` skips the packing step and goes directly to one-per-line.
-- **`firstArgSameLine`** (`boolean`, default: `true`) — Whether the first positional argument (typically the target name) stays on the same line as the command name when wrapping.
-- **`wrapArgThreshold`** (`integer`, default: `0`) — When > 0, forces a command to multi-line layout (skips cascade Step 1) whenever it has more than this many arguments, regardless of line width. Within the multi-line layout, keyword groups follow normal cascade Step 2/3 rules. `0` disables the threshold. Keywords count toward the threshold — `target_link_libraries(MyTarget PRIVATE foo bar)` has 4 arguments, not 2.
+- **`wrapStyle`** (`"cascade" | "vertical"`, default: `"cascade"`) — Wrapping strategy. `"cascade"` uses a three-step algorithm: fit on one line, then keywords on new lines with arguments packed inline, then one argument per line. `"vertical"` skips the packing step and goes directly to one-per-line; keywords are indented by `indentWidth` and values by `continuationIndentWidth`, following the same hierarchy as cascade Step 3.
+- **`firstArgSameLine`** (`boolean`, default: `true`) — Whether the first positional argument (typically the target name) stays on the same line as the command name when wrapping. When `true` and the command name plus first argument exceed `lineWidth`, the overflow is tolerated (the line is not wrapped at the first argument). When `false`, the first argument is indented by `indentWidth` relative to the block's indentation level.
+- **`wrapArgThreshold`** (`integer`, default: `0`) — When > 0, forces a command to multi-line layout (skips cascade Step 1) whenever it has more than this many arguments, regardless of line width. Within the multi-line layout, keyword groups follow normal cascade Step 2/3 rules. Range: 0–999. `0` disables the threshold. Keywords count toward the threshold — `target_link_libraries(MyTarget PRIVATE foo bar)` has 4 arguments, not 2.
 
 ```toml
 lineWidth = 120
@@ -78,7 +78,7 @@ firstArgSameLine = false
 Controls indent character, width, and specialized indent overrides for continuation lines.
 
 - **`indentWidth`** (`integer`, default: `2`) — Spaces (or tab stops) per indentation level. Each nesting level increases indentation by this amount. Range: 1–8.
-- **`indentStyle`** (`"space" | "tab"`, default: `"space"`) — Whether to indent with spaces or hard tab characters.
+- **`indentStyle`** (`"space" | "tab"`, default: `"space"`) — Whether to indent with spaces or hard tab characters. When set to `"space"`, input tabs are converted to `indentWidth` spaces. When set to `"tab"`, the formatter uses tabs for indentation and spaces for alignment when `continuationIndentWidth` produces a non-tab-stop offset.
 - **`continuationIndentWidth`** (`integer | null`, default: `null`) — Indentation for value lines under a keyword within a wrapped command, measured relative to the keyword. Applies when arguments are laid out one-per-line (Step 3 of the cascade algorithm); when keyword groups pack inline (Step 2), `continuationIndentWidth` is not used. When `null`, inherits `indentWidth`. Range: 1–8. For commands without recognized keywords, `indentWidth` is used instead.
 
 ```toml
@@ -91,9 +91,9 @@ continuationIndentWidth = 2
 
 Controls how blank lines between statements and within commands are handled.
 
-- **`maxBlankLines`** (`integer`, default: `1`) — Maximum consecutive blank lines preserved between top-level statements. Runs exceeding this count are collapsed. Leading blank lines at the start of a file are always removed. Range: 0–100. Blank lines inside command argument lists are always discarded during reformatting. Trailing blank lines at end-of-file are also subject to this limit.
-- **`minBlankLinesBetweenBlocks`** (`integer`, default: `0`) — Minimum blank lines inserted before block-opening commands (`if`, `foreach`, `while`, `function`, `macro`, `block`). Takes precedence over `maxBlankLines` at block boundaries. Range: 0–10.
-- **`blankLineBetweenSections`** (`boolean`, default: `false`) — When `true`, insert a blank line between keyword sections (e.g., between `PUBLIC` and `PRIVATE` argument groups) within a command.
+- **`maxBlankLines`** (`integer`, default: `1`) — Maximum consecutive blank lines preserved between top-level statements. Runs exceeding this count are collapsed. Leading blank lines at the start of a file are always removed. Range: 0–100. Blank lines inside command argument lists are discarded during reformatting, except where they serve as sorting group boundaries (preserved when `sortArguments` is enabled). Trailing blank lines at end-of-file are also subject to this limit.
+- **`minBlankLinesBetweenBlocks`** (`integer`, default: `0`) — Minimum blank lines inserted before block-opening commands (`if`, `foreach`, `while`, `function`, `macro`, `block`). Takes precedence over `maxBlankLines` at block boundaries. Range: 0–10. Applies at any nesting level, including inside block bodies. Comments attached above a block move the insertion point above them. Does not insert blank lines before closing commands (`endif`, `endforeach`, etc.). The first statement inside a block body is also exempt.
+- **`blankLineBetweenSections`** (`boolean`, default: `false`) — When `true`, insert a blank line between keyword sections (e.g., between `PUBLIC` and `PRIVATE` argument groups) within a command. The blank line is inserted even between consecutive keywords with zero arguments. This option takes precedence over `maxBlankLines` for blank lines within argument lists.
 
 ```toml
 maxBlankLines = 2
@@ -108,7 +108,7 @@ Controls case normalization for command names, keywords, and boolean/comparison 
 - **`commandCase`** (`"lower" | "upper" | "unchanged"`, default: `"lower"`) — Casing applied to command names (e.g., `set`, `add_library`, `if`).
 - **`keywordCase`** (`"lower" | "upper" | "unchanged"`, default: `"upper"`) — Casing applied to recognized keywords (e.g., `PRIVATE`, `PUBLIC`, `VERSION`, `PROPERTIES`). Uses the built-in keyword dictionary plus any `customKeywords`.
 - **`customKeywords`** (`string[]`, default: `[]`) — Additional strings treated as keywords, subject to `keywordCase` normalization and section detection. Useful for project-specific or third-party module keywords.
-- **`literalCase`** (`"upper" | "lower" | "unchanged"`, default: `"unchanged"`) — Casing for well-known boolean and comparison literals (`ON`, `OFF`, `TRUE`, `FALSE`, `AND`, `OR`, `NOT`, `MATCHES`, etc.). Applies to unquoted arguments only.
+- **`literalCase`** (`"upper" | "lower" | "unchanged"`, default: `"unchanged"`) — Casing for well-known boolean and comparison literals (`ON`, `OFF`, `TRUE`, `FALSE`, `AND`, `OR`, `NOT`, `MATCHES`, etc.). Applies to unquoted arguments only. When a token appears in both the keyword dictionary and the literal list, keyword classification takes precedence when the token is parsed as a keyword.
 
 ```toml
 commandCase = "lower"
@@ -121,7 +121,7 @@ literalCase = "upper"
 
 Controls placement of the closing parenthesis and spacing around parentheses.
 
-- **`closingParenNewline`** (`boolean`, default: `true`) — When a command spans multiple lines, place the closing `)` on its own line at the block's base indentation. When `false`, the `)` stays on the last argument's line. The inline `)` is accounted for during wrapping, which can produce more compact layouts than `closingParenNewline = true`. If the last argument has a trailing comment, `)` is placed before the `#` marker.
+- **`closingParenNewline`** (`boolean`, default: `true`) — When a command spans multiple lines, place the closing `)` on its own line at the block's base indentation. When `false`, the `)` stays on the last argument's line. The inline `)` is accounted for during wrapping, which can produce more compact layouts than `closingParenNewline = true`. If the last argument has a trailing comment, `)` is placed before the `#` marker with `commentGap` spaces between `)` and `#`.
 - **`spaceBeforeParen`** (`boolean | string[]`, default: `false`) — Insert a space between the command name and `(`. `false` = no space, `true` = space for all commands, or pass an array of command names to apply selectively (e.g., `["if", "elseif", "while"]`). Case-insensitive matching.
 - **`spaceInsideParen`** (`"insert" | "remove" | "preserve"`, default: `"remove"`) — Controls whitespace after `(` and before `)` on single-line invocations. Does not apply to multi-line commands or empty argument lists. When a multi-line command collapses to a single line, `"preserve"` mode treats it as `"remove"`.
 
@@ -137,7 +137,7 @@ Controls comment formatting, alignment, and spacing.
 
 - **`commentPreservation`** (`"preserve" | "reflow"`, default: `"preserve"`) — `"preserve"` keeps comments in-place (re-indenting as needed; standalone comments inside argument lists prevent single-line collapse). `"reflow"` reflows comment text to fit within `commentWidth`, treating consecutive `#` lines as paragraphs. Paragraph breaks occur at blank comment lines or whitespace-pattern changes. Indented blocks (4+ spaces) and fenced blocks (triple backticks) are preserved verbatim. List items (starting with `-`, `*`, `+`, or digits) are not reflowed.
 - **`commentWidth`** (`integer | null`, default: `null`) — Maximum line width for comments. Only effective when `commentPreservation` is `"reflow"`. When `null`, inherits `lineWidth`. Range: 40–320.
-- **`alignTrailingComments`** (`boolean`, default: `false`) — When `true`, align trailing `#` comments on consecutive lines to start at the same column. Groups are broken by blank lines or lines without trailing comments.
+- **`alignTrailingComments`** (`boolean`, default: `false`) — When `true`, align trailing `#` comments on consecutive lines to start at the same column. Groups are broken by blank lines or lines without trailing comments. Only lines at the same block-nesting depth are aligned together. Within multi-line commands, trailing comments are aligned within per-keyword-section scope.
 - **`commentGap`** (`integer`, default: `1`) — Minimum spaces between the last code token and a trailing `#` comment. Range: 0–10.
 
 ```toml
@@ -176,7 +176,7 @@ collapseSpaces = false
 Controls column-alignment of property values, consecutive `set()` calls, and repeating argument patterns.
 
 - **`alignPropertyValues`** (`boolean`, default: `false`) — Column-align values in `PROPERTIES` key-value lists (e.g., in `set_target_properties`). Only takes effect when properties are rendered one-per-line. When a property has multiple values, all values remain on the same line after the key at the alignment column.
-- **`alignConsecutiveSet`** (`boolean`, default: `false`) — Align the first value argument of consecutive `set()` commands that form a logical group (not separated by blank lines, comments, or non-`set` commands).
+- **`alignConsecutiveSet`** (`boolean`, default: `false`) — Align the first value argument of consecutive `set()` commands that form a logical group (not separated by blank lines, comments, or non-`set` commands). Valueless `set()` calls (e.g., `set(FOO)`) and those with only scope keywords (e.g., `set(FOO PARENT_SCOPE)`) are skipped but do not break the alignment group.
 - **`alignArgGroups`** (`boolean`, default: `false`) — When arguments are laid out one-per-line, detect repeating structural patterns (lines with the same token count) and column-align them. Keyword-as-first-token lines are aligned by keyword column (padded to the width of the longest keyword with values, plus one gap space). Valueless keywords are excluded from width calculation and not padded. Flow keywords preserve their line-width-aware value wrapping under alignment. Groups are broken by blank lines or comment lines. When multiple values are packed onto a single line, they use single-space separation — column alignment applies across corresponding lines, not within a packed line.
 
 ```toml
@@ -213,8 +213,8 @@ For temporary overrides within a file, see [Inline Pragmas](/guide/inline-pragma
 
 Controls alphabetical sorting of arguments and canonical reordering of keyword sections.
 
-- **`sortArguments`** (`boolean | string[]`, default: `false`) — When `true`, alphabetically sort arguments within keyword sections marked as sortable (e.g., `PRIVATE`, `PUBLIC`, `DEPENDS`, `SOURCES`). Pass an array of section names to sort only specific sections. Sorting is case-insensitive and stable. Attached comments travel with their argument; unattached comments act as group boundaries. Unattached comments and blank lines act as group boundaries — sorting does not cross them. Generator expressions and variable references are sorted by their literal text. For `add_library` and `add_executable`, source file sections are implicitly sortable. Commands without recognized keyword sections are unaffected.
-- **`sortKeywordSections`** (`boolean`, default: `false`) — When `true`, reorder keyword sections to a canonical order (e.g., `PUBLIC` before `INTERFACE` before `PRIVATE`). The canonical order is defined per-command in the keyword dictionary.
+- **`sortArguments`** (`boolean | string[]`, default: `false`) — When `true`, alphabetically sort arguments within keyword sections marked as sortable (e.g., `PRIVATE`, `PUBLIC`, `DEPENDS`, `SOURCES`). Pass an array of section names to sort only specific sections. Sorting is case-insensitive and stable. Attached comments travel with their argument; unattached comments act as group boundaries. Unattached comments and blank lines act as group boundaries — sorting does not cross them. Generator expressions and variable references are sorted by their literal text. For `add_library` and `add_executable`, source file sections are implicitly sortable. Commands without recognized keyword sections are unaffected. Duplicates are preserved in their original order. Multi-line arguments (quoted strings spanning multiple lines) are compared by their original text.
+- **`sortKeywordSections`** (`boolean`, default: `false`) — When `true`, reorder keyword sections to a canonical order (e.g., `PUBLIC` before `INTERFACE` before `PRIVATE`). The canonical order is defined per-command in the keyword dictionary. Positional arguments before the first keyword remain in place. Comments attached to a keyword section travel with it during reordering.
 
 ```toml
 sortArguments = true
