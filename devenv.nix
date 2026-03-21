@@ -12,6 +12,8 @@
   packages = with pkgs; [
     git
     google-chrome
+    cargo-pgo
+    llvm
   ];
 
   # sharp native module needs libstdc++ on the linker path
@@ -27,12 +29,19 @@
       enable = true;
       channel = "stable";
       targets = [ "wasm32-unknown-unknown" ];
+      components = [
+        "rustc"
+        "cargo"
+        "clippy"
+        "rustfmt"
+        "rust-analyzer"
+        "llvm-tools-preview"
+      ];
     };
     python = {
       enable = true;
       uv = {
         enable = true;
-        sync.enable = true;
       };
     };
   };
