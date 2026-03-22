@@ -2169,4 +2169,90 @@ this_is_not_valid_toml
             ConfigDiagnosticSeverity::Warning
         );
     }
+
+    #[test]
+    fn empty_toml_returns_defaults() {
+        let result = load_from_toml("");
+        assert!(result.diagnostics.is_empty());
+        assert_eq!(
+            result.config.line_width,
+            Configuration::default().line_width
+        );
+        assert_eq!(
+            result.config.indent_width,
+            Configuration::default().indent_width
+        );
+        assert_eq!(
+            result.config.command_case,
+            Configuration::default().command_case
+        );
+    }
+
+    #[test]
+    fn load_from_header_empty_returns_defaults() {
+        let result = load_from_header("{}");
+        assert!(result.diagnostics.is_empty());
+        assert_eq!(
+            result.config.line_width,
+            Configuration::default().line_width
+        );
+    }
+
+    #[test]
+    fn load_from_header_with_overrides() {
+        let result = load_from_header(r#"{"lineWidth": 120, "indentWidth": 4}"#);
+        assert!(result.diagnostics.is_empty());
+        assert_eq!(result.config.line_width, 120);
+        assert_eq!(result.config.indent_width, 4);
+    }
+
+    #[test]
+    fn invalid_enum_value_produces_diagnostic() {
+        let result = load_from_toml("commandCase = \"invalid_value\"\n");
+        assert!(
+            result.diagnostics.iter().any(|d| d.key == "commandCase"),
+            "expected diagnostic for invalid commandCase, got: {:?}",
+            result.diagnostics
+        );
+    }
+
+    #[test]
+    fn unknown_key_produces_diagnostic() {
+        let result = load_from_toml("completelyUnknownKey = true\n");
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.key == "completelyUnknownKey"),
+            "expected diagnostic for unknown key, got: {:?}",
+            result.diagnostics
+        );
+    }
+
+    #[test]
+    fn load_from_json_map_basic() {
+        let mut map = serde_json::Map::new();
+        map.insert(
+            "lineWidth".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(100)),
+        );
+        map.insert(
+            "commandCase".to_string(),
+            serde_json::Value::String("upper".to_string()),
+        );
+
+        let result = load_from_json_map(map, Configuration::default());
+        assert_eq!(result.config.line_width, 100);
+        assert_eq!(result.config.command_case, CaseStyle::Upper);
+    }
+
+    #[test]
+    fn load_from_json_map_empty() {
+        let map = serde_json::Map::new();
+        let result = load_from_json_map(map, Configuration::default());
+        assert_eq!(
+            result.config.line_width,
+            Configuration::default().line_width
+        );
+    }
 }

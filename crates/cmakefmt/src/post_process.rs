@@ -832,3 +832,392 @@ fn apply_trailing_comment_alignment(
         lines[*line_idx] = new_line;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::configuration::Configuration;
+
+    fn default_config() -> Configuration {
+        Configuration::default()
+    }
+
+    fn config_with_reflow() -> Configuration {
+        let mut c = Configuration::default();
+        c.comment_preservation = CommentPreservation::Reflow;
+        c
+    }
+
+    fn config_with_set_align() -> Configuration {
+        let mut c = Configuration::default();
+        c.align_consecutive_set = true;
+        c
+    }
+
+    fn config_with_trailing_comment_align() -> Configuration {
+        let mut c = Configuration::default();
+        c.align_trailing_comments = true;
+        c.comment_gap = 2;
+        c
+    }
+
+    // -----------------------------------------------------------------------
+    // Fast path
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn fast_path_no_features_returns_borrowed() {
+        let input = "set(VAR val)\nset(B value)\n";
+        let config = default_config();
+        let result = post_process_alignments(input, &config);
+        assert!(matches!(result, Cow::Borrowed(_)));
+        assert_eq!(&*result, input);
+    }
+
+    // -----------------------------------------------------------------------
+    // is_standalone_comment_line
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn standalone_comment_line_detection() {
+        assert!(is_standalone_comment_line("# hello"));
+        assert!(is_standalone_comment_line("  # indented"));
+        assert!(!is_standalone_comment_line("set(X) # trailing"));
+        assert!(!is_standalone_comment_line(""));
+        assert!(!is_standalone_comment_line("  "));
+    }
+
+    // -----------------------------------------------------------------------
+    // is_pragma_comment_line
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn pragma_comment_detection() {
+        assert!(is_pragma_comment_line("# cmakefmt: off"));
+        assert!(is_pragma_comment_line("# cmakefmt: on"));
+        assert!(is_pragma_comment_line("# cmakefmt: skip"));
+        assert!(is_pragma_comment_line(
+            "# cmakefmt: push { lineWidth = 40 }"
+        ));
+        assert!(is_pragma_comment_line("# cmakefmt: pop"));
+        assert!(!is_pragma_comment_line("# normal comment"));
+        assert!(!is_pragma_comment_line("# cmakefmt: unknown"));
+    }
+
+    // -----------------------------------------------------------------------
+    // parse_list_marker
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn list_marker_dash() {
+        let m = parse_list_marker("- item").unwrap();
+        assert_eq!(m.prefix, "- ");
+        assert_eq!(m.text, "item");
+    }
+
+    #[test]
+    fn list_marker_star() {
+        let m = parse_list_marker("* item").unwrap();
+        assert_eq!(m.prefix, "* ");
+        assert_eq!(m.text, "item");
+    }
+
+    #[test]
+    fn list_marker_plus() {
+        let m = parse_list_marker("+ item").unwrap();
+        assert_eq!(m.prefix, "+ ");
+        assert_eq!(m.text, "item");
+    }
+
+    #[test]
+    fn list_marker_numbered() {
+        let m = parse_list_marker("1. item").unwrap();
+        assert_eq!(m.prefix, "1. ");
+        assert_eq!(m.text, "item");
+    }
+
+    #[test]
+    fn list_marker_numbered_paren() {
+        let m = parse_list_marker("2) item").unwrap();
+        assert_eq!(m.prefix, "2) ");
+        assert_eq!(m.text, "item");
+    }
+
+    #[test]
+    fn list_marker_no_space_after_dash_is_not_list() {
+        assert!(parse_list_marker("-nospc").is_none());
+    }
+
+    #[test]
+    fn list_marker_empty_content() {
+        assert!(parse_list_marker("").is_none());
+    }
+
+    #[test]
+    fn list_marker_non_list() {
+        assert!(parse_list_marker("regular text").is_none());
+    }
+
+    // -----------------------------------------------------------------------
+    // parse_push_body / is_pop_directive
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn parse_push_body_valid() {
+        let body = parse_push_body("# cmakefmt: push { lineWidth = 40 }").unwrap();
+        assert!(body.starts_with('{'));
+    }
+
+    #[test]
+    fn parse_push_body_not_push() {
+        assert!(parse_push_body("# cmakefmt: pop").is_none());
+    }
+
+    #[test]
+    fn is_pop_directive_valid() {
+        assert!(is_pop_directive("# cmakefmt: pop"));
+        assert!(is_pop_directive("  # cmakefmt: pop"));
+    }
+
+    #[test]
+    fn is_pop_directive_invalid() {
+        assert!(!is_pop_directive("# cmakefmt: push { }"));
+        assert!(!is_pop_directive("regular line"));
+    }
+
+    // -----------------------------------------------------------------------
+    // ParsedCommentLine
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn parsed_comment_line_basic() {
+        let p = ParsedCommentLine::parse("# hello world").unwrap();
+        assert_eq!(p.outer_prefix, "");
+        assert_eq!(p.content, "hello world");
+        assert!(!p.is_blank());
+    }
+
+    #[test]
+    fn parsed_comment_line_indented() {
+        let p = ParsedCommentLine::parse("  # indented").unwrap();
+        assert_eq!(p.outer_prefix, "  ");
+        assert_eq!(p.content, "indented");
+    }
+
+    #[test]
+    fn parsed_comment_line_blank() {
+        let p = ParsedCommentLine::parse("#").unwrap();
+        assert!(p.is_blank());
+    }
+
+    #[test]
+    fn parsed_comment_line_fence() {
+        let p = ParsedCommentLine::parse("# ```").unwrap();
+        assert!(p.is_fence_marker());
+    }
+
+    #[test]
+    fn parsed_comment_line_not_comment() {
+        assert!(ParsedCommentLine::parse("not a comment").is_none());
+    }
+
+    // -----------------------------------------------------------------------
+    // wrap_comment_words
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn wrap_words_single_line() {
+        let words = vec!["hello", "world"];
+        let result = wrap_comment_words(&words, 80, "# ", "# ");
+        assert_eq!(result, vec!["# hello world"]);
+    }
+
+    #[test]
+    fn wrap_words_forces_break() {
+        let words = vec!["hello", "world"];
+        let result = wrap_comment_words(&words, 12, "# ", "# ");
+        assert_eq!(result, vec!["# hello", "# world"]);
+    }
+
+    #[test]
+    fn wrap_words_empty() {
+        let words: Vec<&str> = vec![];
+        let result = wrap_comment_words(&words, 80, "# ", "# ");
+        assert_eq!(result, vec!["#"]);
+    }
+
+    // -----------------------------------------------------------------------
+    // parse_set_call
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn parse_set_call_basic() {
+        let info = parse_set_call("  set(VAR value)").unwrap();
+        assert_eq!(info.var_len, 3);
+        assert!(info.value_start.is_some());
+    }
+
+    #[test]
+    fn parse_set_call_valueless() {
+        let info = parse_set_call("set(EMPTY)").unwrap();
+        assert!(info.value_start.is_none());
+    }
+
+    #[test]
+    fn parse_set_call_parent_scope_only() {
+        let info = parse_set_call("set(VAR PARENT_SCOPE)").unwrap();
+        assert!(info.value_start.is_none());
+    }
+
+    #[test]
+    fn parse_set_call_with_value_and_parent_scope() {
+        // The second token is the value, not PARENT_SCOPE
+        let info = parse_set_call("set(VAR some_value PARENT_SCOPE)").unwrap();
+        assert!(info.value_start.is_some());
+    }
+
+    #[test]
+    fn parse_set_call_not_set_command() {
+        assert!(parse_set_call("message(STATUS \"hi\")").is_none());
+    }
+
+    #[test]
+    fn parse_set_call_multiline_rejected() {
+        // No closing paren on the line
+        assert!(parse_set_call("set(VAR").is_none());
+    }
+
+    #[test]
+    fn parse_set_call_case_insensitive() {
+        assert!(parse_set_call("SET(VAR val)").is_some());
+        assert!(parse_set_call("Set(VAR val)").is_some());
+    }
+
+    // -----------------------------------------------------------------------
+    // parse_trailing_comment
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn trailing_comment_basic() {
+        let info = parse_trailing_comment("set(VAR val) # comment").unwrap();
+        assert_eq!(info.comment, "# comment");
+        assert_eq!(info.code_len, "set(VAR val)".len());
+    }
+
+    #[test]
+    fn trailing_comment_standalone_is_none() {
+        assert!(parse_trailing_comment("# standalone comment").is_none());
+    }
+
+    #[test]
+    fn trailing_comment_blank_line_is_none() {
+        assert!(parse_trailing_comment("").is_none());
+        assert!(parse_trailing_comment("   ").is_none());
+    }
+
+    #[test]
+    fn trailing_comment_inside_quoted_string_ignored() {
+        // The `#` inside the quoted string should not be treated as a comment
+        let result = parse_trailing_comment("set(VAR \"value # not comment\")");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn trailing_comment_after_quoted_string() {
+        let info = parse_trailing_comment("set(VAR \"value\") # comment").unwrap();
+        assert_eq!(info.comment, "# comment");
+    }
+
+    #[test]
+    fn trailing_comment_escaped_quote_in_string() {
+        // Escaped quote inside string shouldn't confuse the parser
+        let info = parse_trailing_comment(r#"set(VAR "val\"ue") # comment"#).unwrap();
+        assert_eq!(info.comment, "# comment");
+    }
+
+    // -----------------------------------------------------------------------
+    // align_consecutive_set_lines (integration-style)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn set_alignment_two_consecutive() {
+        let config = config_with_set_align();
+        let input = "set(A value)\nset(LONGVAR value)\n";
+        let result = post_process_alignments(input, &config);
+        let lines: Vec<&str> = result.lines().collect();
+        assert_eq!(lines.len(), 2);
+        // Both values should be at the same column
+        let v1_pos = lines[0].find("value").unwrap();
+        let v2_pos = lines[1].find("value").unwrap();
+        assert_eq!(v1_pos, v2_pos);
+    }
+
+    #[test]
+    fn set_alignment_broken_by_blank_line() {
+        let config = config_with_set_align();
+        let input = "set(A value)\n\nset(LONGVAR value)\n";
+        let result = post_process_alignments(input, &config);
+        let lines: Vec<&str> = result.lines().collect();
+        // Groups should NOT be aligned together (blank line breaks the group)
+        let v1_pos = lines[0].find("value").unwrap();
+        let v2_pos = lines[2].find("value").unwrap();
+        // They should have different positions because LONGVAR is longer
+        assert_ne!(v1_pos, v2_pos);
+    }
+
+    // -----------------------------------------------------------------------
+    // align_trailing_comment_lines (integration-style)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn trailing_comment_alignment_two_lines() {
+        let config = config_with_trailing_comment_align();
+        let input = "set(A val) # comment1\nset(LONGVAR val) # comment2\n";
+        let result = post_process_alignments(input, &config);
+        let lines: Vec<&str> = result.lines().collect();
+        assert_eq!(lines.len(), 2);
+        // Comments should be aligned
+        let c1_pos = lines[0].find("# comment1").unwrap();
+        let c2_pos = lines[1].find("# comment2").unwrap();
+        assert_eq!(c1_pos, c2_pos);
+    }
+
+    // -----------------------------------------------------------------------
+    // reflow (integration-style)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn reflow_long_comment_wraps() {
+        let mut config = config_with_reflow();
+        config.line_width = 30;
+        config.comment_width = Some(30);
+        let input = "# This is a very long comment that should be reflowed to a shorter width\n";
+        let result = post_process_alignments(input, &config);
+        // All lines should be <= 30 chars
+        for line in result.lines() {
+            assert!(
+                line.len() <= 30,
+                "line too long ({} chars): {line}",
+                line.len()
+            );
+        }
+    }
+
+    #[test]
+    fn reflow_preserves_fence_blocks() {
+        let config = config_with_reflow();
+        let input = "# ```\n# code inside fence block that should not be reflowed at all\n# ```\n";
+        let result = post_process_alignments(input, &config);
+        // Fence blocks should be preserved verbatim
+        assert!(result.contains("code inside fence block"));
+    }
+
+    #[test]
+    fn reflow_preserves_blank_comment_lines() {
+        let config = config_with_reflow();
+        let input = "# paragraph one\n#\n# paragraph two\n";
+        let result = post_process_alignments(input, &config);
+        // Blank comment line should be preserved as paragraph separator
+        assert!(result.contains("#\n"));
+    }
+}
