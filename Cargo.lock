@@ -208,6 +208,7 @@ dependencies = [
  "glob",
  "serde",
  "serde_json",
+ "tempfile",
  "toml",
  "tracing",
  "tracing-chrome",

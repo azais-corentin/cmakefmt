@@ -319,3 +319,269 @@ fn parse_single_argument(p: &mut Parser) -> Result<Argument> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -----------------------------------------------------------------------
+    // byte_offset_to_line_col
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn line_col_empty_input() {
+        assert_eq!(byte_offset_to_line_col("", 0), (1, 1));
+    }
+
+    #[test]
+    fn line_col_single_line() {
+        assert_eq!(byte_offset_to_line_col("hello", 0), (1, 1));
+        assert_eq!(byte_offset_to_line_col("hello", 3), (1, 4));
+        assert_eq!(byte_offset_to_line_col("hello", 5), (1, 6));
+    }
+
+    #[test]
+    fn line_col_multi_line() {
+        let src = "ab\ncd\nef";
+        assert_eq!(byte_offset_to_line_col(src, 0), (1, 1)); // 'a'
+        assert_eq!(byte_offset_to_line_col(src, 2), (1, 3)); // '\n'
+        assert_eq!(byte_offset_to_line_col(src, 3), (2, 1)); // 'c'
+        assert_eq!(byte_offset_to_line_col(src, 6), (3, 1)); // 'e'
+    }
+
+    #[test]
+    fn line_col_offset_past_end() {
+        assert_eq!(byte_offset_to_line_col("abc", 100), (1, 4));
+    }
+
+    #[test]
+    fn line_col_at_newline_boundary() {
+        let src = "a\nb";
+        assert_eq!(byte_offset_to_line_col(src, 1), (1, 2)); // at '\n'
+        assert_eq!(byte_offset_to_line_col(src, 2), (2, 1)); // at 'b'
+    }
+
+    // -----------------------------------------------------------------------
+    // parse — empty / minimal inputs
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn parse_empty_file() {
+        let file = parse("").unwrap();
+        assert!(file.elements.is_empty());
+    }
+
+    #[test]
+    fn parse_blank_lines() {
+        let file = parse("\n\n\n").unwrap();
+        assert_eq!(file.elements.len(), 3);
+        for elem in &file.elements {
+            assert!(matches!(elem, FileElement::BlankLine));
+        }
+    }
+
+    #[test]
+    fn parse_whitespace_only() {
+        let file = parse("   \t  ").unwrap();
+        assert!(file.elements.is_empty());
+    }
+
+    // -----------------------------------------------------------------------
+    // parse — commands
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn parse_simple_command() {
+        let src = "message(STATUS \"hello\")\n";
+        let file = parse(src).unwrap();
+        assert_eq!(file.elements.len(), 1);
+
+        let cmd = match &file.elements[0] {
+            FileElement::Command(cmd) => cmd,
+            other => panic!("expected Command, got {other:?}"),
+        };
+
+        assert_eq!(cmd.name.text(src), "message");
+        assert_eq!(cmd.arguments.len(), 2);
+
+        assert!(matches!(&cmd.arguments[0], Argument::Unquoted(s) if s.text(src) == "STATUS"));
+        assert!(matches!(&cmd.arguments[1], Argument::Quoted(s) if s.text(src) == "\"hello\""));
+        assert!(cmd.trailing_comment.is_none());
+    }
+
+    #[test]
+    fn parse_command_no_args() {
+        let src = "cmake_minimum_required()\n";
+        let file = parse(src).unwrap();
+        let cmd = match &file.elements[0] {
+            FileElement::Command(cmd) => cmd,
+            other => panic!("expected Command, got {other:?}"),
+        };
+        assert!(cmd.arguments.is_empty());
+    }
+
+    #[test]
+    fn parse_multiple_commands() {
+        let src = "set(A 1)\nset(B 2)\n";
+        let file = parse(src).unwrap();
+        assert_eq!(file.elements.len(), 2);
+        assert!(matches!(&file.elements[0], FileElement::Command(_)));
+        assert!(matches!(&file.elements[1], FileElement::Command(_)));
+    }
+
+    #[test]
+    fn parse_command_with_trailing_comment() {
+        let src = "set(VAR val) # a comment\n";
+        let file = parse(src).unwrap();
+        let cmd = match &file.elements[0] {
+            FileElement::Command(cmd) => cmd,
+            other => panic!("expected Command, got {other:?}"),
+        };
+        assert!(cmd.trailing_comment.is_some());
+        let comment = cmd.trailing_comment.unwrap();
+        assert_eq!(comment.text(src), "# a comment");
+    }
+
+    // -----------------------------------------------------------------------
+    // parse — comments
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn parse_line_comment() {
+        let src = "# top-level comment\n";
+        let file = parse(src).unwrap();
+        assert_eq!(file.elements.len(), 1);
+        assert!(
+            matches!(&file.elements[0], FileElement::LineComment(s) if s.text(src) == "# top-level comment")
+        );
+    }
+
+    #[test]
+    fn parse_bracket_comment() {
+        let src = "#[[bracket comment]]\n";
+        let file = parse(src).unwrap();
+        assert_eq!(file.elements.len(), 1);
+        assert!(matches!(&file.elements[0], FileElement::BracketComment(_)));
+    }
+
+    // -----------------------------------------------------------------------
+    // parse — arguments
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn parse_bracket_argument() {
+        let src = "cmd([=[bracket arg]=])\n";
+        let file = parse(src).unwrap();
+        let cmd = match &file.elements[0] {
+            FileElement::Command(cmd) => cmd,
+            other => panic!("expected Command, got {other:?}"),
+        };
+        assert_eq!(cmd.arguments.len(), 1);
+        assert!(
+            matches!(&cmd.arguments[0], Argument::Bracket(s) if s.text(src) == "[=[bracket arg]=]")
+        );
+    }
+
+    #[test]
+    fn parse_argument_merging() {
+        // Adjacent unquoted+quoted should merge into single Unquoted argument
+        let src = "cmd(-Da=\"b c\")\n";
+        let file = parse(src).unwrap();
+        let cmd = match &file.elements[0] {
+            FileElement::Command(cmd) => cmd,
+            other => panic!("expected Command, got {other:?}"),
+        };
+        assert_eq!(cmd.arguments.len(), 1);
+        assert!(matches!(&cmd.arguments[0], Argument::Unquoted(s) if s.text(src) == "-Da=\"b c\""));
+    }
+
+    #[test]
+    fn parse_parenthesized_group() {
+        let src = "cmd((a b c))\n";
+        let file = parse(src).unwrap();
+        let cmd = match &file.elements[0] {
+            FileElement::Command(cmd) => cmd,
+            other => panic!("expected Command, got {other:?}"),
+        };
+        assert_eq!(cmd.arguments.len(), 1);
+        match &cmd.arguments[0] {
+            Argument::ParenGroup { arguments } => {
+                assert_eq!(arguments.len(), 3);
+            }
+            other => panic!("expected ParenGroup, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_comment_in_args() {
+        let src = "cmd(arg1 # inline comment\n  arg2)\n";
+        let file = parse(src).unwrap();
+        let cmd = match &file.elements[0] {
+            FileElement::Command(cmd) => cmd,
+            other => panic!("expected Command, got {other:?}"),
+        };
+        assert_eq!(cmd.arguments.len(), 3);
+        assert!(matches!(&cmd.arguments[0], Argument::Unquoted(_)));
+        assert!(matches!(&cmd.arguments[1], Argument::LineComment(_)));
+        assert!(matches!(&cmd.arguments[2], Argument::Unquoted(_)));
+    }
+
+    #[test]
+    fn parse_bracket_comment_in_args() {
+        let src = "cmd(arg1 #[[bc]] arg2)\n";
+        let file = parse(src).unwrap();
+        let cmd = match &file.elements[0] {
+            FileElement::Command(cmd) => cmd,
+            other => panic!("expected Command, got {other:?}"),
+        };
+        assert!(
+            cmd.arguments
+                .iter()
+                .any(|a| matches!(a, Argument::BracketComment(_)))
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // parse — error cases
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn parse_missing_open_paren_returns_error() {
+        let result = parse("command\n");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_missing_close_paren_returns_error() {
+        let result = parse("command(arg\n");
+        assert!(result.is_err());
+    }
+
+    // -----------------------------------------------------------------------
+    // parse — mixed content
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn parse_mixed_content() {
+        let src = "# comment\n\nset(A 1)\n# another\nmessage(\"hi\")\n";
+        let file = parse(src).unwrap();
+        assert_eq!(file.elements.len(), 5);
+        assert!(matches!(&file.elements[0], FileElement::LineComment(_)));
+        assert!(matches!(&file.elements[1], FileElement::BlankLine));
+        assert!(matches!(&file.elements[2], FileElement::Command(_)));
+        assert!(matches!(&file.elements[3], FileElement::LineComment(_)));
+        assert!(matches!(&file.elements[4], FileElement::Command(_)));
+    }
+
+    #[test]
+    fn parse_command_with_space_before_paren() {
+        let src = "set (VAR val)\n";
+        let file = parse(src).unwrap();
+        let cmd = match &file.elements[0] {
+            FileElement::Command(cmd) => cmd,
+            other => panic!("expected Command, got {other:?}"),
+        };
+        assert_eq!(cmd.name.text(src), "set");
+        assert_eq!(cmd.arguments.len(), 2);
+    }
+}

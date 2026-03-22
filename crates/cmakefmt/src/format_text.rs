@@ -514,3 +514,242 @@ fn collapse_inline_spaces(line: &str) -> String {
 
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn test_path() -> PathBuf {
+        PathBuf::from("CMakeLists.txt")
+    }
+
+    // -----------------------------------------------------------------------
+    // strip_bom
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn strip_bom_present() {
+        let input = "\u{feff}set(A 1)\n";
+        assert_eq!(strip_bom(input), "set(A 1)\n");
+    }
+
+    #[test]
+    fn strip_bom_absent() {
+        let input = "set(A 1)\n";
+        assert_eq!(strip_bom(input), input);
+    }
+
+    #[test]
+    fn strip_bom_empty() {
+        assert_eq!(strip_bom(""), "");
+    }
+
+    // -----------------------------------------------------------------------
+    // has_bare_cr / normalize_bare_crs
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn has_bare_cr_none() {
+        assert!(!has_bare_cr("hello\nworld\r\n"));
+    }
+
+    #[test]
+    fn has_bare_cr_bare() {
+        assert!(has_bare_cr("hello\rworld"));
+    }
+
+    #[test]
+    fn has_bare_cr_only_crlf() {
+        assert!(!has_bare_cr("a\r\nb\r\n"));
+    }
+
+    #[test]
+    fn normalize_bare_crs_converts_to_lf() {
+        let result = normalize_bare_crs("a\rb\r\nc");
+        assert_eq!(result, "a\nb\r\nc");
+    }
+
+    #[test]
+    fn normalize_bare_crs_no_change() {
+        let input = "a\r\nb";
+        let result = normalize_bare_crs(input);
+        assert_eq!(result, input);
+    }
+
+    // -----------------------------------------------------------------------
+    // count_bare_crs_in
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn count_bare_crs_none() {
+        assert_eq!(count_bare_crs_in("hello world"), 0);
+    }
+
+    #[test]
+    fn count_bare_crs_some() {
+        assert_eq!(count_bare_crs_in("a\rb\rc"), 2);
+    }
+
+    #[test]
+    fn count_bare_crs_not_crlf() {
+        assert_eq!(count_bare_crs_in("a\r\nb"), 0);
+    }
+
+    // -----------------------------------------------------------------------
+    // count_trailing_newlines
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn trailing_newlines_lf() {
+        assert_eq!(count_trailing_newlines("abc\n\n\n", "\n"), 3);
+    }
+
+    #[test]
+    fn trailing_newlines_crlf() {
+        assert_eq!(count_trailing_newlines("abc\r\n\r\n", "\r\n"), 2);
+    }
+
+    #[test]
+    fn trailing_newlines_none() {
+        assert_eq!(count_trailing_newlines("abc", "\n"), 0);
+    }
+
+    // -----------------------------------------------------------------------
+    // resolve_new_line_kind
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn resolve_lf() {
+        assert_eq!(resolve_new_line_kind("", NewLineKind::Lf), "\n");
+    }
+
+    #[test]
+    fn resolve_crlf() {
+        assert_eq!(resolve_new_line_kind("", NewLineKind::CrLf), "\r\n");
+    }
+
+    #[test]
+    fn resolve_auto_detects_lf() {
+        assert_eq!(resolve_new_line_kind("a\nb\n", NewLineKind::Auto), "\n");
+    }
+
+    #[test]
+    fn resolve_auto_detects_crlf() {
+        assert_eq!(
+            resolve_new_line_kind("a\r\nb\r\n", NewLineKind::Auto),
+            "\r\n"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // collapse_inline_spaces
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn collapse_spaces_basic() {
+        assert_eq!(collapse_inline_spaces("a  b   c"), "a b c");
+    }
+
+    #[test]
+    fn collapse_spaces_preserves_leading() {
+        assert_eq!(collapse_inline_spaces("    a  b"), "    a b");
+    }
+
+    #[test]
+    fn collapse_spaces_preserves_quoted() {
+        assert_eq!(
+            collapse_inline_spaces("set(VAR \"a  b  c\")"),
+            "set(VAR \"a  b  c\")"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // should_bypass_formatting
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn bypass_when_disabled() {
+        let mut config = Configuration::default();
+        config.disable_formatting = true;
+        assert!(should_bypass_formatting(&test_path(), &config));
+    }
+
+    #[test]
+    fn no_bypass_default() {
+        let config = Configuration::default();
+        assert!(!should_bypass_formatting(&test_path(), &config));
+    }
+
+    // -----------------------------------------------------------------------
+    // format_text (integration-style)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn format_already_formatted_returns_none() {
+        let config = Configuration::default();
+        let input = "set(A 1)\n";
+        let result = format_text(&test_path(), input, &config).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn format_text_normalizes_command_case() {
+        let config = Configuration::default(); // default is lowercase
+        let input = "SET(A 1)\n";
+        let result = format_text(&test_path(), input, &config).unwrap();
+        assert!(result.is_some());
+        assert!(result.unwrap().starts_with("set("));
+    }
+
+    #[test]
+    fn format_text_disabled_returns_none() {
+        let mut config = Configuration::default();
+        config.disable_formatting = true;
+        let input = "SET(A 1)\n";
+        let result = format_text(&test_path(), input, &config).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn format_text_bom_stripped() {
+        let config = Configuration::default();
+        let input = "\u{feff}set(A 1)\n";
+        let result = format_text(&test_path(), input, &config).unwrap();
+        // Should produce a change (BOM removed)
+        assert!(result.is_some());
+        assert!(!result.unwrap().starts_with('\u{feff}'));
+    }
+
+    // -----------------------------------------------------------------------
+    // parse_leading_pragma
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn leading_pragma_push() {
+        match parse_leading_pragma("# cmakefmt: push { lineWidth = 40 }") {
+            Some(LeadingPragmaDirective::Push(body)) => {
+                assert!(body.starts_with('{'));
+            }
+            _ => panic!("expected Push"),
+        }
+    }
+
+    #[test]
+    fn leading_pragma_pop() {
+        assert!(matches!(
+            parse_leading_pragma("# cmakefmt: pop"),
+            Some(LeadingPragmaDirective::Pop)
+        ));
+    }
+
+    #[test]
+    fn leading_pragma_unknown() {
+        assert!(parse_leading_pragma("# cmakefmt: off").is_none());
+    }
+
+    #[test]
+    fn leading_pragma_not_pragma() {
+        assert!(parse_leading_pragma("# regular comment").is_none());
+    }
+}
