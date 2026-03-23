@@ -1,0 +1,30 @@
+if(CONDITION)
+  set(A 1)
+  if(NESTED)
+    message(STATUS "nested if")
+  elseif(OTHER)
+    message(STATUS "elseif")
+  else()
+    message(STATUS "else")
+  endif()
+endif()
+
+while(RUNNING)
+  message(STATUS "looping")
+endwhile()
+
+foreach(item a b c)
+  message(STATUS ${item})
+endforeach()
+
+function(my_func ARG)
+  message(STATUS ${ARG})
+endfunction()
+
+macro(my_macro ARG)
+  message(STATUS ${ARG})
+endmacro()
+
+block()
+  set(X 1)
+endblock()

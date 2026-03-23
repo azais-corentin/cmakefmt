@@ -2255,4 +2255,195 @@ this_is_not_valid_toml
             Configuration::default().line_width
         );
     }
+
+    // -----------------------------------------------------------------------
+    // Edge case: per-command config with multiple commands
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn per_command_config_multiple_commands() {
+        let result = load_from_toml(
+            r#"
+[perCommandConfig.set]
+wrapStyle = "cascade"
+
+[perCommandConfig.message]
+commandCase = "upper"
+
+[perCommandConfig.if]
+spaceBeforeParen = true
+lineWidth = 100
+"#,
+        );
+
+        assert!(result.diagnostics.is_empty());
+        assert_eq!(result.config.per_command_config.len(), 3);
+
+        let set_cfg = result.config.per_command_config.get("set").unwrap();
+        assert_eq!(set_cfg.wrap_style, Some(WrapStyle::Cascade));
+
+        let msg_cfg = result.config.per_command_config.get("message").unwrap();
+        assert_eq!(msg_cfg.command_case, Some(CaseStyle::Upper));
+
+        let if_cfg = result.config.per_command_config.get("if").unwrap();
+        assert_eq!(if_cfg.space_before_paren, Some(SpaceBeforeParen::Always));
+        assert_eq!(if_cfg.line_width, Some(100));
+    }
+
+    // -----------------------------------------------------------------------
+    // Edge case: all non-default values round-trip
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn all_non_default_values() {
+        let result = load_from_toml(
+            r#"
+lineWidth = 200
+indentWidth = 8
+indentStyle = "tab"
+commandCase = "upper"
+keywordCase = "preserve"
+closingParenNewline = false
+lineEnding = "crlf"
+finalNewline = false
+trimTrailingWhitespace = false
+maxBlankLines = 5
+wrapStyle = "vertical"
+firstArgSameLine = false
+sortLists = true
+endCommandArgs = "match"
+indentBlockBody = false
+"#,
+        );
+
+        assert!(
+            result.diagnostics.is_empty(),
+            "unexpected diagnostics: {:?}",
+            result.diagnostics
+        );
+        assert_eq!(result.config.line_width, 200);
+        assert_eq!(result.config.indent_width, 8);
+        assert_eq!(result.config.indent_style, IndentStyle::Tab);
+        assert!(result.config.use_tabs);
+        assert_eq!(result.config.command_case, CaseStyle::Upper);
+        assert_eq!(result.config.keyword_case, CaseStyle::Preserve);
+        assert!(!result.config.closing_paren_newline);
+        assert_eq!(result.config.new_line_kind, NewLineKind::CrLf);
+        assert!(!result.config.final_newline);
+        assert!(!result.config.trim_trailing_whitespace);
+        assert_eq!(result.config.max_blank_lines, 5);
+        assert_eq!(result.config.wrap_style, WrapStyle::Vertical);
+        assert!(!result.config.first_arg_same_line);
+        assert!(result.config.sort_lists);
+        assert_eq!(result.config.end_command_args, EndCommandArgs::Match);
+        assert!(!result.config.indent_block_body);
+    }
+
+    // -----------------------------------------------------------------------
+    // Edge case: per-command config with unknown sub-key emits diagnostic
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn per_command_unknown_sub_key_diagnostic() {
+        let result = load_from_toml(
+            r#"
+[perCommandConfig.set]
+unknownSubKey = true
+"#,
+        );
+
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains("Unknown")),
+            "expected diagnostic for unknown sub-key, got: {:?}",
+            result.diagnostics
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Edge case: ignore patterns is an array of strings
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn ignore_patterns_array() {
+        let result = load_from_toml(
+            "ignorePatterns = [\"build/**\", \"third_party/**\", \"*.gen.cmake\"]\n",
+        );
+
+        assert!(result.diagnostics.is_empty());
+        assert_eq!(result.config.ignore_patterns.len(), 3);
+    }
+
+    // -----------------------------------------------------------------------
+    // Edge case: ignore commands is an array of strings
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn ignore_commands_array() {
+        let result = load_from_toml(
+            "ignoreCommands = [\"ExternalProject_Add\", \"FetchContent_Declare\"]\n",
+        );
+
+        assert!(result.diagnostics.is_empty());
+        assert_eq!(result.config.ignore_commands.len(), 2);
+        assert_eq!(result.config.ignore_commands[0], "ExternalProject_Add");
+        assert_eq!(result.config.ignore_commands[1], "FetchContent_Declare");
+    }
+
+    // -----------------------------------------------------------------------
+    // Edge case: multiple diagnostics from a single config
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn multiple_diagnostics_collected() {
+        let result = load_from_toml(
+            r#"
+commandCase = "invalid"
+keywordCase = "invalid"
+unknownKey1 = true
+unknownKey2 = 42
+"#,
+        );
+
+        assert!(
+            result.diagnostics.len() >= 4,
+            "expected at least 4 diagnostics, got {}: {:?}",
+            result.diagnostics.len(),
+            result.diagnostics
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Edge case: inline override format parsing
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn inline_override_json_format() {
+        let base = Configuration::default();
+        let overridden =
+            apply_inline_overrides(&base, r#"{ "lineWidth": 40, "commandCase": "upper" }"#);
+
+        assert_eq!(overridden.line_width, 40);
+        assert_eq!(overridden.command_case, CaseStyle::Upper);
+    }
+
+    #[test]
+    fn inline_override_toml_format() {
+        let base = Configuration::default();
+        let overridden = apply_inline_overrides(&base, "{ lineWidth = 40 }");
+
+        assert_eq!(overridden.line_width, 40);
+    }
+
+    #[test]
+    fn inline_override_malformed_returns_base() {
+        let base = Configuration::default();
+        let overridden = apply_inline_overrides(&base, "{ this is not valid }");
+
+        // Malformed input should return the base config unchanged
+        assert_eq!(overridden.line_width, base.line_width);
+        assert_eq!(overridden.command_case, base.command_case);
+    }
 }

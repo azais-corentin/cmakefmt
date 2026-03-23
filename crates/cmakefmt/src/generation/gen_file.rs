@@ -643,3 +643,426 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
 
     items
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -----------------------------------------------------------------------
+    // classify_block_role
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn classify_block_opener_if() {
+        assert_eq!(classify_block_role("if"), BlockRole::Opener);
+        assert_eq!(classify_block_role("IF"), BlockRole::Opener);
+        assert_eq!(classify_block_role("If"), BlockRole::Opener);
+    }
+
+    #[test]
+    fn classify_block_opener_while() {
+        assert_eq!(classify_block_role("while"), BlockRole::Opener);
+        assert_eq!(classify_block_role("WHILE"), BlockRole::Opener);
+    }
+
+    #[test]
+    fn classify_block_opener_macro() {
+        assert_eq!(classify_block_role("macro"), BlockRole::Opener);
+        assert_eq!(classify_block_role("MACRO"), BlockRole::Opener);
+    }
+
+    #[test]
+    fn classify_block_opener_function() {
+        assert_eq!(classify_block_role("function"), BlockRole::Opener);
+        assert_eq!(classify_block_role("FUNCTION"), BlockRole::Opener);
+    }
+
+    #[test]
+    fn classify_block_opener_foreach() {
+        assert_eq!(classify_block_role("foreach"), BlockRole::Opener);
+        assert_eq!(classify_block_role("FOREACH"), BlockRole::Opener);
+    }
+
+    #[test]
+    fn classify_block_opener_block() {
+        assert_eq!(classify_block_role("block"), BlockRole::Opener);
+        assert_eq!(classify_block_role("BLOCK"), BlockRole::Opener);
+    }
+
+    #[test]
+    fn classify_block_middle_else() {
+        assert_eq!(classify_block_role("else"), BlockRole::Middle);
+        assert_eq!(classify_block_role("ELSE"), BlockRole::Middle);
+    }
+
+    #[test]
+    fn classify_block_middle_elseif() {
+        assert_eq!(classify_block_role("elseif"), BlockRole::Middle);
+        assert_eq!(classify_block_role("ELSEIF"), BlockRole::Middle);
+    }
+
+    #[test]
+    fn classify_block_closer_endif() {
+        assert_eq!(classify_block_role("endif"), BlockRole::Closer);
+        assert_eq!(classify_block_role("ENDIF"), BlockRole::Closer);
+    }
+
+    #[test]
+    fn classify_block_closer_endwhile() {
+        assert_eq!(classify_block_role("endwhile"), BlockRole::Closer);
+        assert_eq!(classify_block_role("ENDWHILE"), BlockRole::Closer);
+    }
+
+    #[test]
+    fn classify_block_closer_endmacro() {
+        assert_eq!(classify_block_role("endmacro"), BlockRole::Closer);
+        assert_eq!(classify_block_role("ENDMACRO"), BlockRole::Closer);
+    }
+
+    #[test]
+    fn classify_block_closer_endblock() {
+        assert_eq!(classify_block_role("endblock"), BlockRole::Closer);
+        assert_eq!(classify_block_role("ENDBLOCK"), BlockRole::Closer);
+    }
+
+    #[test]
+    fn classify_block_closer_endforeach() {
+        assert_eq!(classify_block_role("endforeach"), BlockRole::Closer);
+        assert_eq!(classify_block_role("ENDFOREACH"), BlockRole::Closer);
+    }
+
+    #[test]
+    fn classify_block_closer_endfunction() {
+        assert_eq!(classify_block_role("endfunction"), BlockRole::Closer);
+        assert_eq!(classify_block_role("ENDFUNCTION"), BlockRole::Closer);
+    }
+
+    #[test]
+    fn classify_block_none_for_regular_commands() {
+        assert_eq!(classify_block_role("set"), BlockRole::None);
+        assert_eq!(classify_block_role("message"), BlockRole::None);
+        assert_eq!(classify_block_role("add_executable"), BlockRole::None);
+        assert_eq!(classify_block_role("project"), BlockRole::None);
+    }
+
+    #[test]
+    fn classify_block_none_for_similar_names() {
+        // Commands that share length with block commands but are not block commands
+        assert_eq!(classify_block_role("fi"), BlockRole::None); // len 2 but not "if"
+        assert_eq!(classify_block_role("elif"), BlockRole::None); // len 4 but not "else"
+        assert_eq!(classify_block_role("ifdef"), BlockRole::None); // len 5 but not a block keyword
+        assert_eq!(classify_block_role("end_if"), BlockRole::None); // len 6 but not "elseif"
+    }
+
+    #[test]
+    fn classify_block_none_for_empty_string() {
+        assert_eq!(classify_block_role(""), BlockRole::None);
+    }
+
+    #[test]
+    fn classify_block_mixed_case() {
+        assert_eq!(classify_block_role("iF"), BlockRole::Opener);
+        assert_eq!(classify_block_role("eLsE"), BlockRole::Middle);
+        assert_eq!(classify_block_role("EnDiF"), BlockRole::Closer);
+        assert_eq!(classify_block_role("FoReAcH"), BlockRole::Opener);
+        assert_eq!(classify_block_role("EndFunction"), BlockRole::Closer);
+    }
+
+    // -----------------------------------------------------------------------
+    // is_block_opener / is_block_closer helpers
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn is_block_opener_returns_true_for_openers() {
+        assert!(is_block_opener("if"));
+        assert!(is_block_opener("while"));
+        assert!(is_block_opener("function"));
+        assert!(is_block_opener("macro"));
+        assert!(is_block_opener("foreach"));
+        assert!(is_block_opener("block"));
+    }
+
+    #[test]
+    fn is_block_opener_returns_false_for_non_openers() {
+        assert!(!is_block_opener("else"));
+        assert!(!is_block_opener("endif"));
+        assert!(!is_block_opener("set"));
+    }
+
+    #[test]
+    fn is_block_closer_returns_true_for_closers() {
+        assert!(is_block_closer("endif"));
+        assert!(is_block_closer("endwhile"));
+        assert!(is_block_closer("endfunction"));
+        assert!(is_block_closer("endmacro"));
+        assert!(is_block_closer("endforeach"));
+        assert!(is_block_closer("endblock"));
+    }
+
+    #[test]
+    fn is_block_closer_returns_false_for_non_closers() {
+        assert!(!is_block_closer("if"));
+        assert!(!is_block_closer("else"));
+        assert!(!is_block_closer("set"));
+    }
+
+    // -----------------------------------------------------------------------
+    // closer_to_opener
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn closer_to_opener_maps_all_closers() {
+        assert_eq!(closer_to_opener("endif"), Some("if"));
+        assert_eq!(closer_to_opener("endwhile"), Some("while"));
+        assert_eq!(closer_to_opener("endmacro"), Some("macro"));
+        assert_eq!(closer_to_opener("endblock"), Some("block"));
+        assert_eq!(closer_to_opener("endforeach"), Some("foreach"));
+        assert_eq!(closer_to_opener("endfunction"), Some("function"));
+    }
+
+    #[test]
+    fn closer_to_opener_case_insensitive() {
+        assert_eq!(closer_to_opener("ENDIF"), Some("if"));
+        assert_eq!(closer_to_opener("EndWhile"), Some("while"));
+        assert_eq!(closer_to_opener("ENDFUNCTION"), Some("function"));
+    }
+
+    #[test]
+    fn closer_to_opener_returns_none_for_non_closers() {
+        assert_eq!(closer_to_opener("if"), None);
+        assert_eq!(closer_to_opener("else"), None);
+        assert_eq!(closer_to_opener("set"), None);
+        assert_eq!(closer_to_opener(""), None);
+    }
+
+    // -----------------------------------------------------------------------
+    // parse_pragma_directive
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn parse_pragma_off() {
+        assert_eq!(
+            parse_pragma_directive("# cmakefmt: off"),
+            Some(PragmaDirective::Off)
+        );
+    }
+
+    #[test]
+    fn parse_pragma_on() {
+        assert_eq!(
+            parse_pragma_directive("# cmakefmt: on"),
+            Some(PragmaDirective::On)
+        );
+    }
+
+    #[test]
+    fn parse_pragma_skip() {
+        assert_eq!(
+            parse_pragma_directive("# cmakefmt: skip"),
+            Some(PragmaDirective::Skip)
+        );
+    }
+
+    #[test]
+    fn parse_pragma_pop() {
+        assert_eq!(
+            parse_pragma_directive("# cmakefmt: pop"),
+            Some(PragmaDirective::Pop)
+        );
+    }
+
+    #[test]
+    fn parse_pragma_push_with_body() {
+        let result = parse_pragma_directive("# cmakefmt: push { lineWidth = 40 }");
+        assert!(
+            matches!(result, Some(PragmaDirective::Push(body)) if body == "{ lineWidth = 40 }")
+        );
+    }
+
+    #[test]
+    fn parse_pragma_push_without_brace_returns_none() {
+        assert_eq!(
+            parse_pragma_directive("# cmakefmt: push lineWidth = 40"),
+            None
+        );
+    }
+
+    #[test]
+    fn parse_pragma_empty_after_prefix_returns_none() {
+        assert_eq!(parse_pragma_directive("# cmakefmt:"), None);
+    }
+
+    #[test]
+    fn parse_pragma_unknown_action_returns_none() {
+        assert_eq!(parse_pragma_directive("# cmakefmt: unknown"), None);
+    }
+
+    #[test]
+    fn parse_pragma_not_a_pragma_returns_none() {
+        assert_eq!(parse_pragma_directive("# just a regular comment"), None);
+    }
+
+    #[test]
+    fn parse_pragma_with_extra_whitespace() {
+        assert_eq!(
+            parse_pragma_directive("  #   cmakefmt:   off  "),
+            Some(PragmaDirective::Off)
+        );
+    }
+
+    #[test]
+    fn parse_pragma_no_hash_returns_none() {
+        assert_eq!(parse_pragma_directive("cmakefmt: off"), None);
+    }
+
+    // -----------------------------------------------------------------------
+    // BlockStack
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn block_stack_push_and_get_opener_args() {
+        use crate::parser::ast::{Argument, Span};
+
+        let mut stack = BlockStack::new();
+        let span = Span { start: 0, end: 4 };
+        let args = vec![Argument::Unquoted(span)];
+        stack.push_opener("if", args);
+
+        let result = stack.get_opener_args("endif");
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().len(), 1);
+    }
+
+    #[test]
+    fn block_stack_else_matches_nearest_if() {
+        use crate::parser::ast::{Argument, Span};
+
+        let mut stack = BlockStack::new();
+        let outer_span = Span { start: 0, end: 1 };
+        let inner_span = Span { start: 2, end: 3 };
+        stack.push_opener("if", vec![Argument::Unquoted(outer_span)]);
+        stack.push_opener("if", vec![Argument::Unquoted(inner_span)]);
+
+        // else() should match the innermost (most recent) if
+        let result = stack.get_opener_args("else");
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().len(), 1);
+        match &result.unwrap()[0] {
+            Argument::Unquoted(span) => assert_eq!(span.start, 2),
+            _ => panic!("expected Unquoted argument"),
+        }
+    }
+
+    #[test]
+    fn block_stack_pop_removes_latest() {
+        use crate::parser::ast::{Argument, Span};
+
+        let mut stack = BlockStack::new();
+        stack.push_opener("if", vec![Argument::Unquoted(Span { start: 0, end: 1 })]);
+        stack.push_opener("while", vec![]);
+        stack.pop_opener();
+
+        // After popping while, endif should still find if
+        let result = stack.get_opener_args("endif");
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn block_stack_get_opener_args_empty_stack() {
+        let stack = BlockStack::new();
+        assert!(stack.get_opener_args("endif").is_none());
+        assert!(stack.get_opener_args("else").is_none());
+        assert!(stack.get_opener_args("endwhile").is_none());
+    }
+
+    #[test]
+    fn block_stack_mismatched_closer() {
+        use crate::parser::ast::{Argument, Span};
+
+        let mut stack = BlockStack::new();
+        stack.push_opener("if", vec![Argument::Unquoted(Span { start: 0, end: 1 })]);
+
+        // endwhile should not match an if opener
+        assert!(stack.get_opener_args("endwhile").is_none());
+    }
+
+    #[test]
+    fn block_stack_nested_blocks() {
+        use crate::parser::ast::{Argument, Span};
+
+        let mut stack = BlockStack::new();
+        stack.push_opener(
+            "function",
+            vec![Argument::Unquoted(Span { start: 0, end: 5 })],
+        );
+        stack.push_opener("if", vec![Argument::Unquoted(Span { start: 10, end: 15 })]);
+        stack.push_opener("foreach", vec![]);
+
+        // endforeach finds foreach
+        assert!(stack.get_opener_args("endforeach").is_some());
+        assert_eq!(stack.get_opener_args("endforeach").unwrap().len(), 0);
+
+        // endif finds if
+        let if_args = stack.get_opener_args("endif");
+        assert!(if_args.is_some());
+        match &if_args.unwrap()[0] {
+            Argument::Unquoted(span) => assert_eq!(span.start, 10),
+            _ => panic!("expected Unquoted"),
+        }
+
+        // endfunction finds function
+        let fn_args = stack.get_opener_args("endfunction");
+        assert!(fn_args.is_some());
+        match &fn_args.unwrap()[0] {
+            Argument::Unquoted(span) => assert_eq!(span.start, 0),
+            _ => panic!("expected Unquoted"),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // is_ignored_command
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn is_ignored_command_case_insensitive() {
+        let mut config = Configuration::default();
+        config.ignore_commands = vec!["ExternalProject_Add".to_string()];
+
+        assert!(is_ignored_command("ExternalProject_Add", &config));
+        assert!(is_ignored_command("externalproject_add", &config));
+        assert!(is_ignored_command("EXTERNALPROJECT_ADD", &config));
+        assert!(!is_ignored_command("set", &config));
+    }
+
+    #[test]
+    fn is_ignored_command_empty_list() {
+        let config = Configuration::default();
+        assert!(!is_ignored_command("set", &config));
+        assert!(!is_ignored_command("if", &config));
+    }
+
+    // -----------------------------------------------------------------------
+    // indent_prefix
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn indent_prefix_spaces() {
+        let mut config = Configuration::default();
+        config.use_tabs = false;
+        config.indent_width = 4;
+
+        assert_eq!(indent_prefix(0, &config), "");
+        assert_eq!(indent_prefix(1, &config), "    ");
+        assert_eq!(indent_prefix(2, &config), "        ");
+    }
+
+    #[test]
+    fn indent_prefix_tabs() {
+        let mut config = Configuration::default();
+        config.use_tabs = true;
+
+        assert_eq!(indent_prefix(0, &config), "");
+        assert_eq!(indent_prefix(1, &config), "\t");
+        assert_eq!(indent_prefix(2, &config), "\t\t");
+    }
+}

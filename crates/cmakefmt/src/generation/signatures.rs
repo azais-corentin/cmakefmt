@@ -2248,3 +2248,209 @@ pub fn lookup_command(name: &str) -> Option<CommandKind> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// All command names in the lookup table should be lowercase.
+    #[test]
+    fn lookup_command_names_are_lowercase() {
+        let commands = [
+            "set",
+            "target_link_libraries",
+            "target_sources",
+            "target_compile_definitions",
+            "target_compile_options",
+            "target_compile_features",
+            "target_include_directories",
+            "target_link_directories",
+            "target_link_options",
+            "target_precompile_headers",
+            "add_executable",
+            "add_library",
+            "add_test",
+            "project",
+            "message",
+            "find_package",
+            "find_library",
+            "find_file",
+            "find_path",
+            "find_program",
+            "execute_process",
+            "cmake_parse_arguments",
+            "define_property",
+            "get_property",
+            "set_property",
+            "export",
+            "foreach",
+            "function",
+            "macro",
+            "cmake_minimum_required",
+            "configure_file",
+            "include",
+            "math",
+            "add_subdirectory",
+            "string",
+            "list",
+            "file",
+            "install",
+            "add_custom_command",
+            "add_custom_target",
+            "try_compile",
+            "try_run",
+            "source_group",
+            "set_target_properties",
+            "set_source_files_properties",
+            "set_tests_properties",
+            "set_directory_properties",
+            "set_package_properties",
+            "get_directory_property",
+            "get_filename_component",
+            "gtest_discover_tests",
+            "build_command",
+            "cmake_host_system_information",
+            "cmake_language",
+            "cmake_path",
+            "cmake_pkg_config",
+            "separate_arguments",
+            "enable_language",
+            "mark_as_advanced",
+            "option",
+            "unset",
+            "block",
+            "return",
+            "include_directories",
+            "link_directories",
+            "link_libraries",
+            "include_external_msproject",
+            "load_cache",
+            "create_test_sourcelist",
+            "add_compile_definitions",
+            "add_compile_options",
+            "add_definitions",
+            "add_dependencies",
+            "add_link_options",
+            "aux_source_directory",
+            "enable_testing",
+            "fltk_wrap_ui",
+            "get_source_file_property",
+            "get_target_property",
+            "get_test_property",
+            "include_regular_expression",
+            "remove_definitions",
+        ];
+
+        for cmd in &commands {
+            assert!(
+                lookup_command(cmd).is_some(),
+                "expected known command for lowercase '{cmd}'"
+            );
+        }
+    }
+
+    /// Case-insensitive lookup should work for all known commands.
+    #[test]
+    fn lookup_command_case_insensitive() {
+        assert!(lookup_command("SET").is_some());
+        assert!(lookup_command("Set").is_some());
+        assert!(lookup_command("MESSAGE").is_some());
+        assert!(lookup_command("Find_Package").is_some());
+        assert!(lookup_command("CMAKE_MINIMUM_REQUIRED").is_some());
+        assert!(lookup_command("TARGET_LINK_LIBRARIES").is_some());
+    }
+
+    /// Unknown commands should return None.
+    #[test]
+    fn lookup_command_unknown_returns_none() {
+        assert!(lookup_command("not_a_cmake_command").is_none());
+        assert!(lookup_command("my_custom_function").is_none());
+        assert!(lookup_command("").is_none());
+    }
+
+    /// Very long command names (>64 bytes) should return None without panicking.
+    #[test]
+    fn lookup_command_very_long_name() {
+        let long_name = "a".repeat(100);
+        assert!(lookup_command(&long_name).is_none());
+    }
+
+    /// Condition syntax commands should be identified correctly.
+    #[test]
+    fn condition_syntax_commands() {
+        let condition_commands = ["if", "while", "elseif", "else", "endif", "endwhile"];
+        for cmd in &condition_commands {
+            assert!(
+                matches!(lookup_command(cmd), Some(CommandKind::ConditionSyntax)),
+                "expected ConditionSyntax for '{cmd}'"
+            );
+        }
+    }
+
+    /// Block closers should resolve to Known with the NO_KW_SPEC.
+    #[test]
+    fn block_closers_are_known() {
+        let closers = ["endforeach", "endfunction", "endmacro", "endblock"];
+        for cmd in &closers {
+            assert!(
+                matches!(lookup_command(cmd), Some(CommandKind::Known(_))),
+                "expected Known for '{cmd}'"
+            );
+        }
+    }
+
+    /// Core commands should have non-empty keyword lists.
+    #[test]
+    fn core_commands_have_keywords() {
+        let commands_with_keywords = [
+            "target_link_libraries",
+            "install",
+            "find_package",
+            "add_custom_command",
+            "set_property",
+        ];
+
+        for cmd in &commands_with_keywords {
+            if let Some(CommandKind::Known(spec)) = lookup_command(cmd) {
+                assert!(
+                    !spec.keywords.is_empty() || !spec.sections.is_empty(),
+                    "expected non-empty keywords or sections for '{cmd}'"
+                );
+            } else {
+                panic!("expected Known for '{cmd}'");
+            }
+        }
+    }
+
+    /// Verify critical CMake commands are present in the database.
+    #[test]
+    fn critical_commands_are_registered() {
+        let critical = [
+            "set",
+            "add_executable",
+            "add_library",
+            "target_link_libraries",
+            "find_package",
+            "install",
+            "project",
+            "cmake_minimum_required",
+            "message",
+            "if",
+            "foreach",
+            "function",
+            "macro",
+            "add_custom_command",
+            "add_custom_target",
+            "string",
+            "list",
+            "file",
+        ];
+
+        for cmd in &critical {
+            assert!(
+                lookup_command(cmd).is_some(),
+                "critical command '{cmd}' is missing from the signature database"
+            );
+        }
+    }
+}
