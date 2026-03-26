@@ -1,0 +1,1 @@
+target_compile_definitions(MyTarget PRIVATE ENABLE_FEATURE=1 DEBUG_MODE)

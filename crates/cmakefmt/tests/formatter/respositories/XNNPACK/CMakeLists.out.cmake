@@ -5064,9 +5064,7 @@ else()
     "Unsupported XNNPACK library type \"${XNNPACK_LIBRARY_TYPE}\". Must be \"static\", \"shared\", or \"default\""
   )
 endif()
-set_target_properties(XNNPACK
-  PROPERTIES C_STANDARD 99 C_EXTENSIONS YES
-)
+set_target_properties(XNNPACK PROPERTIES C_STANDARD 99 C_EXTENSIONS YES)
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "^armv[5-8]" OR IOS_ARCH MATCHES "^armv7")
   set_property(
     SOURCE ${XNNPACK_MICROKERNEL_SRCS}

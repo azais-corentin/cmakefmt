@@ -582,22 +582,15 @@ pub fn gen_command(
         WrapStyle::Cascade => true,
         WrapStyle::Vertical => count_wrap_arguments(&arguments) <= 2,
     };
-    // Prevent multiline commands with spec-defined keywords from collapsing
-    // to single line. Sort-group-only keywords (PUBLIC/PRIVATE on add_executable)
-    // don't block collapse since they aren't structural for that command,
-    // UNLESS sorting is active (sorted output should preserve structured layout).
-    let has_structural_keyword_args = match cmd_kind.as_ref() {
-        Some(CommandKind::Known(spec)) => arguments
-            .iter()
-            .any(|arg| arg.is_keyword && is_in_command_spec(&arg.text, spec)),
-        _ => has_keyword_args,
-    };
+    // When sorting is active and the source was already multi-line, preserve
+    // structured layout — sorting reorders sections and collapsing would
+    // discard that structure.
     let sorting_with_keywords = has_keyword_args
         && (should_sort_for_command(raw_name, config, cmd_kind.as_ref())
             || config.sort_keyword_sections);
     let allow_single_line = allow_single_line_by_style
         && !force_one_per_line
-        && !(source_is_multiline && (has_structural_keyword_args || sorting_with_keywords));
+        && !(source_is_multiline && sorting_with_keywords);
     if !arguments.is_empty() {
         let single_line = try_single_line(
             &formatted_name,
