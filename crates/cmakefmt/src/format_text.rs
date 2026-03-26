@@ -670,8 +670,10 @@ mod tests {
 
     #[test]
     fn bypass_when_disabled() {
-        let mut config = Configuration::default();
-        config.disable_formatting = true;
+        let config = Configuration {
+            disable_formatting: true,
+            ..Default::default()
+        };
         assert!(should_bypass_formatting(&test_path(), &config));
     }
 
@@ -704,8 +706,10 @@ mod tests {
 
     #[test]
     fn format_text_disabled_returns_none() {
-        let mut config = Configuration::default();
-        config.disable_formatting = true;
+        let config = Configuration {
+            disable_formatting: true,
+            ..Default::default()
+        };
         let input = "SET(A 1)\n";
         let result = format_text(&test_path(), input, &config).unwrap();
         assert!(result.is_none());

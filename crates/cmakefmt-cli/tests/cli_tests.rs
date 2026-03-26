@@ -42,7 +42,7 @@ fn stdin_formats_output() {
 #[test]
 fn check_already_formatted_exits_0() {
     let mut tmp = NamedTempFile::new().unwrap();
-    write!(tmp, "set(A 1)\n").unwrap();
+    writeln!(tmp, "set(A 1)").unwrap();
 
     let output = cmakefmt_bin()
         .arg("--check")
@@ -60,7 +60,7 @@ fn check_already_formatted_exits_0() {
 #[test]
 fn check_unformatted_exits_nonzero() {
     let mut tmp = NamedTempFile::new().unwrap();
-    write!(tmp, "SET(A 1)\n").unwrap();
+    writeln!(tmp, "SET(A 1)").unwrap();
 
     let output = cmakefmt_bin()
         .arg("--check")
@@ -81,7 +81,7 @@ fn check_unformatted_exits_nonzero() {
 #[test]
 fn diff_shows_changes() {
     let mut tmp = NamedTempFile::new().unwrap();
-    write!(tmp, "SET(A 1)\n").unwrap();
+    writeln!(tmp, "SET(A 1)").unwrap();
 
     let output = cmakefmt_bin()
         .arg("--diff")
@@ -105,7 +105,7 @@ fn diff_shows_changes() {
 #[test]
 fn write_modifies_file_in_place() {
     let mut tmp = NamedTempFile::new().unwrap();
-    write!(tmp, "SET(A 1)\n").unwrap();
+    writeln!(tmp, "SET(A 1)").unwrap();
     let path = tmp.path().to_path_buf();
 
     let output = cmakefmt_bin()
@@ -285,10 +285,10 @@ fn command_case_upper_override() {
 #[test]
 fn check_multiple_files_reports_all_unformatted() {
     let mut tmp1 = NamedTempFile::new().unwrap();
-    write!(tmp1, "SET(A 1)\n").unwrap();
+    writeln!(tmp1, "SET(A 1)").unwrap();
 
     let mut tmp2 = NamedTempFile::new().unwrap();
-    write!(tmp2, "SET(B 2)\n").unwrap();
+    writeln!(tmp2, "SET(B 2)").unwrap();
 
     let output = cmakefmt_bin()
         .arg("--check")
@@ -306,10 +306,10 @@ fn check_multiple_files_reports_all_unformatted() {
 #[test]
 fn check_multiple_files_all_formatted_exits_0() {
     let mut tmp1 = NamedTempFile::new().unwrap();
-    write!(tmp1, "set(A 1)\n").unwrap();
+    writeln!(tmp1, "set(A 1)").unwrap();
 
     let mut tmp2 = NamedTempFile::new().unwrap();
-    write!(tmp2, "set(B 2)\n").unwrap();
+    writeln!(tmp2, "set(B 2)").unwrap();
 
     let output = cmakefmt_bin()
         .arg("--check")
@@ -357,7 +357,7 @@ fn stdin_empty_input() {
 #[test]
 fn diff_already_formatted_shows_no_diff() {
     let mut tmp = NamedTempFile::new().unwrap();
-    write!(tmp, "set(A 1)\n").unwrap();
+    writeln!(tmp, "set(A 1)").unwrap();
 
     let output = cmakefmt_bin()
         .arg("--diff")

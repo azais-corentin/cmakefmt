@@ -1783,11 +1783,13 @@ mod tests {
         );
         map.insert("sortLists".to_string(), serde_json::Value::Bool(true));
 
-        let mut base = Configuration::default();
-        base.line_width = 120;
-        base.indent_width = 6;
-        base.use_tabs = true;
-        base.indent_style = IndentStyle::Tab;
+        let base = Configuration {
+            line_width: 120,
+            indent_width: 6,
+            use_tabs: true,
+            indent_style: IndentStyle::Tab,
+            ..Default::default()
+        };
 
         let result = load_from_json_map(map, base);
         assert_eq!(result.config.line_width, 90);
@@ -1940,7 +1942,7 @@ spaceBeforeParen = true
         assert!(result.config.final_newline);
         assert!(result.config.trim_trailing_whitespace);
         assert_eq!(result.config.end_command_args, EndCommandArgs::Remove);
-        assert_eq!(result.config.align_property_values, true);
+        assert!(result.config.align_property_values);
         assert_eq!(
             result.config.sort_arguments,
             SortArguments::CommandList(vec!["sources".to_string(), "files".to_string()])

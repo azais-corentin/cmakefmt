@@ -843,22 +843,25 @@ mod tests {
     }
 
     fn config_with_reflow() -> Configuration {
-        let mut c = Configuration::default();
-        c.comment_preservation = CommentPreservation::Reflow;
-        c
+        Configuration {
+            comment_preservation: CommentPreservation::Reflow,
+            ..Default::default()
+        }
     }
 
     fn config_with_set_align() -> Configuration {
-        let mut c = Configuration::default();
-        c.align_consecutive_set = true;
-        c
+        Configuration {
+            align_consecutive_set: true,
+            ..Default::default()
+        }
     }
 
     fn config_with_trailing_comment_align() -> Configuration {
-        let mut c = Configuration::default();
-        c.align_trailing_comments = true;
-        c.comment_gap = 2;
-        c
+        Configuration {
+            align_trailing_comments: true,
+            comment_gap: 2,
+            ..Default::default()
+        }
     }
 
     // -----------------------------------------------------------------------

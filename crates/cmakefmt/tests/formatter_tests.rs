@@ -129,7 +129,7 @@ fn walk_recursive(dir: &Path, suffix: &str, out: &mut Vec<PathBuf>) {
         } else if path
             .file_name()
             .and_then(|n| n.to_str())
-            .map_or(false, |n| n.ends_with(suffix))
+            .is_some_and(|n| n.ends_with(suffix))
         {
             out.push(path);
         }

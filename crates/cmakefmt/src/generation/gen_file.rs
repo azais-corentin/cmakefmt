@@ -1025,8 +1025,10 @@ mod tests {
 
     #[test]
     fn is_ignored_command_case_insensitive() {
-        let mut config = Configuration::default();
-        config.ignore_commands = vec!["ExternalProject_Add".to_string()];
+        let config = Configuration {
+            ignore_commands: vec!["ExternalProject_Add".to_string()],
+            ..Default::default()
+        };
 
         assert!(is_ignored_command("ExternalProject_Add", &config));
         assert!(is_ignored_command("externalproject_add", &config));
@@ -1047,9 +1049,11 @@ mod tests {
 
     #[test]
     fn indent_prefix_spaces() {
-        let mut config = Configuration::default();
-        config.use_tabs = false;
-        config.indent_width = 4;
+        let config = Configuration {
+            use_tabs: false,
+            indent_width: 4,
+            ..Default::default()
+        };
 
         assert_eq!(indent_prefix(0, &config), "");
         assert_eq!(indent_prefix(1, &config), "    ");
@@ -1058,8 +1062,10 @@ mod tests {
 
     #[test]
     fn indent_prefix_tabs() {
-        let mut config = Configuration::default();
-        config.use_tabs = true;
+        let config = Configuration {
+            use_tabs: true,
+            ..Default::default()
+        };
 
         assert_eq!(indent_prefix(0, &config), "");
         assert_eq!(indent_prefix(1, &config), "\t");
