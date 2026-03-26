@@ -136,17 +136,6 @@ fn quoted_arg_callback(lex: &mut Lexer<Token>) -> bool {
 mod tests {
     use super::*;
 
-    /// Collect all tokens from `input` into a `Vec<(Token, &str)>`.
-    fn tokenize(input: &str) -> Vec<(Token, String)> {
-        let lex = Token::lexer(input);
-        lex.into_iter()
-            .map(|result| {
-                let tok = result.unwrap_or(Token::UnquotedText);
-                (tok, String::new()) // we'll use a different helper for slices
-            })
-            .collect()
-    }
-
     fn tokenize_with_slices(input: &str) -> Vec<(Token, &str)> {
         let mut lex = Token::lexer(input);
         let mut result = Vec::new();
