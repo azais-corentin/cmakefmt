@@ -2,6 +2,40 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [v0.2.0](https://github.com/azais-corentin/cmakefmt/compare/9cf8de673944ba88c2847550f67db55b208a28fc..v0.2.0) - 2026-03-26
+
+
+
+
+### Added
+
+- **devenv:** add cargo-pgo and llvm packages - ([cbb8aaa](https://github.com/azais-corentin/cmakefmt/commit/cbb8aaadf3b7e2c862bf145beac67b11e30131e4))
+
+
+
+### Fixed
+
+- resolve all clippy warnings - ([54a84b5](https://github.com/azais-corentin/cmakefmt/commit/54a84b559e7ec56868608f177e5bed0daf335199))
+- collapse multi-line keyword commands to single line when they fit (#7) - ([c6371a2](https://github.com/azais-corentin/cmakefmt/commit/c6371a2ead1770c6ed74e502e4f71afc861d1860))
+- **ci:** redeploy docs after release via workflow_run trigger - ([9cf8de6](https://github.com/azais-corentin/cmakefmt/commit/9cf8de673944ba88c2847550f67db55b208a28fc))
+
+
+
+
+
+<details>
+<summary><h3 style="display:inline">Internal Changes</h3></summary>
+
+
+- **documentation(website):** update playground example to match README screenshots - ([6e50180](https://github.com/azais-corentin/cmakefmt/commit/6e501807d642b24ab512251811782b41e4ae0a58))
+- **refactoring:** remove unused tokenize function in token.rs - ([6b2ee20](https://github.com/azais-corentin/cmakefmt/commit/6b2ee20c95ce56137549b9a48b7f3bacd14df4d8))
+- **tests:** add unit and integration tests for core modules and CLI - ([84c46fc](https://github.com/azais-corentin/cmakefmt/commit/84c46fc9a198e5fc373229c3f3002378e6fb5081))
+
+</details>
+
+
+- - -
+
 ## [v0.1.5](https://github.com/azais-corentin/cmakefmt/compare/22b2159ead7117d8458979e40b6350da8cd82172..v0.1.5) - 2026-03-19
 
 
