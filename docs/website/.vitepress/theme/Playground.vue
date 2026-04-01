@@ -10,6 +10,8 @@ import {
 } from "vue";
 // Static imports are SSR-safe: CodeMirror only touches the DOM at EditorView construction time.
 import { json } from "@codemirror/lang-json";
+import { StreamLanguage } from "@codemirror/language";
+import { cmake } from "@codemirror/legacy-modes/mode/cmake";
 import { Compartment, EditorState } from "@codemirror/state";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { basicSetup, EditorView } from "codemirror";
@@ -105,6 +107,8 @@ onMounted(() => {
       : []),
   ];
 
+  const cmakeLang = StreamLanguage.define(cmake);
+
   // Input editor
   inputView.value = new EditorView({
     parent: inputContainerEl.value!,
@@ -112,6 +116,7 @@ onMounted(() => {
       doc: initialInput.value ?? DEFAULT_INPUT,
       extensions: [
         ...makeExtensions(),
+        cmakeLang,
         EditorView.updateListener.of(update => {
           if (!update.docChanged) return;
           scheduleFormat();
@@ -126,7 +131,7 @@ onMounted(() => {
     parent: outputContainerEl.value!,
     state: EditorState.create({
       doc: "",
-      extensions: makeExtensions(true),
+      extensions: [...makeExtensions(true), cmakeLang],
     }),
   });
 

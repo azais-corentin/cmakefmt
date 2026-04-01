@@ -77,5 +77,12 @@ export default defineConfig({
         },
       },
     ],
+    resolve: {
+      dedupe: [
+        "@codemirror/language",
+        "@codemirror/state",
+        "@codemirror/view",
+      ],
+    },
   },
 });
