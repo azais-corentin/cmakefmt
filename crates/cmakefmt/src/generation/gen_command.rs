@@ -5522,10 +5522,10 @@ fn compute_keyword_column_width(
                     widths.push(arg_inline_text(keyword).len());
                 }
             }
-            ArgGroup::Positional(args) if !args.is_empty() => {
-                if is_keyword_like_value(args[0]) && args.len() > 1 {
-                    widths.push(arg_inline_text(args[0]).len());
-                }
+            ArgGroup::Positional(args)
+                if !args.is_empty() && is_keyword_like_value(args[0]) && args.len() > 1 =>
+            {
+                widths.push(arg_inline_text(args[0]).len());
             }
             _ => {}
         }
