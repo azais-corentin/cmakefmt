@@ -7293,6 +7293,57 @@
         "weighted_total_seconds": 0.01999312237222222,
         "aggregate_throughput_gb_per_s": 0.033952225538474046
       }
+    },
+    {
+      "commit_sha": "68a3b109a740de471fe7c05b18a6020d5856dd88",
+      "commit_timestamp": "2026-06-12T13:48:49+02:00",
+      "runner": "Linux",
+      "rust_version": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+      "fixtures": [
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__synthetic__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__synthetic__cmakelists__in",
+          "fixture_stem": "respositories__synthetic__cmakelists",
+          "variant": "in",
+          "path": "respositories__synthetic__cmakelists__in",
+          "input_bytes": 327058,
+          "throughput_bytes_per_iteration": 327058,
+          "mean_seconds": 0.012123587823999993,
+          "median_seconds": 0.012060514900000001,
+          "mean_confidence_interval_lower_seconds": 0.012088128593999997,
+          "mean_confidence_interval_upper_seconds": 0.012168083428500003,
+          "median_confidence_interval_lower_seconds": 0.0120498459,
+          "median_confidence_interval_upper_seconds": 0.012079142800000001,
+          "throughput_gb_per_s": 0.026976997630400488
+        },
+        {
+          "benchmark_id": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "group_id": "formatter_fixtures",
+          "function_id": "fixture",
+          "value_str": "respositories__xnnpack__cmakelists__in",
+          "directory_name": "formatter_fixtures/fixture/respositories__xnnpack__cmakelists__in",
+          "fixture_stem": "respositories__xnnpack__cmakelists",
+          "variant": "in",
+          "path": "respositories__xnnpack__cmakelists__in",
+          "input_bytes": 351753,
+          "throughput_bytes_per_iteration": 351753,
+          "mean_seconds": 0.0042821668374999995,
+          "median_seconds": 0.004273610083333334,
+          "mean_confidence_interval_lower_seconds": 0.004273425907437499,
+          "mean_confidence_interval_upper_seconds": 0.004296481248645833,
+          "median_confidence_interval_lower_seconds": 0.004270516166666666,
+          "median_confidence_interval_upper_seconds": 0.004276279875,
+          "throughput_gb_per_s": 0.08214369344968335
+        }
+      ],
+      "aggregate": {
+        "total_input_bytes": 678811,
+        "weighted_total_seconds": 0.016405754661499992,
+        "aggregate_throughput_gb_per_s": 0.04137639590533385
+      }
     }
   ],
   "baselines": {
