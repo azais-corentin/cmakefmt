@@ -95,12 +95,6 @@ fn apply_case_owned(mut text: String, style: CaseStyle) -> String {
     text
 }
 
-/// Apply literal casing per §4.4. Only applies to unquoted arguments that match
-/// the literal token list and are NOT classified as keywords for the current command.
-fn apply_literal_case<'a>(text: &'a str, style: CaseStyle) -> Cow<'a, str> {
-    apply_case_str(text, style)
-}
-
 /// Apply a case style to borrowed text, allocating only when a change is
 /// actually needed (ASCII casing is length-preserving and idempotent).
 fn apply_case_str(text: &str, style: CaseStyle) -> Cow<'_, str> {
@@ -381,6 +375,35 @@ fn format_command_name<'a>(name: &'a str, style: CaseStyle, buf: &'a mut [u8; 64
     }
 }
 
+/// Emit a cased keyword/literal token, staging the recased bytes in a stack
+/// buffer so no heap allocation happens per token. Only called for tokens
+/// that matched a keyword/literal table — ASCII identifiers free of tabs and
+/// newlines — so a plain `push_str` is safe for the recased bytes.
+fn push_token_cased(items: &mut PrintItems, text: &str, style: CaseStyle) {
+    let changed = match style {
+        CaseStyle::Preserve => false,
+        CaseStyle::Lower => text.bytes().any(|b| b.is_ascii_uppercase()),
+        CaseStyle::Upper => text.bytes().any(|b| b.is_ascii_lowercase()),
+    };
+    if !changed {
+        items.push_raw_str(text);
+        return;
+    }
+    let mut buf = [0u8; 64];
+    if text.len() <= buf.len() {
+        let out = &mut buf[..text.len()];
+        out.copy_from_slice(text.as_bytes());
+        if matches!(style, CaseStyle::Lower) {
+            out.make_ascii_lowercase();
+        } else {
+            out.make_ascii_uppercase();
+        }
+        items.push_str(std::str::from_utf8(out).expect("ASCII casing preserves UTF-8"));
+    } else {
+        items.push_raw_str(&apply_case_str(text, style));
+    }
+}
+
 /// Apply keyword casing. Unlike the old version, this does NOT normalize booleans —
 /// boolean/literal casing is now handled separately via literalCase.
 fn apply_keyword_case<'a>(text: &'a str, style: CaseStyle) -> Cow<'a, str> {
@@ -526,8 +549,6 @@ pub fn gen_command(
 
     let effective = config.effective_config_for_command(raw_name);
     let config = effective.as_ref();
-
-
 
     // Command name with casing (stack buffer: no heap alloc for ≤64-byte names)
     let mut name_buf = [0u8; 64];
@@ -707,7 +728,6 @@ fn gen_unknown_command(
     formatted_name: &str,
     indent_depth: u32,
 ) {
-
     items.push_str(formatted_name);
     if config.has_space_before_paren(cmd.name.text(source)) {
         items.push_space();
@@ -1357,8 +1377,8 @@ fn try_single_line(
     let line_width = config.line_width as usize;
 
     // Per-arg widths summed directly — early rejection without allocations.
-    let args_width: usize = args.iter().map(arg_width).sum::<usize>()
-        + if args.len() > 1 { args.len() - 1 } else { 0 };
+    let args_width: usize =
+        args.iter().map(arg_width).sum::<usize>() + if args.len() > 1 { args.len() - 1 } else { 0 };
     let total = base_indent + cmd_name.len() + 1 + args_width + close_overhead;
 
     let keep_condition_header_inline = cmd_name.eq_ignore_ascii_case("if")
@@ -1398,26 +1418,29 @@ fn try_single_line(
             items.push_space();
         }
         let t = arg_inline_text(a);
-        let t = if case_args {
+        let style = if case_args {
             let is_kw = keyword_positions
                 .as_ref()
                 .map_or(a.is_keyword, |flags| flags[i]);
             if is_kw {
-                apply_case_cow(t, config.keyword_case)
+                Some(config.keyword_case)
             } else if !a.is_bracket
                 && config.literal_case != CaseStyle::Preserve
                 && !t.starts_with('"')
                 && !t.starts_with('#')
                 && is_literal_token(&t)
             {
-                apply_case_cow(t, config.literal_case)
+                Some(config.literal_case)
             } else {
-                t
+                None
             }
         } else {
-            t
+            None
         };
-        items.push_raw_str(&t);
+        match style {
+            Some(style) => push_token_cased(items, &t, style),
+            None => items.push_raw_str(&t),
+        }
     }
     if space_before_close {
         items.push_space();
@@ -4886,8 +4909,7 @@ fn emit_kw_arg(items: &mut PrintItems, arg: &FormattedArg, config: &Configuratio
 /// Used for sub-keywords identified by position in section groups,
 /// which lack the `is_keyword` flag.
 fn emit_sub_kw_arg(items: &mut PrintItems, arg: &FormattedArg, config: &Configuration) {
-    let text = apply_keyword_case(&arg.text, config.keyword_case);
-    items.push_raw_str(&text);
+    push_token_cased(items, &arg.text, config.keyword_case);
     if let Some(comment) = &arg.trailing_comment {
         items.push_space();
         if arg.trailing_is_bracket {
@@ -4914,30 +4936,33 @@ fn emit_arg_with_case(
     } else if arg.is_bracket || arg.text.starts_with("#[") {
         emit_bracket_verbatim(items, &arg.text);
     } else {
-        let text = if let Some(case) = kw_case {
+        // Resolve which case style (if any) applies; the multi-line path
+        // never cases (multi-line args are quoted strings, excluded by the
+        // `"` checks), so it reads `arg.text` directly.
+        let style = if let Some(case) = kw_case {
             if arg.is_keyword {
-                apply_keyword_case(&arg.text, case)
+                Some(case)
             } else if literal_case != CaseStyle::Preserve
                 && !arg.text.starts_with('"')
                 && is_literal_token(&arg.text)
             {
-                apply_literal_case(&arg.text, literal_case)
+                Some(literal_case)
             } else {
-                Cow::Borrowed(arg.text.as_ref())
+                None
             }
         } else if literal_case != CaseStyle::Preserve
             && !arg.text.starts_with('"')
             && !arg.text.starts_with('#')
             && is_literal_token(&arg.text)
         {
-            apply_literal_case(&arg.text, literal_case)
+            Some(literal_case)
         } else {
-            Cow::Borrowed(arg.text.as_ref())
+            None
         };
         if arg.has_newline {
             // Multi-line quoted strings: emit first line normally (gets indent
             // from context), then continuation lines verbatim.
-            // Casing transforms never add newlines, so the cached flag holds.
+            let text = &arg.text;
             let first_nl = text.find('\n').unwrap();
             let first_line = &text[..first_nl];
             let rest = &text[first_nl + 1..];
@@ -4953,8 +4978,10 @@ fn emit_arg_with_case(
                 items.push_signal(Signal::NewLine);
             }
             items.push_signal(Signal::FinishIgnoringIndent);
+        } else if let Some(style) = style {
+            push_token_cased(items, &arg.text, style);
         } else {
-            items.push_raw_str(&text);
+            items.push_raw_str(&arg.text);
         }
     }
 
@@ -5453,8 +5480,7 @@ fn group_args_by_genex(args: &[&FormattedArg]) -> Vec<GenexArgGroup> {
 
 /// Join argument texts with single spaces, sized exactly up front.
 fn join_args_text(args: &[&FormattedArg]) -> String {
-    let cap =
-        args.iter().map(|a| a.text.len()).sum::<usize>() + args.len().saturating_sub(1);
+    let cap = args.iter().map(|a| a.text.len()).sum::<usize>() + args.len().saturating_sub(1);
     let mut joined = String::with_capacity(cap);
     for (i, arg) in args.iter().enumerate() {
         if i > 0 {
@@ -5484,7 +5510,10 @@ enum ValueLayoutLine<'a> {
     Genex(String),
     /// A range into the shared token slab (one allocation per emit call
     /// instead of one `Vec` per output line).
-    Tokens { start: usize, len: usize },
+    Tokens {
+        start: usize,
+        len: usize,
+    },
 }
 
 #[derive(Clone, Default)]
@@ -5797,7 +5826,12 @@ fn emit_values_with_genex_with_indent(
         };
 
         if group_has_leading_blank && !(skip_first_blank && group_index == 0) {
-            flush_current_line(&mut lines, &mut line_start, token_slab.len(), &mut current_width);
+            flush_current_line(
+                &mut lines,
+                &mut line_start,
+                token_slab.len(),
+                &mut current_width,
+            );
             lines.push(ValueLayoutLine::Blank);
         }
 
@@ -5945,7 +5979,12 @@ fn emit_values_with_genex_with_indent(
         }
     }
 
-    flush_current_line(&mut lines, &mut line_start, token_slab.len(), &mut current_width);
+    flush_current_line(
+        &mut lines,
+        &mut line_start,
+        token_slab.len(),
+        &mut current_width,
+    );
 
     let alignments = if config.align_arg_groups {
         apply_arg_group_alignment(
