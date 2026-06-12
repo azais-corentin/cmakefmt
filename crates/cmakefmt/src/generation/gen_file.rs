@@ -390,7 +390,11 @@ fn emit_comment_with_opening_indent(
 
 pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems {
     let _file_stage = info_span!(EVENT_GEN_FILE, element_count = file.elements.len()).entered();
-    let mut items = PrintItems::with_capacities(file.elements.len() * 6, source.len());
+    // Items capacity: one PrintItem per ~10 source bytes is a close upper
+    // bound for real-world files; undershooting costs doubling reallocs of a
+    // multi-hundred-KB Vec, so prefer the larger estimate.
+    let mut items =
+        PrintItems::with_capacities((file.elements.len() * 6).max(source.len() / 10), source.len());
     let mut pending_blanks: u8 = 0;
     let mut indent_level: u32 = 0;
     let mut first = true;

@@ -1330,10 +1330,9 @@ fn try_single_line(
     let close_overhead = 1; // ")"
     let line_width = config.line_width as usize;
 
-    // Pre-compute per-arg widths to enable early rejection without allocating cased strings.
-    let arg_widths: Vec<usize> = args.iter().map(arg_width).collect();
-    let args_width: usize =
-        arg_widths.iter().sum::<usize>() + if args.len() > 1 { args.len() - 1 } else { 0 };
+    // Per-arg widths summed directly — early rejection without allocations.
+    let args_width: usize = args.iter().map(arg_width).sum::<usize>()
+        + if args.len() > 1 { args.len() - 1 } else { 0 };
     let total = base_indent + cmd_name.len() + 1 + args_width + close_overhead;
 
     let keep_condition_header_inline = cmd_name.eq_ignore_ascii_case("if")
@@ -1346,84 +1345,51 @@ fn try_single_line(
         return None;
     }
 
-    // Width check passed — build cased strings for the output.
+    // Width check passed — emit cased strings for the output directly.
     // Apply keyword/literal casing per §4.4:
     // 1. Keyword tokens get keywordCase
     // 2. Literal tokens (not keywords) get literalCase
     // 3. Other tokens preserved as-is
-    let args_text: Vec<Cow<'_, str>> = if let Some(ck) = cmd_kind {
-        match ck {
-            CommandKind::Known(spec) => {
-                let mut is_keyword_position = vec![false; args.len()];
-                for idx in compute_keyword_positions(args, spec) {
-                    is_keyword_position[idx] = true;
-                }
-                args.iter()
-                    .enumerate()
-                    .map(|(i, a)| {
-                        let t = arg_inline_text(a);
-                        if is_keyword_position[i] {
-                            apply_case_cow(t, config.keyword_case)
-                        } else if !a.is_bracket
-                            && config.literal_case != CaseStyle::Preserve
-                            && !t.starts_with('"')
-                            && !t.starts_with('#')
-                            && is_literal_token(&t)
-                        {
-                            apply_case_cow(t, config.literal_case)
-                        } else {
-                            t
-                        }
-                    })
-                    .collect()
+    // Known commands case keywords by spec position; condition syntax and
+    // custom-keyword commands use the per-arg flag; otherwise no casing.
+    let keyword_positions = match cmd_kind {
+        Some(CommandKind::Known(spec)) => {
+            let mut flags = vec![false; args.len()];
+            for idx in compute_keyword_positions(args, spec) {
+                flags[idx] = true;
             }
-            CommandKind::ConditionSyntax => args
-                .iter()
-                .map(|a| {
-                    let t = arg_inline_text(a);
-                    if a.is_keyword {
-                        apply_case_cow(t, config.keyword_case)
-                    } else if !a.is_bracket
-                        && config.literal_case != CaseStyle::Preserve
-                        && !t.starts_with('"')
-                        && !t.starts_with('#')
-                        && is_literal_token(&t)
-                    {
-                        apply_case_cow(t, config.literal_case)
-                    } else {
-                        t
-                    }
-                })
-                .collect(),
+            Some(flags)
         }
-    } else if !config.custom_keywords.is_empty() {
-        args.iter()
-            .map(|a| {
-                let t = arg_inline_text(a);
-                if a.is_keyword {
-                    apply_case_cow(t, config.keyword_case)
-                } else if !a.is_bracket
-                    && config.literal_case != CaseStyle::Preserve
-                    && !t.starts_with('"')
-                    && !t.starts_with('#')
-                    && is_literal_token(&t)
-                {
-                    apply_case_cow(t, config.literal_case)
-                } else {
-                    t
-                }
-            })
-            .collect()
-    } else {
-        args.iter().map(arg_inline_text).collect()
+        _ => None,
     };
+    let case_args = cmd_kind.is_some() || !config.custom_keywords.is_empty();
 
     let mut items = PrintItems::new();
-    for (i, text) in args_text.iter().enumerate() {
+    for (i, a) in args.iter().enumerate() {
         if i > 0 {
             items.push_space();
         }
-        items.push_raw_str(text);
+        let t = arg_inline_text(a);
+        let t = if case_args {
+            let is_kw = keyword_positions
+                .as_ref()
+                .map_or(a.is_keyword, |flags| flags[i]);
+            if is_kw {
+                apply_case_cow(t, config.keyword_case)
+            } else if !a.is_bracket
+                && config.literal_case != CaseStyle::Preserve
+                && !t.starts_with('"')
+                && !t.starts_with('#')
+                && is_literal_token(&t)
+            {
+                apply_case_cow(t, config.literal_case)
+            } else {
+                t
+            }
+        } else {
+            t
+        };
+        items.push_raw_str(&t);
     }
     Some(items)
 }

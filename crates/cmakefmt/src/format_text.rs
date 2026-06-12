@@ -159,7 +159,9 @@ fn format_inner(text: &str, config: &Configuration) -> Result<String> {
         indent_width: print_config.indent_width,
         use_tabs: print_config.use_tabs,
         new_line_text: newline,
-        initial_capacity: parse_text.len(),
+        // Formatted output can exceed input size (indent expansion); leave
+        // headroom so the render buffer never doubles mid-render.
+        initial_capacity: parse_text.len() + parse_text.len() / 8 + 64,
     };
     let result = {
         let _stage = info_span!(EVENT_FORMAT_PRINT).entered();
@@ -177,20 +179,34 @@ fn format_inner(text: &str, config: &Configuration) -> Result<String> {
     };
     let result = {
         let _stage = info_span!(EVENT_FORMAT_POST_PROCESS).entered();
-        crate::post_process::post_process_alignments(&result, config)
+        // Keep the rendered String when the stage made no changes; converting
+        // a borrowed Cow with into_owned() would copy the whole buffer.
+        let owned = match crate::post_process::post_process_alignments(&result, config) {
+            Cow::Owned(s) => Some(s),
+            Cow::Borrowed(_) => None,
+        };
+        owned.unwrap_or(result)
     };
 
     // Restore whitespace where config says to preserve (trimTrailingWhitespace,
     // collapseSpaces) by comparing formatted output with original input.
     let result = {
         let _stage = info_span!(EVENT_FORMAT_FINALIZE_WHITESPACE).entered();
-        finalize_whitespace(&result, parse_text, config, newline)
+        let owned = match finalize_whitespace(&result, parse_text, config, newline) {
+            Cow::Owned(s) => Some(s),
+            Cow::Borrowed(_) => None,
+        };
+        owned.unwrap_or(result)
     };
 
     // Apply finalNewline semantics.
     let result = {
         let _stage = info_span!(EVENT_FORMAT_FINAL_NEWLINE).entered();
-        apply_final_newline(&result, text, config, newline)
+        let owned = match apply_final_newline(&result, text, config, newline) {
+            Cow::Owned(s) => Some(s),
+            Cow::Borrowed(_) => None,
+        };
+        owned.unwrap_or(result)
     };
 
     // Restore bare CRs at their original positions.
@@ -198,7 +214,7 @@ fn format_inner(text: &str, config: &Configuration) -> Result<String> {
         let _stage = info_span!(EVENT_FORMAT_RESTORE_BARE_CR).entered();
         restore_bare_crs(&result, text)
     } else {
-        result.into_owned()
+        result
     };
 
     Ok(result)
