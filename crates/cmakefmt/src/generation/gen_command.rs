@@ -59,6 +59,10 @@ const LITERAL_TOKENS: &[&str] = &[
 
 /// Check if a token is in the literal list (case-insensitive binary search).
 fn is_literal_token(text: &str) -> bool {
+    // Fast reject: literal tokens are 2..=21 bytes ("NO" .. "VERSION_GREATER_EQUAL").
+    if text.len() < 2 || text.len() > 21 {
+        return false;
+    }
     LITERAL_TOKENS
         .binary_search_by(|probe| {
             let mut probe_bytes = probe.as_bytes().iter();
@@ -94,23 +98,42 @@ fn apply_case_owned(mut text: String, style: CaseStyle) -> String {
 /// Apply literal casing per §4.4. Only applies to unquoted arguments that match
 /// the literal token list and are NOT classified as keywords for the current command.
 fn apply_literal_case<'a>(text: &'a str, style: CaseStyle) -> Cow<'a, str> {
+    apply_case_str(text, style)
+}
+
+/// Apply a case style to borrowed text, allocating only when a change is
+/// actually needed (ASCII casing is length-preserving and idempotent).
+fn apply_case_str(text: &str, style: CaseStyle) -> Cow<'_, str> {
     match style {
         CaseStyle::Preserve => Cow::Borrowed(text),
         CaseStyle::Lower => {
-            let mut s = text.to_string();
-            s.make_ascii_lowercase();
-            Cow::Owned(s)
+            if text.bytes().any(|b| b.is_ascii_uppercase()) {
+                let mut s = text.to_string();
+                s.make_ascii_lowercase();
+                Cow::Owned(s)
+            } else {
+                Cow::Borrowed(text)
+            }
         }
         CaseStyle::Upper => {
-            let mut s = text.to_string();
-            s.make_ascii_uppercase();
-            Cow::Owned(s)
+            if text.bytes().any(|b| b.is_ascii_lowercase()) {
+                let mut s = text.to_string();
+                s.make_ascii_uppercase();
+                Cow::Owned(s)
+            } else {
+                Cow::Borrowed(text)
+            }
         }
     }
 }
 
-fn apply_literal_case_owned(text: String, style: CaseStyle) -> String {
-    apply_case_owned(text, style)
+/// Apply a case style to a `Cow`, reusing the buffer for owned input and
+/// borrowing when no change is needed.
+fn apply_case_cow(text: Cow<'_, str>, style: CaseStyle) -> Cow<'_, str> {
+    match text {
+        Cow::Borrowed(s) => apply_case_str(s, style),
+        Cow::Owned(s) => Cow::Owned(apply_case_owned(s, style)),
+    }
 }
 
 /// Check if a token is a keyword in the context of a specific command.
@@ -305,7 +328,7 @@ fn sort_keyword_sections_in_source_order(args: &mut Vec<FormattedArg>, candidate
         {
             continue;
         }
-        seen.push(arg.text.clone());
+        seen.push(arg.text.to_string());
     }
 
     if seen.is_empty() {
@@ -333,41 +356,13 @@ fn is_sort_group_keyword(text: &str) -> bool {
 }
 
 fn apply_command_case<'a>(name: &'a str, style: CaseStyle) -> Cow<'a, str> {
-    match style {
-        CaseStyle::Preserve => Cow::Borrowed(name),
-        CaseStyle::Lower => {
-            let mut s = name.to_string();
-            s.make_ascii_lowercase();
-            Cow::Owned(s)
-        }
-        CaseStyle::Upper => {
-            let mut s = name.to_string();
-            s.make_ascii_uppercase();
-            Cow::Owned(s)
-        }
-    }
+    apply_case_str(name, style)
 }
 
 /// Apply keyword casing. Unlike the old version, this does NOT normalize booleans —
 /// boolean/literal casing is now handled separately via literalCase.
 fn apply_keyword_case<'a>(text: &'a str, style: CaseStyle) -> Cow<'a, str> {
-    match style {
-        CaseStyle::Preserve => Cow::Borrowed(text),
-        CaseStyle::Lower => {
-            let mut s = text.to_string();
-            s.make_ascii_lowercase();
-            Cow::Owned(s)
-        }
-        CaseStyle::Upper => {
-            let mut s = text.to_string();
-            s.make_ascii_uppercase();
-            Cow::Owned(s)
-        }
-    }
-}
-
-fn apply_keyword_case_owned(text: String, style: CaseStyle) -> String {
-    apply_case_owned(text, style)
+    apply_case_str(text, style)
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -415,7 +410,9 @@ fn resolve_single_line_paren_spacing(
     }
 }
 
-fn extract_deferred_closing_comment(arguments: &mut [FormattedArg]) -> Option<String> {
+fn extract_deferred_closing_comment<'src>(
+    arguments: &mut [FormattedArg<'src>],
+) -> Option<Cow<'src, str>> {
     arguments.iter_mut().rev().find_map(|arg| {
         if arg.text.starts_with('#') || arg.trailing_is_bracket {
             return None;
@@ -457,7 +454,7 @@ fn visual_indent_prefix(width: usize, config: &Configuration) -> String {
 fn push_visual_indent(items: &mut PrintItems, width: usize, config: &Configuration) {
     let prefix = visual_indent_prefix(width, config);
     if !prefix.is_empty() {
-        items.extend(ir_helpers::gen_from_raw_string(&prefix));
+        items.push_raw_str(&prefix);
     }
 }
 
@@ -667,13 +664,13 @@ pub fn gen_command(
     items.push_str_runtime_width_computed(")");
     if let Some(comment) = deferred_closing_comment {
         push_comment_gap(&mut items, config.comment_gap);
-        items.extend(ir_helpers::gen_from_raw_string(&comment));
+        items.push_raw_str(&comment);
     }
 
     // Trailing comment
     if let Some(comment_span) = &cmd.trailing_comment {
         push_comment_gap(&mut items, config.comment_gap);
-        items.push_string(comment_span.text(source).to_string());
+        items.push_str(comment_span.text(source));
     }
 
     items
@@ -691,7 +688,7 @@ fn gen_unknown_command(
 ) -> PrintItems {
     let mut items = PrintItems::new();
 
-    items.push_string(formatted_name.to_string());
+    items.push_str(formatted_name);
     if config.has_space_before_paren(cmd.name.text(source)) {
         items.push_space();
     }
@@ -741,7 +738,7 @@ fn gen_unknown_command(
                 if paren_spacing.after_open {
                     items.push_space();
                 }
-                items.extend(ir_helpers::gen_from_raw_string(&formatted_content));
+                items.push_raw_str(&formatted_content);
                 if paren_spacing.before_close {
                     items.push_space();
                 }
@@ -752,7 +749,7 @@ fn gen_unknown_command(
                     let (start, end) = arg_source_range(arg);
                     let arg_text = &source[start..end];
                     push_newline_with_visual_indent(&mut items, continuation, config);
-                    items.extend(ir_helpers::gen_from_raw_string(arg_text));
+                    items.push_raw_str(arg_text);
                 }
                 if config.closing_paren_newline {
                     items.push_signal(Signal::NewLine);
@@ -790,7 +787,7 @@ fn gen_unknown_command(
 
     if let Some(comment_span) = &cmd.trailing_comment {
         push_comment_gap(&mut items, config.comment_gap);
-        items.push_string(comment_span.text(source).to_string());
+        items.push_str(comment_span.text(source));
     }
 
     items
@@ -868,7 +865,7 @@ fn emit_unknown_args_raw(
                 items.push_signal(Signal::NewLine);
                 let stripped = strip_base_indent(line, base_indent_len);
                 if !stripped.is_empty() {
-                    items.extend(ir_helpers::gen_from_raw_string(stripped));
+                    items.push_raw_str(stripped);
                 }
             }
             first_on_line = true;
@@ -903,7 +900,7 @@ fn emit_unknown_args_raw(
                     items.push_space();
                 }
             } else {
-                items.extend(ir_helpers::gen_from_raw_string(gap));
+                items.push_raw_str(gap);
             }
             first_on_line = false;
         }
@@ -912,7 +909,7 @@ fn emit_unknown_args_raw(
         if matches!(arg, Argument::Bracket(_) | Argument::Quoted(_)) && arg_text.contains('\n') {
             emit_text_preserving_line_endings(items, arg_text);
         } else {
-            items.extend(ir_helpers::gen_from_raw_string(arg_text));
+            items.push_raw_str(arg_text);
         }
         pos = arg_end;
     }
@@ -927,7 +924,7 @@ fn emit_unknown_args_raw(
 
 fn emit_text_preserving_line_endings(items: &mut PrintItems, text: &str) {
     if !text.contains('\n') {
-        items.extend(ir_helpers::gen_from_raw_string(text));
+        items.push_raw_str(text);
         return;
     }
 
@@ -945,10 +942,10 @@ fn emit_text_preserving_line_endings(items: &mut PrintItems, text: &str) {
             }
 
             if segment_end > segment_start {
-                items.push_string(text[segment_start..segment_end].to_string());
+                items.push_str(&text[segment_start..segment_end]);
             }
             if had_cr {
-                items.push_string("\r".to_string());
+                items.push_str("\r");
             }
             items.push_signal(Signal::NewLine);
             segment_start = i + 1;
@@ -957,7 +954,7 @@ fn emit_text_preserving_line_endings(items: &mut PrintItems, text: &str) {
     }
 
     if segment_start < text.len() {
-        items.push_string(text[segment_start..].to_string());
+        items.push_str(&text[segment_start..]);
     }
 
     items.push_signal(Signal::FinishIgnoringIndent);
@@ -1009,35 +1006,67 @@ fn strip_base_indent(line: &str, base_indent_len: usize) -> &str {
 // ===========================================================================
 
 #[derive(Debug, Clone)]
-struct FormattedArg {
-    text: String,
+struct FormattedArg<'src> {
+    /// Argument text; borrows the source for unmodified arguments, owned only
+    /// for synthesized text (cased compounds, joined genex groups).
+    text: Cow<'src, str>,
     is_keyword: bool,
     is_bracket: bool,
-    trailing_comment: Option<String>,
+    trailing_comment: Option<Cow<'src, str>>,
     trailing_is_bracket: bool,
     is_paren_group: bool,
-    paren_inner: Vec<FormattedArg>,
+    paren_inner: Vec<FormattedArg<'src>>,
     blank_line_before: bool,
     /// Whether a source newline separates this arg from the previous one.
     /// Used by `alignArgGroups` to preserve source-level token grouping.
     new_line_before: bool,
+    /// Cached `text.contains('\n')` (text is immutable after construction).
+    has_newline: bool,
+    /// Cached net `$<`/`>` depth delta of `text`.
+    genex_delta: i32,
+    /// Cached "does `text` contain `$<`".
+    has_genex: bool,
 }
 
-fn build_argument_list(
+impl<'src> FormattedArg<'src> {
+    /// Build an argument with derived text facts cached and all flags at
+    /// their defaults. Construction sites override flags via functional
+    /// update syntax.
+    fn new(text: Cow<'src, str>) -> Self {
+        let (genex_delta, has_genex) = genex_scan(&text);
+        let has_newline = text.contains('\n');
+        Self {
+            text,
+            is_keyword: false,
+            is_bracket: false,
+            trailing_comment: None,
+            trailing_is_bracket: false,
+            is_paren_group: false,
+            paren_inner: Vec::new(),
+            blank_line_before: false,
+            new_line_before: false,
+            has_newline,
+            genex_delta,
+            has_genex,
+        }
+    }
+}
+
+fn build_argument_list<'src>(
     cmd: &CommandInvocation,
-    source: &str,
+    source: &'src str,
     config: &Configuration,
     cmd_kind: Option<&CommandKind>,
-) -> Vec<FormattedArg> {
+) -> Vec<FormattedArg<'src>> {
     build_argument_list_from_args(&cmd.arguments, source, config, cmd_kind)
 }
 
-fn build_argument_list_from_args(
+fn build_argument_list_from_args<'src>(
     args: &[Argument],
-    source: &str,
+    source: &'src str,
     config: &Configuration,
     cmd_kind: Option<&CommandKind>,
-) -> Vec<FormattedArg> {
+) -> Vec<FormattedArg<'src>> {
     let mut result = Vec::with_capacity(args.len());
     let arg_ranges: Vec<(usize, usize)> = args.iter().map(arg_source_range).collect();
     let mut i = 0;
@@ -1063,28 +1092,17 @@ fn build_argument_list_from_args(
         match &args[i] {
             Argument::Bracket(span) => {
                 result.push(FormattedArg {
-                    text: span.text(source).to_string(),
-                    is_keyword: false,
                     is_bracket: true,
-                    trailing_comment: None,
-                    trailing_is_bracket: false,
-                    is_paren_group: false,
-                    paren_inner: Vec::new(),
                     blank_line_before,
                     new_line_before,
+                    ..FormattedArg::new(Cow::Borrowed(span.text(source)))
                 });
             }
             Argument::Quoted(span) => {
                 result.push(FormattedArg {
-                    text: span.text(source).to_string(),
-                    is_keyword: false,
-                    is_bracket: false,
-                    trailing_comment: None,
-                    trailing_is_bracket: false,
-                    is_paren_group: false,
-                    paren_inner: Vec::new(),
                     blank_line_before,
                     new_line_before,
+                    ..FormattedArg::new(Cow::Borrowed(span.text(source)))
                 });
             }
             Argument::Unquoted(span) => {
@@ -1093,33 +1111,24 @@ fn build_argument_list_from_args(
                 // Store original text — keyword casing is applied during formatting
                 // based on command context, not globally
                 result.push(FormattedArg {
-                    text: text.to_string(),
                     is_keyword: is_kw,
-                    is_bracket: false,
-                    trailing_comment: None,
-                    trailing_is_bracket: false,
-                    is_paren_group: false,
-                    paren_inner: Vec::new(),
                     blank_line_before,
                     new_line_before,
+                    ..FormattedArg::new(Cow::Borrowed(text))
                 });
             }
             Argument::ParenGroup { arguments } => {
                 let inner = build_argument_list_from_args(arguments, source, config, cmd_kind);
                 result.push(FormattedArg {
-                    text: String::new(),
-                    is_keyword: false,
-                    is_bracket: false,
-                    trailing_comment: None,
-                    trailing_is_bracket: false,
                     is_paren_group: true,
                     paren_inner: inner,
                     blank_line_before,
                     new_line_before,
+                    ..FormattedArg::new(Cow::Borrowed(""))
                 });
             }
             Argument::LineComment(span) => {
-                let comment_text = span.text(source).trim_end().to_string();
+                let comment_text = span.text(source).trim_end();
                 // Only attach to previous arg if on the same source line
                 let same_line = if i > 0 {
                     let prev_end = arg_ranges[i - 1].1;
@@ -1131,24 +1140,18 @@ fn build_argument_list_from_args(
                     && let Some(last) = result.last_mut()
                     && last.trailing_comment.is_none()
                 {
-                    last.trailing_comment = Some(comment_text);
+                    last.trailing_comment = Some(Cow::Borrowed(comment_text));
                     i += 1;
                     continue;
                 }
                 result.push(FormattedArg {
-                    text: comment_text,
-                    is_keyword: false,
-                    is_bracket: false,
-                    trailing_comment: None,
-                    trailing_is_bracket: false,
-                    is_paren_group: false,
-                    paren_inner: Vec::new(),
                     blank_line_before,
                     new_line_before,
+                    ..FormattedArg::new(Cow::Borrowed(comment_text))
                 });
             }
             Argument::BracketComment(span) => {
-                let comment_text = span.text(source).to_string();
+                let comment_text = span.text(source);
                 // Only attach to previous arg if on the same source line
                 let same_line = if i > 0 {
                     let prev_end = arg_ranges[i - 1].1;
@@ -1160,21 +1163,15 @@ fn build_argument_list_from_args(
                     && let Some(last) = result.last_mut()
                     && last.trailing_comment.is_none()
                 {
-                    last.trailing_comment = Some(comment_text);
+                    last.trailing_comment = Some(Cow::Borrowed(comment_text));
                     last.trailing_is_bracket = true;
                     i += 1;
                     continue;
                 }
                 result.push(FormattedArg {
-                    text: comment_text,
-                    is_keyword: false,
-                    is_bracket: false,
-                    trailing_comment: None,
-                    trailing_is_bracket: false,
-                    is_paren_group: false,
-                    paren_inner: Vec::new(),
                     blank_line_before,
                     new_line_before,
+                    ..FormattedArg::new(Cow::Borrowed(comment_text))
                 });
             }
         }
@@ -1204,21 +1201,35 @@ fn format_paren_group_inline(args: &[FormattedArg]) -> String {
     s
 }
 
-fn arg_inline_text(arg: &FormattedArg) -> Cow<'_, str> {
+fn arg_inline_text<'a>(arg: &'a FormattedArg) -> Cow<'a, str> {
     if arg.is_paren_group {
         Cow::Owned(format_paren_group_inline(&arg.paren_inner))
     } else {
-        Cow::Borrowed(&arg.text)
+        Cow::Borrowed(arg.text.as_ref())
     }
 }
 
 /// Width of an argument's text (handling paren groups).
 fn arg_width(arg: &FormattedArg) -> usize {
     if arg.is_paren_group {
-        format_paren_group_inline(&arg.paren_inner).len()
+        paren_group_inline_width(&arg.paren_inner)
     } else {
         arg.text.len()
     }
+}
+
+/// Width of `format_paren_group_inline` output without building the string:
+/// `(` + args joined by single spaces + `)`.
+fn paren_group_inline_width(args: &[FormattedArg]) -> usize {
+    let mut width = 2 + args.len().saturating_sub(1);
+    for arg in args {
+        width += if arg.is_paren_group {
+            paren_group_inline_width(&arg.paren_inner)
+        } else {
+            arg.text.len()
+        };
+    }
+    width
 }
 
 fn count_wrap_arguments(args: &[FormattedArg]) -> usize {
@@ -1236,7 +1247,7 @@ fn can_pack_args_on_line(
 
     if args.iter().any(|arg| {
         arg.text.starts_with('#')
-            || arg.text.contains('\n')
+            || arg.has_newline
             || (arg.trailing_comment.is_some() && !arg.trailing_is_bracket)
     }) {
         return false;
@@ -1272,7 +1283,7 @@ fn try_single_line(
     }
 
     // If any argument text contains a newline, force multi-line
-    if args.iter().any(|a| a.text.contains('\n')) {
+    if args.iter().any(|a| a.has_newline) {
         return None;
     }
 
@@ -1323,7 +1334,7 @@ fn try_single_line(
     let line_width = config.line_width as usize;
 
     // Pre-compute per-arg widths to enable early rejection without allocating cased strings.
-    let arg_widths: Vec<usize> = args.iter().map(|a| arg_inline_text(a).len()).collect();
+    let arg_widths: Vec<usize> = args.iter().map(arg_width).collect();
     let args_width: usize =
         arg_widths.iter().sum::<usize>() + if args.len() > 1 { args.len() - 1 } else { 0 };
     let total = base_indent + cmd_name.len() + 1 + args_width + close_overhead;
@@ -1343,7 +1354,7 @@ fn try_single_line(
     // 1. Keyword tokens get keywordCase
     // 2. Literal tokens (not keywords) get literalCase
     // 3. Other tokens preserved as-is
-    let args_text: Vec<String> = if let Some(ck) = cmd_kind {
+    let args_text: Vec<Cow<'_, str>> = if let Some(ck) = cmd_kind {
         match ck {
             CommandKind::Known(spec) => {
                 let mut is_keyword_position = vec![false; args.len()];
@@ -1355,15 +1366,16 @@ fn try_single_line(
                     .map(|(i, a)| {
                         let t = arg_inline_text(a);
                         if is_keyword_position[i] {
-                            apply_keyword_case_owned(t.into_owned(), config.keyword_case)
+                            apply_case_cow(t, config.keyword_case)
                         } else if !a.is_bracket
+                            && config.literal_case != CaseStyle::Preserve
                             && !t.starts_with('"')
                             && !t.starts_with('#')
                             && is_literal_token(&t)
                         {
-                            apply_literal_case_owned(t.into_owned(), config.literal_case)
+                            apply_case_cow(t, config.literal_case)
                         } else {
-                            t.into_owned()
+                            t
                         }
                     })
                     .collect()
@@ -1373,15 +1385,16 @@ fn try_single_line(
                 .map(|a| {
                     let t = arg_inline_text(a);
                     if a.is_keyword {
-                        apply_keyword_case_owned(t.into_owned(), config.keyword_case)
+                        apply_case_cow(t, config.keyword_case)
                     } else if !a.is_bracket
+                        && config.literal_case != CaseStyle::Preserve
                         && !t.starts_with('"')
                         && !t.starts_with('#')
                         && is_literal_token(&t)
                     {
-                        apply_literal_case_owned(t.into_owned(), config.literal_case)
+                        apply_case_cow(t, config.literal_case)
                     } else {
-                        t.into_owned()
+                        t
                     }
                 })
                 .collect(),
@@ -1391,22 +1404,21 @@ fn try_single_line(
             .map(|a| {
                 let t = arg_inline_text(a);
                 if a.is_keyword {
-                    apply_keyword_case_owned(t.into_owned(), config.keyword_case)
+                    apply_case_cow(t, config.keyword_case)
                 } else if !a.is_bracket
+                    && config.literal_case != CaseStyle::Preserve
                     && !t.starts_with('"')
                     && !t.starts_with('#')
                     && is_literal_token(&t)
                 {
-                    apply_literal_case_owned(t.into_owned(), config.literal_case)
+                    apply_case_cow(t, config.literal_case)
                 } else {
-                    t.into_owned()
+                    t
                 }
             })
             .collect()
     } else {
-        args.iter()
-            .map(|a| arg_inline_text(a).into_owned())
-            .collect()
+        args.iter().map(arg_inline_text).collect()
     };
 
     let mut items = PrintItems::new();
@@ -1414,7 +1426,7 @@ fn try_single_line(
         if i > 0 {
             items.push_space();
         }
-        items.extend(ir_helpers::gen_from_raw_string(text));
+        items.push_raw_str(text);
     }
     Some(items)
 }
@@ -1427,17 +1439,17 @@ fn try_single_line(
 #[derive(Debug, Clone)]
 enum ArgGroup<'a> {
     /// Positional arguments (not associated with a keyword).
-    Positional(Vec<&'a FormattedArg>),
+    Positional(Vec<&'a FormattedArg<'a>>),
     /// A keyword and its associated values.
     Keyword {
-        keyword: &'a FormattedArg,
-        values: Vec<&'a FormattedArg>,
+        keyword: &'a FormattedArg<'a>,
+        values: Vec<&'a FormattedArg<'a>>,
     },
     /// A command-line keyword (e.g., `debug`, `optimized`, `general`) with its single value.
     /// These are NOT subject to keyword casing and always keep keyword + value inline.
     CmdLineKeyword {
-        keyword: &'a FormattedArg,
-        value: Option<&'a FormattedArg>,
+        keyword: &'a FormattedArg<'a>,
+        value: Option<&'a FormattedArg<'a>>,
     },
 }
 
@@ -1666,13 +1678,13 @@ fn get_section_front_positional(keyword_text: &str, spec: &CommandSpec) -> usize
 /// Split arguments into groups based on command spec keywords.
 /// Returns (front_positionals, keyword_groups, back_positionals).
 fn split_arguments<'a>(
-    args: &'a [FormattedArg],
+    args: &'a [FormattedArg<'a>],
     spec: &CommandSpec,
     config: &Configuration,
 ) -> (
-    Vec<&'a FormattedArg>,
+    Vec<&'a FormattedArg<'a>>,
     Vec<ArgGroup<'a>>,
-    Vec<&'a FormattedArg>,
+    Vec<&'a FormattedArg<'a>>,
 ) {
     // 0. Extract back positional args from the end of the list
     let back_count = spec.back_positional.min(args.len());
@@ -2125,7 +2137,7 @@ fn is_one_line_alignment_candidate(cmd_name: &str, args: &[&FormattedArg]) -> bo
     !args.is_empty()
         && args
             .iter()
-            .all(|arg| !arg.text.starts_with('#') && !arg.text.contains('\n'))
+            .all(|arg| !arg.text.starts_with('#') && !arg.has_newline)
         && (cmd_name.eq_ignore_ascii_case("install") || is_keyword_like_value(args[0]))
 }
 
@@ -2925,25 +2937,16 @@ fn emit_keyword_group(
             if keyword.is_keyword {
                 apply_keyword_case(&keyword.text, config.keyword_case)
             } else {
-                Cow::Borrowed(keyword.text.as_str())
+                Cow::Borrowed(keyword.text.as_ref())
             },
             if first_val.is_keyword || get_keyword_type(first_val, spec).is_some() {
                 apply_keyword_case(&first_val.text, config.keyword_case)
             } else {
-                Cow::Borrowed(first_val.text.as_str())
+                Cow::Borrowed(first_val.text.as_ref())
             },
         );
-        let compound_arg = FormattedArg {
-            text: compound_text,
-            is_keyword: false, // already cased
-            is_bracket: false,
-            trailing_comment: None,
-            trailing_is_bracket: false,
-            is_paren_group: false,
-            paren_inner: Vec::new(),
-            blank_line_before: false,
-            new_line_before: false,
-        };
+        // is_keyword stays false: already cased.
+        let compound_arg = FormattedArg::new(Cow::Owned(compound_text));
         return emit_keyword_group(
             items,
             &compound_arg,
@@ -2981,7 +2984,7 @@ fn emit_keyword_group(
                 let kw_text = if keyword.is_keyword || get_keyword_type(keyword, spec).is_some() {
                     apply_keyword_case(&keyword.text, config.keyword_case)
                 } else {
-                    Cow::Borrowed(keyword.text.as_str())
+                    Cow::Borrowed(keyword.text.as_ref())
                 };
                 let padded_width = kw_col_width + 1;
                 items.push_string(format!("{:<width$}", kw_text, width = padded_width));
@@ -3023,7 +3026,7 @@ fn emit_keyword_group(
             || is_custom_keyword(keyword, config));
     // Try inline: keyword + all values on one line.
     let inline_width = compute_keyword_inline_width(keyword, values);
-    let can_inline_content = !values.iter().any(|v| v.text.contains('\n'))
+    let can_inline_content = !values.iter().any(|v| v.has_newline)
         && values
             .iter()
             .all(|v| v.trailing_comment.is_none() || v.trailing_is_bracket)
@@ -3041,17 +3044,17 @@ fn emit_keyword_group(
         let kw_text = if keyword.is_keyword {
             apply_keyword_case(&keyword.text, config.keyword_case)
         } else {
-            Cow::Borrowed(keyword.text.as_str())
+            Cow::Borrowed(keyword.text.as_ref())
         };
         items.push_string(kw_text.into_owned());
         for val in values {
             items.push_space();
             let val_text = arg_inline_text(val);
-            items.extend(ir_helpers::gen_from_raw_string(&val_text));
+            items.push_raw_str(&val_text);
         }
         if let Some(comment) = &keyword.trailing_comment {
             items.push_space();
-            items.extend(ir_helpers::gen_from_raw_string(comment));
+            items.push_raw_str(comment);
         }
         return false;
     }
@@ -3078,16 +3081,16 @@ fn emit_keyword_group(
             let kw_text = if keyword.is_keyword {
                 apply_keyword_case(&keyword.text, config.keyword_case)
             } else {
-                Cow::Borrowed(keyword.text.as_str())
+                Cow::Borrowed(keyword.text.as_ref())
             };
             items.push_string(kw_text.into_owned());
             for val in values {
                 items.push_space();
-                items.extend(ir_helpers::gen_from_raw_string(&arg_inline_text(val)));
+                items.push_raw_str(&arg_inline_text(val));
             }
             if let Some(comment) = &keyword.trailing_comment {
                 items.push_space();
-                items.extend(ir_helpers::gen_from_raw_string(comment));
+                items.push_raw_str(comment);
             }
             return false;
         }
@@ -3105,23 +3108,19 @@ fn emit_keyword_group(
                 && allow_keyword_inline
                 && !preserve_inline_keyword_layout
                 && base_indent + leading_width <= config.line_width as usize
-                && !values[..leading_count]
-                    .iter()
-                    .any(|v| v.text.contains('\n'));
+                && !values[..leading_count].iter().any(|v| v.has_newline);
             if can_inline_leading {
                 let kw_text = if keyword.is_keyword {
                     apply_keyword_case(&keyword.text, config.keyword_case)
                 } else {
-                    Cow::Borrowed(keyword.text.as_str())
+                    Cow::Borrowed(keyword.text.as_ref())
                 };
                 items.push_string(kw_text.into_owned());
                 for val in &values[..leading_count] {
                     items.push_space();
-                    items.extend(ir_helpers::gen_from_raw_string(&arg_inline_text(val)));
+                    items.push_raw_str(&arg_inline_text(val));
                 }
-                let wrap_section_tail = values[leading_count..]
-                    .iter()
-                    .any(|v| v.text.contains('\n'));
+                let wrap_section_tail = values[leading_count..].iter().any(|v| v.has_newline);
                 emit_section_values_inner(
                     items,
                     &values[leading_count..],
@@ -3147,7 +3146,7 @@ fn emit_keyword_group(
                 let pw: usize = values.iter().map(|v| arg_width(v)).sum::<usize>()
                     + values.len().saturating_sub(1);
                 value_col + pw + closing_paren_extra < config.line_width as usize
-                    && !values.iter().any(|v| v.text.contains('\n'))
+                    && !values.iter().any(|v| v.has_newline)
                     && !values.iter().any(|v| v.text.starts_with('#'))
                     && values
                         .iter()
@@ -3295,30 +3294,30 @@ fn emit_property_values(
                 prop_name.trailing_comment.is_some() && !prop_name.trailing_is_bracket;
             let val_has_line_comment = val.trailing_comment.is_some() && !val.trailing_is_bracket;
             let can_inline = prop_indent + inline_width <= config.line_width as usize
-                && !prop_name.text.contains('\n')
-                && !val.text.contains('\n')
+                && !prop_name.has_newline
+                && !val.has_newline
                 && !name_has_line_comment
                 && !val_has_line_comment;
 
             if can_inline {
                 let mut val_items = PrintItems::new();
                 val_items.push_signal(Signal::NewLine);
-                val_items.extend(ir_helpers::gen_from_raw_string(&arg_inline_text(prop_name)));
+                val_items.push_raw_str(&arg_inline_text(prop_name));
                 val_items.push_space();
-                val_items.extend(ir_helpers::gen_from_raw_string(&arg_inline_text(val)));
+                val_items.push_raw_str(&arg_inline_text(val));
                 if let Some(comment) = &prop_name.trailing_comment {
                     val_items.push_space();
-                    val_items.extend(ir_helpers::gen_from_raw_string(comment));
+                    val_items.push_raw_str(comment);
                 }
                 if let Some(comment) = &val.trailing_comment {
                     val_items.push_signal(Signal::NewLine);
-                    val_items.extend(ir_helpers::gen_from_raw_string(comment));
+                    val_items.push_raw_str(comment);
                 }
                 // Emit any standalone comments in prop_values
                 for pv in prop_values {
                     if pv.text.starts_with('#') {
                         val_items.push_signal(Signal::NewLine);
-                        val_items.extend(ir_helpers::gen_from_raw_string(&pv.text));
+                        val_items.push_raw_str(&pv.text);
                     }
                 }
                 items.push_indented(val_items);
@@ -3333,7 +3332,7 @@ fn emit_property_values(
             for pv in prop_values {
                 if pv.text.starts_with('#') {
                     val_items.push_signal(Signal::NewLine);
-                    val_items.extend(ir_helpers::gen_from_raw_string(&pv.text));
+                    val_items.push_raw_str(&pv.text);
                 }
             }
             items.push_indented(val_items);
@@ -3386,14 +3385,14 @@ fn emit_flow_values(
 
     for val in values {
         let is_comment = val.text.starts_with('#');
-        let has_newline = val.text.contains('\n');
+        let has_newline = val.has_newline;
         let val_text = arg_inline_text(val);
         let val_width = val_text.len();
 
         // Comments always go on their own line
         if is_comment {
             val_items.push_signal(Signal::NewLine);
-            val_items.extend(ir_helpers::gen_from_raw_string(&val_text));
+            val_items.push_raw_str(&val_text);
             current_line_width = flow_indent;
             line_started = false;
             continue;
@@ -3431,12 +3430,12 @@ fn emit_flow_values(
             if let Some(first_nl) = raw.find('\n') {
                 let first_line = &raw[..first_nl];
                 let rest = &raw[first_nl + 1..];
-                val_items.push_string(first_line.to_string());
+                val_items.push_str(first_line);
                 val_items.push_signal(Signal::StartIgnoringIndent);
                 for line in rest.lines() {
                     val_items.push_signal(Signal::NewLine);
                     if !line.is_empty() {
-                        val_items.push_string(line.to_string());
+                        val_items.push_str(line);
                     }
                 }
                 if rest.ends_with('\n') {
@@ -3444,23 +3443,23 @@ fn emit_flow_values(
                 }
                 val_items.push_signal(Signal::FinishIgnoringIndent);
             } else {
-                val_items.extend(ir_helpers::gen_from_raw_string(raw));
+                val_items.push_raw_str(raw);
             }
             current_line_width = flow_indent;
             line_started = false;
         } else {
-            val_items.extend(ir_helpers::gen_from_raw_string(&val_text));
+            val_items.push_raw_str(&val_text);
             current_line_width += needed;
             // Emit trailing comment if present
             if let Some(comment) = &val.trailing_comment {
                 if val.trailing_is_bracket {
                     // Bracket comments stay inline
                     val_items.push_space();
-                    val_items.extend(ir_helpers::gen_from_raw_string(comment));
+                    val_items.push_raw_str(comment);
                 } else {
                     // Line comments go on their own line
                     val_items.push_signal(Signal::NewLine);
-                    val_items.extend(ir_helpers::gen_from_raw_string(comment));
+                    val_items.push_raw_str(comment);
                 }
                 current_line_width = flow_indent;
                 line_started = false;
@@ -3514,10 +3513,10 @@ fn emit_aligned_keyword_values(
         if let Some(comment) = &val.trailing_comment {
             if val.trailing_is_bracket {
                 items.push_space();
-                items.extend(ir_helpers::gen_from_raw_string(comment));
+                items.push_raw_str(comment);
             } else {
                 push_comment_gap(items, config.comment_gap);
-                items.extend(ir_helpers::gen_from_raw_string(comment));
+                items.push_raw_str(comment);
                 push_newline_with_visual_indent(items, value_indent_width, config);
                 current_width = value_start_col;
             }
@@ -3587,8 +3586,8 @@ fn emit_pair_values(
             // Try inline: KEY VALUE at L2 (only if no intervening comments)
             let inline_width = arg_width(key) + 1 + arg_width(val);
             let can_inline = pair_indent + inline_width <= config.line_width as usize
-                && !key.text.contains('\n')
-                && !val.text.contains('\n')
+                && !key.has_newline
+                && !val.has_newline
                 && !key_has_line_comment
                 && !val_has_line_comment
                 && !has_intervening_comments;
@@ -3596,7 +3595,7 @@ fn emit_pair_values(
             if can_inline {
                 let key_text = arg_inline_text(key);
                 val_items.push_signal(Signal::NewLine);
-                val_items.extend(ir_helpers::gen_from_raw_string(&key_text));
+                val_items.push_raw_str(&key_text);
 
                 if let Some(width) = aligned_key_width {
                     let padding = width.saturating_sub(key_text.len()) + 1;
@@ -3607,17 +3606,17 @@ fn emit_pair_values(
                     val_items.push_space();
                 }
 
-                val_items.extend(ir_helpers::gen_from_raw_string(&arg_inline_text(val)));
+                val_items.push_raw_str(&arg_inline_text(val));
 
                 // Key's bracket comment (if any) goes inline
                 if let Some(comment) = &key.trailing_comment {
                     val_items.push_space();
-                    val_items.extend(ir_helpers::gen_from_raw_string(comment));
+                    val_items.push_raw_str(comment);
                 }
                 // Value's trailing comment goes on its own line at L2
                 if let Some(comment) = &val.trailing_comment {
                     val_items.push_signal(Signal::NewLine);
-                    val_items.extend(ir_helpers::gen_from_raw_string(comment));
+                    val_items.push_raw_str(comment);
                 }
                 i = val_idx + 1;
                 continue;
@@ -3628,20 +3627,16 @@ fn emit_pair_values(
                 // Both have line comments: special layout
                 // KEY alone at L2, key-comment at L3, value at L3, val-comment at L2
                 val_items.push_signal(Signal::NewLine);
-                val_items.extend(ir_helpers::gen_from_raw_string(&arg_inline_text(key)));
+                val_items.push_raw_str(&arg_inline_text(key));
                 let mut sub = PrintItems::new();
                 sub.push_signal(Signal::NewLine);
-                sub.extend(ir_helpers::gen_from_raw_string(
-                    key.trailing_comment.as_ref().unwrap(),
-                ));
+                sub.push_raw_str(key.trailing_comment.as_ref().unwrap());
                 sub.push_signal(Signal::NewLine);
-                sub.extend(ir_helpers::gen_from_raw_string(&arg_inline_text(val)));
+                sub.push_raw_str(&arg_inline_text(val));
                 val_items.push_indented(sub);
                 // Value's trailing comment at L2
                 val_items.push_signal(Signal::NewLine);
-                val_items.extend(ir_helpers::gen_from_raw_string(
-                    val.trailing_comment.as_ref().unwrap(),
-                ));
+                val_items.push_raw_str(val.trailing_comment.as_ref().unwrap());
             } else {
                 // Key at L2 (with trailing comment inline if present)
                 val_items.push_signal(Signal::NewLine);
@@ -3710,7 +3705,7 @@ fn emit_aligned_property_pairs(
 
         let key_text = arg_inline_text(key);
         val_items.push_signal(Signal::NewLine);
-        val_items.extend(ir_helpers::gen_from_raw_string(&key_text));
+        val_items.push_raw_str(&key_text);
         index += 1;
 
         let mut emitted_first_value = false;
@@ -3728,11 +3723,11 @@ fn emit_aligned_property_pairs(
                 for _ in 0..padding {
                     val_items.push_space();
                 }
-                val_items.extend(ir_helpers::gen_from_raw_string(&arg_inline_text(value)));
+                val_items.push_raw_str(&arg_inline_text(value));
                 emitted_first_value = true;
             } else {
                 val_items.push_space();
-                val_items.extend(ir_helpers::gen_from_raw_string(&arg_inline_text(value)));
+                val_items.push_raw_str(&arg_inline_text(value));
             }
             index += 1;
         }
@@ -3808,27 +3803,27 @@ fn emit_cmd_line_keyword(
 ) {
     if let Some(val) = value {
         let inline_width = keyword.text.len() + 1 + arg_width(val);
-        if base_indent + inline_width <= config.line_width as usize && !val.text.contains('\n') {
+        if base_indent + inline_width <= config.line_width as usize && !val.has_newline {
             items.push_signal(Signal::NewLine);
-            items.extend(ir_helpers::gen_from_raw_string(&keyword.text));
+            items.push_raw_str(&keyword.text);
             items.push_space();
-            items.extend(ir_helpers::gen_from_raw_string(&arg_inline_text(val)));
+            items.push_raw_str(&arg_inline_text(val));
             if let Some(comment) = &val.trailing_comment {
                 items.push_space();
-                items.extend(ir_helpers::gen_from_raw_string(comment));
+                items.push_raw_str(comment);
             }
             return;
         }
         // Expanded: keyword on its own line, value indented below
         items.push_signal(Signal::NewLine);
-        items.extend(ir_helpers::gen_from_raw_string(&keyword.text));
+        items.push_raw_str(&keyword.text);
         let mut val_items = PrintItems::new();
         val_items.push_signal(Signal::NewLine);
         emit_arg(&mut val_items, val, config);
         items.push_indented(val_items);
     } else {
         items.push_signal(Signal::NewLine);
-        items.extend(ir_helpers::gen_from_raw_string(&keyword.text));
+        items.push_raw_str(&keyword.text);
     }
 }
 
@@ -3883,8 +3878,7 @@ fn emit_section_values_inner(
                     // Try inline
                     if let Some(sv) = sub_val {
                         let iw = values[i].text.len() + 1 + arg_width(sv);
-                        if sub_indent + iw <= config.line_width as usize && !sv.text.contains('\n')
-                        {
+                        if sub_indent + iw <= config.line_width as usize && !sv.has_newline {
                             push_wrapped_newline(
                                 &mut val_items,
                                 wrap_indent,
@@ -3897,10 +3891,10 @@ fn emit_section_values_inner(
                             );
                             val_items.push_space();
                             let sv_text = arg_inline_text(sv);
-                            val_items.extend(ir_helpers::gen_from_raw_string(&sv_text));
+                            val_items.push_raw_str(&sv_text);
                             if let Some(comment) = &values[i].trailing_comment {
                                 val_items.push_space();
-                                val_items.extend(ir_helpers::gen_from_raw_string(comment));
+                                val_items.push_raw_str(comment);
                             }
                             i += 2;
                             continue;
@@ -3937,7 +3931,7 @@ fn emit_section_values_inner(
                     let iw =
                         kw.text.len() + sub_values.iter().map(|v| 1 + arg_width(v)).sum::<usize>();
                     let can_inline = sub_indent + iw <= config.line_width as usize
-                        && !sub_values.iter().any(|v| v.text.contains('\n'))
+                        && !sub_values.iter().any(|v| v.has_newline)
                         // Multi-value inline only under alignArgGroups; otherwise
                         // only single-value keywords inline (original behavior).
                         && (sub_values.len() == 1 || config.align_arg_groups)
@@ -3957,11 +3951,11 @@ fn emit_section_values_inner(
                         val_items.push_string(sub_kw_text.into_owned());
                         for sv in &sub_values {
                             val_items.push_space();
-                            val_items.extend(ir_helpers::gen_from_raw_string(&arg_inline_text(sv)));
+                            val_items.push_raw_str(&arg_inline_text(sv));
                         }
                         if let Some(comment) = &kw.trailing_comment {
                             val_items.push_space();
-                            val_items.extend(ir_helpers::gen_from_raw_string(comment));
+                            val_items.push_raw_str(comment);
                         }
                     } else if sub_values.is_empty() {
                         push_wrapped_newline(
@@ -4051,7 +4045,7 @@ fn emit_section_values_inner(
                             .iter()
                             .map(|v| 1 + arg_width(v))
                             .sum::<usize>();
-                    let all_inlineable = !all_group_values.iter().any(|v| v.text.contains('\n'))
+                    let all_inlineable = !all_group_values.iter().any(|v| v.has_newline)
                         && all_group_values
                             .iter()
                             .all(|v| v.trailing_comment.is_none() || v.trailing_is_bracket)
@@ -4066,22 +4060,20 @@ fn emit_section_values_inner(
                             continuation_indent,
                             config,
                         );
-                        val_items.push_string(
-                            apply_keyword_case(&kw.text, config.keyword_case).into_owned(),
-                        );
+                        val_items.push_raw_str(&apply_keyword_case(&kw.text, config.keyword_case));
                         for v in all_group_values {
                             val_items.push_space();
                             let raw = arg_inline_text(v);
                             let vt = if v.is_keyword {
-                                apply_keyword_case_owned(raw.into_owned(), config.keyword_case)
+                                apply_case_cow(raw, config.keyword_case)
                             } else {
-                                raw.into_owned()
+                                raw
                             };
-                            val_items.extend(ir_helpers::gen_from_raw_string(&vt));
+                            val_items.push_raw_str(&vt);
                         }
                         if let Some(comment) = &kw.trailing_comment {
                             val_items.push_space();
-                            val_items.extend(ir_helpers::gen_from_raw_string(comment));
+                            val_items.push_raw_str(comment);
                         }
                     } else {
                         // Try to inline keyword + front positionals only
@@ -4092,7 +4084,7 @@ fn emit_section_values_inner(
                                 .sum::<usize>();
                         let can_inline_front = !front_positionals.is_empty()
                             && sub_indent + front_iw <= config.line_width as usize
-                            && !front_positionals.iter().any(|v| v.text.contains('\n'))
+                            && !front_positionals.iter().any(|v| v.has_newline)
                             && front_positionals
                                 .iter()
                                 .all(|v| v.trailing_comment.is_none() || v.trailing_is_bracket)
@@ -4112,12 +4104,11 @@ fn emit_section_values_inner(
                             );
                             for v in front_positionals {
                                 val_items.push_space();
-                                val_items
-                                    .extend(ir_helpers::gen_from_raw_string(&arg_inline_text(v)));
+                                val_items.push_raw_str(&arg_inline_text(v));
                             }
                             if let Some(comment) = &kw.trailing_comment {
                                 val_items.push_space();
-                                val_items.extend(ir_helpers::gen_from_raw_string(comment));
+                                val_items.push_raw_str(comment);
                             }
                             let mut nested_items = PrintItems::new();
                             emit_section_values_inner(
@@ -4213,25 +4204,26 @@ fn gen_condition_closer_multi_line(
     let base_indent = (indent_depth as usize + 1) * config.indent_width as usize;
     let mut inner = PrintItems::new();
 
-    let mut tokens: Vec<String> = Vec::with_capacity(args.len());
+    let mut tokens: Vec<Cow<'_, str>> = Vec::with_capacity(args.len());
     for arg in args {
         let raw = arg_inline_text(arg);
         let token = if arg.is_keyword {
-            apply_keyword_case_owned(raw.into_owned(), config.keyword_case)
+            apply_case_cow(raw, config.keyword_case)
         } else if !arg.is_bracket
+            && config.literal_case != CaseStyle::Preserve
             && !raw.starts_with('"')
             && !raw.starts_with('#')
             && is_literal_token(&raw)
         {
-            apply_literal_case_owned(raw.into_owned(), config.literal_case)
+            apply_case_cow(raw, config.literal_case)
         } else {
-            raw.into_owned()
+            raw
         };
         tokens.push(token);
     }
 
     if let Some(first) = tokens.first() {
-        inner.extend(ir_helpers::gen_from_raw_string(first));
+        inner.push_raw_str(first);
         let mut current_width = base_indent + first.len();
         let mut i = 1;
 
@@ -4243,9 +4235,9 @@ fn gen_condition_closer_multi_line(
                 let needed = 1 + token.len() + 1 + next.len();
                 if current_width + needed > config.line_width as usize {
                     inner.push_signal(Signal::NewLine);
-                    inner.extend(ir_helpers::gen_from_raw_string(token));
+                    inner.push_raw_str(token);
                     inner.push_space();
-                    inner.extend(ir_helpers::gen_from_raw_string(next));
+                    inner.push_raw_str(next);
                     current_width = base_indent + token.len() + 1 + next.len();
                     i += 2;
                     continue;
@@ -4255,11 +4247,11 @@ fn gen_condition_closer_multi_line(
             let needed = 1 + token.len();
             if current_width + needed > config.line_width as usize {
                 inner.push_signal(Signal::NewLine);
-                inner.extend(ir_helpers::gen_from_raw_string(token));
+                inner.push_raw_str(token);
                 current_width = base_indent + token.len();
             } else {
                 inner.push_space();
-                inner.extend(ir_helpers::gen_from_raw_string(token));
+                inner.push_raw_str(token);
                 current_width += needed;
             }
             i += 1;
@@ -4342,18 +4334,18 @@ fn is_not_op(text: &str) -> bool {
 #[derive(Debug)]
 enum CondExpr<'a> {
     /// Simple atom (unquoted, quoted, bracket, etc.)
-    Atom(&'a FormattedArg),
+    Atom(&'a FormattedArg<'a>),
     /// Parenthesized group: (expr...)
-    ParenGroup(&'a FormattedArg),
+    ParenGroup(&'a FormattedArg<'a>),
     /// Unary operation: OP expr
     Unary {
-        op: &'a FormattedArg,
+        op: &'a FormattedArg<'a>,
         operand: Box<CondExpr<'a>>,
     },
     /// Binary operation: lhs OP rhs
     Binary {
         lhs: Box<CondExpr<'a>>,
-        op: &'a FormattedArg,
+        op: &'a FormattedArg<'a>,
         rhs: Box<CondExpr<'a>>,
     },
 }
@@ -4368,12 +4360,12 @@ enum CondItem<'a> {
     /// Logical operator + expression: AND expr, OR expr.
     /// Comments between the operator and expression are stored in `comments`.
     LogicalOp {
-        op: &'a FormattedArg,
-        comments: Vec<&'a FormattedArg>,
+        op: &'a FormattedArg<'a>,
+        comments: Vec<&'a FormattedArg<'a>>,
         expr: CondExpr<'a>,
     },
     /// Standalone comment (line comment not attached to any expression).
-    Comment(&'a FormattedArg),
+    Comment(&'a FormattedArg<'a>),
 }
 
 /// Parse a flat argument list into condition items.
@@ -4551,7 +4543,7 @@ fn gen_condition_multi_line(
                 emit_cond_logical_op(&mut inner, op, comments, expr, config, base_indent);
             }
             CondItem::Comment(arg) => {
-                inner.extend(ir_helpers::gen_from_raw_string(&arg.text));
+                inner.push_raw_str(&arg.text);
             }
         }
     }
@@ -4586,12 +4578,12 @@ fn emit_cond_logical_op(
         let op_text = if op.is_keyword {
             apply_keyword_case(&op.text, config.keyword_case)
         } else {
-            Cow::Borrowed(op.text.as_str())
+            Cow::Borrowed(op.text.as_ref())
         };
         items.push_string(op_text.into_owned());
         if let Some(comment) = &op.trailing_comment {
             items.push_space();
-            items.extend(ir_helpers::gen_from_raw_string(comment));
+            items.push_raw_str(comment);
         }
         items.push_space();
         emit_cond_expr_inline(items, expr, config);
@@ -4602,18 +4594,18 @@ fn emit_cond_logical_op(
     let op_text = if op.is_keyword {
         apply_keyword_case(&op.text, config.keyword_case)
     } else {
-        Cow::Borrowed(op.text.as_str())
+        Cow::Borrowed(op.text.as_ref())
     };
     items.push_string(op_text.into_owned());
     if let Some(comment) = &op.trailing_comment {
         items.push_space();
-        items.extend(ir_helpers::gen_from_raw_string(comment));
+        items.push_raw_str(comment);
     }
 
     // Emit interleaved comments on their own lines
     for c in comments {
         items.push_signal(Signal::NewLine);
-        items.extend(ir_helpers::gen_from_raw_string(&c.text));
+        items.push_raw_str(&c.text);
     }
 
     if op_has_comment || has_interleaved_comments {
@@ -4652,10 +4644,10 @@ fn emit_cond_expr(
                 && !inline.contains('\n')
                 && !has_line_comment_in_paren(arg)
             {
-                items.extend(ir_helpers::gen_from_raw_string(&inline));
+                items.push_raw_str(&inline);
                 if let Some(comment) = &arg.trailing_comment {
                     items.push_space();
-                    items.extend(ir_helpers::gen_from_raw_string(comment));
+                    items.push_raw_str(comment);
                 }
             } else {
                 // Expanded paren group
@@ -4684,7 +4676,7 @@ fn emit_cond_expr(
                             );
                         }
                         CondItem::Comment(arg) => {
-                            paren_inner.extend(ir_helpers::gen_from_raw_string(&arg.text));
+                            paren_inner.push_raw_str(&arg.text);
                         }
                     }
                 }
@@ -4693,7 +4685,7 @@ fn emit_cond_expr(
                 items.push_str_runtime_width_computed(")");
                 if let Some(comment) = &arg.trailing_comment {
                     items.push_space();
-                    items.extend(ir_helpers::gen_from_raw_string(comment));
+                    items.push_raw_str(comment);
                 }
             }
         }
@@ -4709,13 +4701,13 @@ fn emit_cond_expr(
                     if op.is_keyword {
                         apply_keyword_case(&op.text, config.keyword_case)
                     } else {
-                        Cow::Borrowed(op.text.as_str())
+                        Cow::Borrowed(op.text.as_ref())
                     }
                     .into_owned(),
                 );
                 if let Some(comment) = &op.trailing_comment {
                     items.push_space();
-                    items.extend(ir_helpers::gen_from_raw_string(comment));
+                    items.push_raw_str(comment);
                 }
                 items.push_space();
                 emit_cond_expr_inline(items, operand, config);
@@ -4727,13 +4719,13 @@ fn emit_cond_expr(
                 if op.is_keyword {
                     apply_keyword_case(&op.text, config.keyword_case)
                 } else {
-                    Cow::Borrowed(op.text.as_str())
+                    Cow::Borrowed(op.text.as_ref())
                 }
                 .into_owned(),
             );
             if let Some(comment) = &op.trailing_comment {
                 items.push_space();
-                items.extend(ir_helpers::gen_from_raw_string(comment));
+                items.push_raw_str(comment);
             }
 
             // For short operators (< indent_width): operand on same line
@@ -4769,13 +4761,13 @@ fn emit_cond_expr(
                     if op.is_keyword {
                         apply_keyword_case(&op.text, config.keyword_case)
                     } else {
-                        Cow::Borrowed(op.text.as_str())
+                        Cow::Borrowed(op.text.as_ref())
                     }
                     .into_owned(),
                 );
                 if let Some(comment) = &op.trailing_comment {
                     items.push_space();
-                    items.extend(ir_helpers::gen_from_raw_string(comment));
+                    items.push_raw_str(comment);
                 }
                 items.push_space();
                 emit_cond_expr_inline(items, rhs, config);
@@ -4790,13 +4782,13 @@ fn emit_cond_expr(
                 if op.is_keyword {
                     apply_keyword_case(&op.text, config.keyword_case)
                 } else {
-                    Cow::Borrowed(op.text.as_str())
+                    Cow::Borrowed(op.text.as_ref())
                 }
                 .into_owned(),
             );
             if let Some(comment) = &op.trailing_comment {
                 sub.push_space();
-                sub.extend(ir_helpers::gen_from_raw_string(comment));
+                sub.push_raw_str(comment);
             }
             sub.push_signal(Signal::NewLine);
             emit_cond_expr(
@@ -4816,33 +4808,33 @@ fn emit_cond_expr_inline(items: &mut PrintItems, expr: &CondExpr<'_>, config: &C
         CondExpr::Atom(arg) => {
             let t = arg_inline_text(arg);
             let t = if arg.is_keyword {
-                apply_keyword_case_owned(t.into_owned(), config.keyword_case)
+                apply_case_cow(t, config.keyword_case)
             } else {
-                t.into_owned()
+                t
             };
-            items.extend(ir_helpers::gen_from_raw_string(&t));
+            items.push_raw_str(&t);
             if let Some(comment) = &arg.trailing_comment {
                 items.push_space();
-                items.extend(ir_helpers::gen_from_raw_string(comment));
+                items.push_raw_str(comment);
             }
         }
         CondExpr::ParenGroup(arg) => {
-            items.extend(ir_helpers::gen_from_raw_string(&arg_inline_text(arg)));
+            items.push_raw_str(&arg_inline_text(arg));
             if let Some(comment) = &arg.trailing_comment {
                 items.push_space();
-                items.extend(ir_helpers::gen_from_raw_string(comment));
+                items.push_raw_str(comment);
             }
         }
         CondExpr::Unary { op, operand } => {
             let op_text = if op.is_keyword {
                 apply_keyword_case(&op.text, config.keyword_case)
             } else {
-                Cow::Borrowed(op.text.as_str())
+                Cow::Borrowed(op.text.as_ref())
             };
             items.push_string(op_text.into_owned());
             if let Some(comment) = &op.trailing_comment {
                 items.push_space();
-                items.extend(ir_helpers::gen_from_raw_string(comment));
+                items.push_raw_str(comment);
             }
             items.push_space();
             emit_cond_expr_inline(items, operand, config);
@@ -4853,12 +4845,12 @@ fn emit_cond_expr_inline(items: &mut PrintItems, expr: &CondExpr<'_>, config: &C
             let op_text = if op.is_keyword {
                 apply_keyword_case(&op.text, config.keyword_case)
             } else {
-                Cow::Borrowed(op.text.as_str())
+                Cow::Borrowed(op.text.as_ref())
             };
             items.push_string(op_text.into_owned());
             if let Some(comment) = &op.trailing_comment {
                 items.push_space();
-                items.extend(ir_helpers::gen_from_raw_string(comment));
+                items.push_raw_str(comment);
             }
             items.push_space();
             emit_cond_expr_inline(items, rhs, config);
@@ -4898,13 +4890,13 @@ fn emit_kw_arg(items: &mut PrintItems, arg: &FormattedArg, config: &Configuratio
 /// which lack the `is_keyword` flag.
 fn emit_sub_kw_arg(items: &mut PrintItems, arg: &FormattedArg, config: &Configuration) {
     let text = apply_keyword_case(&arg.text, config.keyword_case);
-    items.extend(ir_helpers::gen_from_raw_string(&text));
+    items.push_raw_str(&text);
     if let Some(comment) = &arg.trailing_comment {
         items.push_space();
         if arg.trailing_is_bracket {
             emit_bracket_verbatim(items, comment);
         } else {
-            items.extend(ir_helpers::gen_from_raw_string(comment));
+            items.push_raw_str(comment);
         }
     }
 }
@@ -4928,18 +4920,22 @@ fn emit_arg_with_case(
         let text = if let Some(case) = kw_case {
             if arg.is_keyword {
                 apply_keyword_case(&arg.text, case)
-            } else if !arg.text.starts_with('"') && is_literal_token(&arg.text) {
+            } else if literal_case != CaseStyle::Preserve
+                && !arg.text.starts_with('"')
+                && is_literal_token(&arg.text)
+            {
                 apply_literal_case(&arg.text, literal_case)
             } else {
-                Cow::Borrowed(arg.text.as_str())
+                Cow::Borrowed(arg.text.as_ref())
             }
-        } else if !arg.text.starts_with('"')
+        } else if literal_case != CaseStyle::Preserve
+            && !arg.text.starts_with('"')
             && !arg.text.starts_with('#')
             && is_literal_token(&arg.text)
         {
             apply_literal_case(&arg.text, literal_case)
         } else {
-            Cow::Borrowed(arg.text.as_str())
+            Cow::Borrowed(arg.text.as_ref())
         };
         if text.contains('\n') {
             // Multi-line quoted strings: emit first line normally (gets indent
@@ -4947,12 +4943,12 @@ fn emit_arg_with_case(
             let first_nl = text.find('\n').unwrap();
             let first_line = &text[..first_nl];
             let rest = &text[first_nl + 1..];
-            items.push_string(first_line.to_string());
+            items.push_str(first_line);
             items.push_signal(Signal::StartIgnoringIndent);
             for line in rest.lines() {
                 items.push_signal(Signal::NewLine);
                 if !line.is_empty() {
-                    items.push_string(line.to_string());
+                    items.push_str(line);
                 }
             }
             if rest.ends_with('\n') {
@@ -4960,7 +4956,7 @@ fn emit_arg_with_case(
             }
             items.push_signal(Signal::FinishIgnoringIndent);
         } else {
-            items.extend(ir_helpers::gen_from_raw_string(&text));
+            items.push_raw_str(&text);
         }
     }
 
@@ -4969,7 +4965,7 @@ fn emit_arg_with_case(
         if arg.trailing_is_bracket {
             emit_bracket_verbatim(items, comment);
         } else {
-            items.extend(ir_helpers::gen_from_raw_string(comment));
+            items.push_raw_str(comment);
         }
     }
 }
@@ -4977,13 +4973,13 @@ fn emit_arg_with_case(
 fn emit_bracket_verbatim(items: &mut PrintItems, text: &str) {
     if let Some(first_nl) = text.find('\n') {
         let first_line = &text[..first_nl];
-        items.push_string(first_line.to_string());
+        items.push_str(first_line);
         let rest = &text[first_nl + 1..];
         items.push_signal(Signal::StartIgnoringIndent);
         for line in rest.lines() {
             items.push_signal(Signal::NewLine);
             if !line.is_empty() {
-                items.push_string(line.to_string());
+                items.push_str(line);
             }
         }
         if rest.ends_with('\n') {
@@ -4991,7 +4987,7 @@ fn emit_bracket_verbatim(items: &mut PrintItems, text: &str) {
         }
         items.push_signal(Signal::FinishIgnoringIndent);
     } else {
-        items.push_string(text.to_string());
+        items.push_str(text);
     }
 }
 
@@ -5147,21 +5143,21 @@ fn sort_argument_groups(
 ///
 /// A source blank line starts a new independent sort segment. Within each
 /// segment, comments remain attached to the following sortable row.
-fn sort_section_with_groups(args: &mut [FormattedArg]) {
+fn sort_section_with_groups(args: &mut [FormattedArg<'_>]) {
     #[derive(Clone)]
-    struct SortUnit {
+    struct SortUnit<'src> {
         key: String,
-        items: Vec<FormattedArg>,
+        items: Vec<FormattedArg<'src>>,
     }
 
     fn is_standalone_comment(arg: &FormattedArg) -> bool {
         arg.text.starts_with('#')
     }
 
-    fn flush_row(
-        units: &mut Vec<SortUnit>,
+    fn flush_row<'src>(
+        units: &mut Vec<SortUnit<'src>>,
         row_key: &mut Option<String>,
-        row_items: &mut Vec<FormattedArg>,
+        row_items: &mut Vec<FormattedArg<'src>>,
     ) {
         if let Some(key) = row_key.take() {
             units.push(SortUnit {
@@ -5171,9 +5167,9 @@ fn sort_section_with_groups(args: &mut [FormattedArg]) {
         }
     }
 
-    fn sort_segment(segment: &[FormattedArg]) -> Vec<FormattedArg> {
-        let mut units: Vec<SortUnit> = Vec::new();
-        let mut pending_comments: Vec<FormattedArg> = Vec::new();
+    fn sort_segment<'src>(segment: &[FormattedArg<'src>]) -> Vec<FormattedArg<'src>> {
+        let mut units: Vec<SortUnit<'src>> = Vec::new();
+        let mut pending_comments: Vec<FormattedArg<'src>> = Vec::new();
         let mut row_items: Vec<FormattedArg> = Vec::new();
         let mut row_key: Option<String> = None;
 
@@ -5198,7 +5194,7 @@ fn sort_section_with_groups(args: &mut [FormattedArg]) {
                 continue;
             }
 
-            let delta = genex_depth_delta(&item.text);
+            let delta = item.genex_delta;
 
             // While inside a genex (depth > 0), all tokens belong to the
             // current sort unit — never start a new row.
@@ -5282,7 +5278,9 @@ fn sort_keyword_sections_by_order(args: &mut Vec<FormattedArg>, order: &[&str]) 
                 .any(|&section| section.eq_ignore_ascii_case(&arg.text))
     }
 
-    fn take_trailing_attached_comments(items: &mut Vec<FormattedArg>) -> Vec<FormattedArg> {
+    fn take_trailing_attached_comments<'src>(
+        items: &mut Vec<FormattedArg<'src>>,
+    ) -> Vec<FormattedArg<'src>> {
         let mut trailing: Vec<FormattedArg> = Vec::new();
         while let Some(last) = items.last() {
             if !is_standalone_comment(last) || last.blank_line_before {
@@ -5368,15 +5366,17 @@ fn sort_keyword_sections_by_order(args: &mut Vec<FormattedArg>, order: &[&str]) 
 // Generator expression (genex) formatting
 // ---------------------------------------------------------------------------
 
-/// Compute the net depth change of `$<` / `>` in a string.
-/// Each `$<` increments by 1, each `>` decrements by 1.
-fn genex_depth_delta(text: &str) -> i32 {
+/// Single-pass scan returning the net `$<`/`>` depth delta and whether the
+/// string contains `$<` at all (replaces a separate substring search).
+fn genex_scan(text: &str) -> (i32, bool) {
     let mut depth: i32 = 0;
+    let mut has_genex = false;
     let bytes = text.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
         if i + 1 < bytes.len() && bytes[i] == b'$' && bytes[i + 1] == b'<' {
             depth += 1;
+            has_genex = true;
             i += 2;
         } else if bytes[i] == b'>' {
             depth -= 1;
@@ -5385,7 +5385,7 @@ fn genex_depth_delta(text: &str) -> i32 {
             i += 1;
         }
     }
-    depth
+    (depth, has_genex)
 }
 
 /// Group a slice of `FormattedArg` values into genex groups and standalone args.
@@ -5393,9 +5393,9 @@ fn genex_depth_delta(text: &str) -> i32 {
 /// depth goes above 0 and returns to 0.
 enum GenexArgGroup<'a> {
     /// A standalone argument (not part of a genex spanning multiple tokens).
-    Single(&'a FormattedArg),
+    Single(&'a FormattedArg<'a>),
     /// A group of consecutive args forming one complete genex.
-    Genex(Vec<&'a FormattedArg>),
+    Genex(Vec<&'a FormattedArg<'a>>),
 }
 
 fn group_args_by_genex<'a>(args: &[&'a FormattedArg]) -> Vec<GenexArgGroup<'a>> {
@@ -5404,11 +5404,11 @@ fn group_args_by_genex<'a>(args: &[&'a FormattedArg]) -> Vec<GenexArgGroup<'a>> 
     let mut genex_buf: Vec<&'a FormattedArg> = Vec::new();
 
     for &arg in args {
-        let delta = genex_depth_delta(&arg.text);
+        let (delta, has_genex) = (arg.genex_delta, arg.has_genex);
         if depth == 0 && delta == 0 {
             // Standalone arg, not genex.
             // But it might contain a self-contained genex (like LOG_LEVEL=$<IF:...>).
-            if memchr::memmem::find(arg.text.as_bytes(), b"$<").is_some() {
+            if has_genex {
                 groups.push(GenexArgGroup::Genex(vec![arg]));
             } else {
                 groups.push(GenexArgGroup::Single(arg));
@@ -5439,15 +5439,15 @@ fn emit_genex_value(
     continuation_indent: usize,
 ) {
     push_wrapped_newline(items, wrap_indent, continuation_indent, config);
-    items.extend(ir_helpers::gen_from_raw_string(text));
+    items.push_raw_str(text);
 }
 
 #[derive(Clone)]
 enum ValueLayoutLine<'a> {
     Blank,
-    Comment(&'a FormattedArg),
+    Comment(&'a FormattedArg<'a>),
     Genex(String),
-    Tokens(Vec<&'a FormattedArg>),
+    Tokens(Vec<&'a FormattedArg<'a>>),
 }
 
 #[derive(Clone, Default)]
@@ -5711,22 +5711,16 @@ fn emit_values_with_genex_with_indent(
                 if let GenexArgGroup::Genex(args) = group {
                     let joined = args
                         .iter()
-                        .map(|a| a.text.as_str())
+                        .map(|a| a.text.as_ref())
                         .collect::<Vec<_>>()
                         .join(" ");
                     Some(FormattedArg {
-                        text: joined,
-                        is_keyword: false,
-                        is_bracket: false,
-                        trailing_comment: None,
-                        trailing_is_bracket: false,
-                        is_paren_group: false,
-                        paren_inner: Vec::new(),
                         blank_line_before: args
                             .first()
                             .map(|a| a.blank_line_before)
                             .unwrap_or(false),
                         new_line_before: args.first().map(|a| a.new_line_before).unwrap_or(false),
+                        ..FormattedArg::new(Cow::Owned(joined))
                     })
                 } else {
                     None
@@ -5826,7 +5820,7 @@ fn emit_values_with_genex_with_indent(
                     flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
                     let joined = args
                         .iter()
-                        .map(|arg| arg.text.as_str())
+                        .map(|arg| arg.text.as_ref())
                         .collect::<Vec<_>>()
                         .join(" ");
                     lines.push(ValueLayoutLine::Genex(joined));

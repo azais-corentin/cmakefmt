@@ -3,7 +3,6 @@ use tracing::info_span;
 use crate::configuration::{Configuration, EndCommandArgs, apply_inline_overrides};
 use crate::instrumentation::{EVENT_GEN_FILE, EVENT_GEN_FILE_COMMAND};
 use crate::parser::ast::{Argument, CommandInvocation, File, FileElement};
-use crate::printer::ir_helpers;
 use crate::printer::{PrintItems, Signal};
 
 use super::gen_command::gen_command;
@@ -370,7 +369,7 @@ fn emit_comment_with_opening_indent(
     config: &Configuration,
 ) {
     if indent_level == 0 {
-        items.extend(ir_helpers::gen_from_raw_string(comment_text));
+        items.push_raw_str(comment_text);
         return;
     }
 
@@ -380,18 +379,18 @@ fn emit_comment_with_opening_indent(
         rendered.push_str(&prefix);
         rendered.push_str(&comment_text[..first_newline]);
         rendered.push_str(&comment_text[first_newline..]);
-        items.extend(ir_helpers::gen_from_raw_string(&rendered));
+        items.push_raw_str(&rendered);
     } else {
         let mut rendered = String::with_capacity(prefix.len() + comment_text.len());
         rendered.push_str(&prefix);
         rendered.push_str(comment_text);
-        items.extend(ir_helpers::gen_from_raw_string(&rendered));
+        items.push_raw_str(&rendered);
     }
 }
 
 pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems {
     let _file_stage = info_span!(EVENT_GEN_FILE, element_count = file.elements.len()).entered();
-    let mut items = PrintItems::with_capacity(file.elements.len() * 6);
+    let mut items = PrintItems::with_capacities(file.elements.len() * 6, source.len());
     let mut pending_blanks: u8 = 0;
     let mut indent_level: u32 = 0;
     let mut first = true;
@@ -435,9 +434,7 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
                         items.push_signal(Signal::NewLine);
                     }
                     first = false;
-                    items.extend(ir_helpers::gen_from_raw_string(command_source_slice(
-                        cmd, source,
-                    )));
+                    items.push_raw_str(command_source_slice(cmd, source));
                 }
                 FileElement::LineComment(span) => {
                     let comment_text = span.text(source);
@@ -445,7 +442,7 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
                         items.push_signal(Signal::NewLine);
                     }
                     first = false;
-                    items.extend(ir_helpers::gen_from_raw_string(comment_text));
+                    items.push_raw_str(comment_text);
 
                     if matches!(
                         parse_pragma_directive(comment_text),
@@ -459,7 +456,7 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
                         items.push_signal(Signal::NewLine);
                     }
                     first = false;
-                    items.extend(ir_helpers::gen_from_raw_string(span.text(source)));
+                    items.push_raw_str(span.text(source));
                 }
                 FileElement::BlankLine => unreachable!(),
             }
@@ -532,7 +529,7 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
                 if preserve_verbatim {
                     // Suppressed commands must remain byte-for-byte identical on their own line.
                     let raw_command = command_source_slice(cmd, source);
-                    items.extend(ir_helpers::gen_from_raw_string(raw_command));
+                    items.push_raw_str(raw_command);
                 } else {
                     // Apply endCommandArgs policy — may replace the command's arguments
                     let modified_cmd;

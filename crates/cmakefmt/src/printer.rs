@@ -31,12 +31,14 @@ pub enum Signal {
 }
 
 /// A single item in the print stream.
-#[derive(Debug, Clone)]
+///
+/// Text fragments are stored as byte ranges into the owning [`PrintItems`]
+/// text buffer, so pushing a fragment never allocates on its own.
+#[derive(Debug, Clone, Copy)]
 pub enum PrintItem {
-    /// An owned text fragment. Never contains `\n` — newlines are always [`Signal::NewLine`].
-    String(String),
-    /// A static text fragment used for punctuation like `(`, `)`, and `,`.
-    Static(&'static str),
+    /// A text fragment in `PrintItems::text`. Never contains `\n` — newlines
+    /// are always [`Signal::NewLine`].
+    Text { start: u32, len: u32 },
     /// A single space character.
     Space,
     /// A printer signal (indent, newline, etc.).
@@ -44,21 +46,41 @@ pub enum PrintItem {
 }
 
 /// A linear sequence of print items produced by the generation layer.
+///
+/// All text fragments share one slab buffer (`text`); items reference it by
+/// range. Merging two `PrintItems` appends the other buffer and rebases the
+/// ranges, which is far cheaper than per-fragment heap allocations.
 #[derive(Debug, Clone, Default)]
 pub struct PrintItems {
     items: Vec<PrintItem>,
+    text: String,
+}
+
+#[inline]
+fn to_u32(n: usize) -> u32 {
+    u32::try_from(n).expect("PrintItems text buffer exceeded 4 GiB")
 }
 
 impl PrintItems {
     /// Create an empty item list.
     pub fn new() -> Self {
-        Self { items: Vec::new() }
+        Self::default()
     }
 
     /// Create an item list pre-allocated for `cap` items.
     pub fn with_capacity(cap: usize) -> Self {
         Self {
             items: Vec::with_capacity(cap),
+            text: String::new(),
+        }
+    }
+
+    /// Create an item list pre-allocated for `items_cap` items and
+    /// `text_cap` bytes of fragment text.
+    pub fn with_capacities(items_cap: usize, text_cap: usize) -> Self {
+        Self {
+            items: Vec::with_capacity(items_cap),
+            text: String::with_capacity(text_cap),
         }
     }
 
@@ -67,11 +89,21 @@ impl PrintItems {
         self.items.push(PrintItem::Signal(signal));
     }
 
+    /// Append a borrowed string fragment (copied into the slab buffer).
+    pub fn push_str(&mut self, text: &str) {
+        if !text.is_empty() {
+            let start = to_u32(self.text.len());
+            self.text.push_str(text);
+            self.items.push(PrintItem::Text {
+                start,
+                len: to_u32(text.len()),
+            });
+        }
+    }
+
     /// Append an owned string fragment.
     pub fn push_string(&mut self, text: String) {
-        if !text.is_empty() {
-            self.items.push(PrintItem::String(text));
-        }
+        self.push_str(&text);
     }
 
     /// Append a static string fragment.
@@ -79,9 +111,7 @@ impl PrintItems {
     /// In dprint-core this computes display width for CJK characters; cmakefmt only calls it
     /// for single ASCII characters like `(`, `)`, and `,`, so width computation is unnecessary.
     pub fn push_str_runtime_width_computed(&mut self, text: &'static str) {
-        if !text.is_empty() {
-            self.items.push(PrintItem::Static(text));
-        }
+        self.push_str(text);
     }
 
     /// Append a single space.
@@ -89,9 +119,68 @@ impl PrintItems {
         self.items.push(PrintItem::Space);
     }
 
+    /// Append IR for a raw (potentially multi-line) string.
+    ///
+    /// If the string contains newlines, the output is wrapped in
+    /// `StartIgnoringIndent`/`FinishIgnoringIndent` so the content is emitted
+    /// verbatim. Each line is split on `\t` to emit `Signal::Tab`.
+    pub fn push_raw_str(&mut self, text: &str) {
+        // Fast path: one SIMD scan instead of separate `\n` and `\t` passes.
+        if memchr::memchr2(b'\n', b'\t', text.as_bytes()).is_none() {
+            self.push_str(text);
+            return;
+        }
+        if text.contains('\n') {
+            self.push_signal(Signal::StartIgnoringIndent);
+            for (i, line) in text.lines().enumerate() {
+                if i > 0 {
+                    self.push_signal(Signal::NewLine);
+                }
+                self.push_line(line);
+            }
+            // `str::lines()` drops a trailing empty line; restore it.
+            if text.ends_with('\n') {
+                self.push_signal(Signal::NewLine);
+            }
+            self.push_signal(Signal::FinishIgnoringIndent);
+        } else {
+            self.push_line(text);
+        }
+    }
+
+    /// Append IR for a single line, splitting on `\t` to emit `Signal::Tab`.
+    fn push_line(&mut self, line: &str) {
+        if !line.contains('\t') {
+            self.push_str(line);
+            return;
+        }
+        for (i, part) in line.split('\t').enumerate() {
+            if i > 0 {
+                self.push_signal(Signal::Tab);
+            }
+            self.push_str(part);
+        }
+    }
+
     /// Append all items from another `PrintItems`, consuming it.
     pub fn extend(&mut self, other: PrintItems) {
-        self.items.extend(other.items);
+        if self.text.is_empty() {
+            // Ranges stay valid at offset 0: steal the other buffer when ours
+            // is unallocated, otherwise keep our reserved capacity.
+            if self.text.capacity() == 0 {
+                self.text = other.text;
+            } else {
+                self.text.push_str(&other.text);
+            }
+            self.items.extend(other.items);
+            return;
+        }
+        let offset = to_u32(self.text.len());
+        self.text.push_str(&other.text);
+        self.items.reserve(other.items.len());
+        for item in other.items {
+            self.items.push(rebase(item, offset));
+        }
     }
 
     /// Append `other`'s items wrapped in one indent level, consuming `other`.
@@ -102,21 +191,21 @@ impl PrintItems {
         }
         self.items.reserve(other.items.len() + 2);
         self.items.push(PrintItem::Signal(Signal::StartIndent));
-        self.items.extend(other.items);
+        self.extend(other);
         self.items.push(PrintItem::Signal(Signal::FinishIndent));
     }
 
     /// Append `other`'s items wrapped in `times` indent levels, consuming `other`.
     pub fn push_indented_times(&mut self, other: PrintItems, times: u32) {
         if other.is_empty() || times == 0 {
-            self.items.extend(other.items);
+            self.extend(other);
             return;
         }
         self.items.reserve(other.items.len() + (times as usize) * 2);
         for _ in 0..times {
             self.items.push(PrintItem::Signal(Signal::StartIndent));
         }
-        self.items.extend(other.items);
+        self.extend(other);
         for _ in 0..times {
             self.items.push(PrintItem::Signal(Signal::FinishIndent));
         }
@@ -126,8 +215,25 @@ impl PrintItems {
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
     }
+
+    /// Resolve a text item's range against the slab buffer.
+    #[inline]
+    fn resolve(&self, start: u32, len: u32) -> &str {
+        &self.text[start as usize..(start + len) as usize]
+    }
 }
 
+/// Shift a text item's range by `offset` (no-op for non-text items).
+#[inline]
+fn rebase(item: PrintItem, offset: u32) -> PrintItem {
+    match item {
+        PrintItem::Text { start, len } => PrintItem::Text {
+            start: start + offset,
+            len,
+        },
+        other => other,
+    }
+}
 // ── IR helpers ──────────────────────────────────────────────────────────────
 
 /// Convenience functions that mirror `dprint_core::formatting::ir_helpers`.
@@ -145,71 +251,30 @@ pub mod ir_helpers {
             return items;
         }
 
+        let PrintItems { items: inner, text } = items;
         let extra = (times as usize) * 2;
-        let mut out = Vec::with_capacity(items.items.len() + extra);
+        let mut out = Vec::with_capacity(inner.len() + extra);
 
         for _ in 0..times {
             out.push(PrintItem::Signal(Signal::StartIndent));
         }
-        out.extend(items.items);
+        out.extend(inner);
         for _ in 0..times {
             out.push(PrintItem::Signal(Signal::FinishIndent));
         }
 
-        PrintItems { items: out }
+        // The slab buffer is untouched, so ranges stay valid.
+        PrintItems { items: out, text }
     }
 
     /// Generate IR from a raw (potentially multi-line) string.
     ///
-    /// If the string contains newlines, the entire output is wrapped in
-    /// `StartIgnoringIndent`/`FinishIgnoringIndent` so the content is emitted verbatim.
-    /// Each line is split on `\t` to emit `Signal::Tab` for literal tabs.
+    /// Equivalent to [`PrintItems::push_raw_str`] on a fresh list. Prefer the
+    /// in-place method when appending to an existing list.
     pub fn gen_from_raw_string(text: &str) -> PrintItems {
-        let has_newline = text.contains('\n');
         let mut items = PrintItems::new();
-
-        if has_newline {
-            items.push_signal(Signal::StartIgnoringIndent);
-            gen_string_lines_into(&mut items, text);
-            items.push_signal(Signal::FinishIgnoringIndent);
-        } else {
-            gen_line_into(&mut items, text);
-        }
-
+        items.push_raw_str(text);
         items
-    }
-
-    /// Append IR for a multi-line string (lines separated by `Signal::NewLine`).
-    fn gen_string_lines_into(items: &mut PrintItems, text: &str) {
-        for (i, line) in text.lines().enumerate() {
-            if i > 0 {
-                items.push_signal(Signal::NewLine);
-            }
-            gen_line_into(items, line);
-        }
-
-        // `str::lines()` drops a trailing empty line; restore it.
-        if text.ends_with('\n') {
-            items.push_signal(Signal::NewLine);
-        }
-    }
-
-    /// Append IR for a single line, splitting on `\t` to emit `Signal::Tab`.
-    fn gen_line_into(items: &mut PrintItems, line: &str) {
-        if !line.contains('\t') {
-            if !line.is_empty() {
-                items.items.push(PrintItem::String(line.to_string()));
-            }
-            return;
-        }
-        for (i, part) in line.split('\t').enumerate() {
-            if i > 0 {
-                items.push_signal(Signal::Tab);
-            }
-            if !part.is_empty() {
-                items.items.push(PrintItem::String(part.to_string()));
-            }
-        }
     }
 }
 
@@ -287,7 +352,7 @@ fn render(items: &PrintItems, options: &PrintOptions) -> String {
                     out.push('\t');
                 }
             },
-            PrintItem::String(text) => {
+            PrintItem::Text { start, len } => {
                 emit_indent_if_needed(
                     &mut out,
                     &mut at_line_start,
@@ -296,18 +361,7 @@ fn render(items: &PrintItems, options: &PrintOptions) -> String {
                     options,
                     &mut indent_cache,
                 );
-                out.push_str(text);
-            }
-            PrintItem::Static(text) => {
-                emit_indent_if_needed(
-                    &mut out,
-                    &mut at_line_start,
-                    indent_level,
-                    ignore_indent_count,
-                    options,
-                    &mut indent_cache,
-                );
-                out.push_str(text);
+                out.push_str(items.resolve(*start, *len));
             }
             PrintItem::Space => {
                 emit_indent_if_needed(
