@@ -355,8 +355,30 @@ fn is_sort_group_keyword(text: &str) -> bool {
         .any(|&k| k.eq_ignore_ascii_case(text))
 }
 
-fn apply_command_case<'a>(name: &'a str, style: CaseStyle) -> Cow<'a, str> {
-    apply_case_str(name, style)
+/// Case a command name into a caller-provided stack buffer, avoiding a heap
+/// allocation in the common "name needs recasing" path (e.g. legacy all-caps
+/// commands under commandCase=lower). Falls back to the heap only for names
+/// longer than the buffer.
+fn format_command_name<'a>(name: &'a str, style: CaseStyle, buf: &'a mut [u8; 64]) -> Cow<'a, str> {
+    match style {
+        CaseStyle::Preserve => Cow::Borrowed(name),
+        CaseStyle::Lower if !name.bytes().any(|b| b.is_ascii_uppercase()) => Cow::Borrowed(name),
+        CaseStyle::Upper if !name.bytes().any(|b| b.is_ascii_lowercase()) => Cow::Borrowed(name),
+        style => {
+            if name.len() <= buf.len() {
+                let out = &mut buf[..name.len()];
+                out.copy_from_slice(name.as_bytes());
+                if matches!(style, CaseStyle::Lower) {
+                    out.make_ascii_lowercase();
+                } else {
+                    out.make_ascii_uppercase();
+                }
+                Cow::Borrowed(std::str::from_utf8(out).expect("ASCII casing preserves UTF-8"))
+            } else {
+                apply_case_str(name, style)
+            }
+        }
+    }
 }
 
 /// Apply keyword casing. Unlike the old version, this does NOT normalize booleans —
@@ -507,8 +529,9 @@ pub fn gen_command(
 
 
 
-    // Command name with casing
-    let formatted_name = apply_command_case(raw_name, config.command_case);
+    // Command name with casing (stack buffer: no heap alloc for ≤64-byte names)
+    let mut name_buf = [0u8; 64];
+    let formatted_name = format_command_name(raw_name, config.command_case, &mut name_buf);
 
     // Multi-line quoted/bracket arguments are emitted via the raw command path so
     // their internal content and line endings remain byte-preserved.
@@ -594,7 +617,10 @@ pub fn gen_command(
         && !force_one_per_line
         && !(source_is_multiline && sorting_with_keywords);
     if !arguments.is_empty() {
-        let single_line = try_single_line(
+        let emitted_single_line = try_single_line(
+            items,
+            single_line_paren_spacing.after_open,
+            single_line_paren_spacing.before_close,
             &formatted_name,
             &arguments,
             config,
@@ -602,15 +628,7 @@ pub fn gen_command(
             allow_single_line,
             cmd_kind.as_ref(),
         );
-        if let Some(single) = single_line {
-            if single_line_paren_spacing.after_open {
-                items.push_space();
-            }
-            items.extend(single);
-            if single_line_paren_spacing.before_close {
-                items.push_space();
-            }
-        } else {
+        if !emitted_single_line {
             match cmd_kind {
                 Some(CommandKind::ConditionSyntax) => {
                     let is_condition_closer = formatted_name.eq_ignore_ascii_case("endif")
@@ -1259,16 +1277,24 @@ fn can_pack_args_on_line(
 // Single-line attempt
 // ===========================================================================
 
+/// Try to emit the whole argument list on one line directly into `items`.
+/// Returns `false` (emitting nothing) when single-line layout is not allowed
+/// or does not fit; paren spacing is emitted here so no staging buffer or
+/// post-hoc merge is needed.
+#[allow(clippy::too_many_arguments)]
 fn try_single_line(
+    items: &mut PrintItems,
+    space_after_open: bool,
+    space_before_close: bool,
     cmd_name: &str,
     args: &[FormattedArg],
     config: &Configuration,
     indent_depth: u32,
     allow_single_line: bool,
     cmd_kind: Option<&CommandKind>,
-) -> Option<PrintItems> {
+) -> bool {
     if !allow_single_line {
-        return None;
+        return false;
     }
 
     // If any argument has a trailing line comment, force multi-line
@@ -1276,12 +1302,12 @@ fn try_single_line(
         .iter()
         .any(|a| a.trailing_comment.is_some() && !a.trailing_is_bracket)
     {
-        return None;
+        return false;
     }
 
     // If any argument text contains a newline, force multi-line
     if args.iter().any(|a| a.has_newline) {
-        return None;
+        return false;
     }
 
     // If any argument is a standalone comment (line or bracket), force multi-line.
@@ -1289,7 +1315,7 @@ fn try_single_line(
     // comments) and must not be inlined — line comments would comment out following
     // content, and standalone bracket comments need their own line.
     if args.iter().any(|a| a.text.starts_with('#')) {
-        return None;
+        return false;
     }
 
     // Only reject single-line if the command actually has section-bearing keywords
@@ -1319,7 +1345,7 @@ fn try_single_line(
             }
         };
         if has_sections {
-            return None;
+            return false;
         }
     }
 
@@ -1342,7 +1368,7 @@ fn try_single_line(
     if !keep_condition_header_inline
         && ((total > line_width) || (!has_keyword_args && total == line_width))
     {
-        return None;
+        return false;
     }
 
     // Width check passed — emit cased strings for the output directly.
@@ -1364,7 +1390,9 @@ fn try_single_line(
     };
     let case_args = cmd_kind.is_some() || !config.custom_keywords.is_empty();
 
-    let mut items = PrintItems::new();
+    if space_after_open {
+        items.push_space();
+    }
     for (i, a) in args.iter().enumerate() {
         if i > 0 {
             items.push_space();
@@ -1391,7 +1419,10 @@ fn try_single_line(
         };
         items.push_raw_str(&t);
     }
-    Some(items)
+    if space_before_close {
+        items.push_space();
+    }
+    true
 }
 
 // ===========================================================================
