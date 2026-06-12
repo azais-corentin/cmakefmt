@@ -1033,8 +1033,7 @@ impl<'src> FormattedArg<'src> {
     /// their defaults. Construction sites override flags via functional
     /// update syntax.
     fn new(text: Cow<'src, str>) -> Self {
-        let (genex_delta, has_genex) = genex_scan(&text);
-        let has_newline = text.contains('\n');
+        let (genex_delta, has_genex, has_newline) = text_scan(&text);
         Self {
             text,
             is_keyword: false,
@@ -5366,26 +5365,39 @@ fn sort_keyword_sections_by_order(args: &mut Vec<FormattedArg>, order: &[&str]) 
 // Generator expression (genex) formatting
 // ---------------------------------------------------------------------------
 
-/// Single-pass scan returning the net `$<`/`>` depth delta and whether the
-/// string contains `$<` at all (replaces a separate substring search).
-fn genex_scan(text: &str) -> (i32, bool) {
+/// Single SIMD-accelerated pass over `text` returning the net `$<`/`>` depth
+/// delta, whether the string contains `$<` at all, and whether it contains a
+/// newline. `memchr3` skips runs of uninteresting bytes; arg text rarely
+/// contains `$`, `>`, or `\n`, so most calls are a single vectorized scan.
+fn text_scan(text: &str) -> (i32, bool, bool) {
+    let bytes = text.as_bytes();
     let mut depth: i32 = 0;
     let mut has_genex = false;
-    let bytes = text.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        if i + 1 < bytes.len() && bytes[i] == b'$' && bytes[i + 1] == b'<' {
-            depth += 1;
-            has_genex = true;
-            i += 2;
-        } else if bytes[i] == b'>' {
-            depth -= 1;
-            i += 1;
-        } else {
-            i += 1;
+    let mut has_newline = false;
+    let mut pos = 0;
+    while let Some(off) = memchr::memchr3(b'$', b'>', b'\n', &bytes[pos..]) {
+        let i = pos + off;
+        match bytes[i] {
+            b'$' => {
+                if bytes.get(i + 1) == Some(&b'<') {
+                    depth += 1;
+                    has_genex = true;
+                    pos = i + 2;
+                } else {
+                    pos = i + 1;
+                }
+            }
+            b'>' => {
+                depth -= 1;
+                pos = i + 1;
+            }
+            _ => {
+                has_newline = true;
+                pos = i + 1;
+            }
         }
     }
-    (depth, has_genex)
+    (depth, has_genex, has_newline)
 }
 
 /// Group a slice of `FormattedArg` values into genex groups and standalone args.
