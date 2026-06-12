@@ -198,7 +198,7 @@ bun run preview                          # preview production build
 - Cargo workspace (`resolver = 3`)
 - WASM target required: `wasm32-unknown-unknown` (must be installed in toolchain)
 - Task runner: `mise` (`mise.toml` defines canonical aliases)
-- Dev environment: Nix (`devenv.nix`, includes Rust + Python/uv + wasm32 target)
+- Dev environment: Nix flake (`flake.nix` dev shell, activated via direnv `use flake`; includes Rust + Python/uv + wasm32 target)
 - Build profiles: `bench` (debug=2), `release` (lto=true), `release-wasm` (inherits release, `opt-level = "s"`)
 - Code formatting: `dprint` orchestrates all file types — `rustfmt --edition 2024` for `.rs` via exec plugin
 - No custom `rustfmt.toml` / `clippy.toml`; rely on defaults + `clippy -D warnings`
