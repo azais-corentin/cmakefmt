@@ -617,24 +617,22 @@ pub fn gen_command(
                         || formatted_name.eq_ignore_ascii_case("endwhile")
                         || formatted_name.eq_ignore_ascii_case("else");
                     if is_condition_closer {
-                        items.extend(gen_condition_closer_multi_line(
-                            &arguments,
-                            config,
-                            indent_depth,
-                        ));
+                        gen_condition_closer_multi_line(items, &arguments, config, indent_depth);
                     } else {
-                        items.extend(gen_condition_multi_line(
+                        gen_condition_multi_line(
+                            items,
                             &formatted_name,
                             &arguments,
                             config,
                             indent_depth,
-                        ));
+                        );
                     }
                 }
                 Some(CommandKind::Known(spec)) => {
                     let allow_keyword_inline = matches!(config.wrap_style, WrapStyle::Cascade);
                     let allow_opening_arg_packing = allow_keyword_inline;
-                    items.extend(gen_known_multi_line(
+                    gen_known_multi_line(
+                        items,
                         &formatted_name,
                         &arguments,
                         spec,
@@ -644,13 +642,14 @@ pub fn gen_command(
                         allow_opening_arg_packing,
                         config.first_arg_same_line,
                         closing_paren_extra,
-                    ));
+                    );
                 }
                 None => {
                     // Unknown command with customKeywords — use empty spec.
                     let allow_keyword_inline = matches!(config.wrap_style, WrapStyle::Cascade);
                     let allow_opening_arg_packing = allow_keyword_inline;
-                    items.extend(gen_known_multi_line(
+                    gen_known_multi_line(
+                        items,
                         &formatted_name,
                         &arguments,
                         &EMPTY_SPEC,
@@ -660,7 +659,7 @@ pub fn gen_command(
                         allow_opening_arg_packing,
                         config.first_arg_same_line,
                         closing_paren_extra,
-                    ));
+                    );
                 }
             }
         }
@@ -2517,6 +2516,7 @@ fn emit_section_values_source_grouped(
 
 #[allow(clippy::too_many_arguments)]
 fn gen_known_multi_line(
+    items: &mut PrintItems,
     cmd_name: &str,
     arguments: &[FormattedArg],
     spec: &CommandSpec,
@@ -2526,7 +2526,7 @@ fn gen_known_multi_line(
     allow_opening_arg_packing: bool,
     first_arg_same_line: bool,
     closing_paren_extra: usize,
-) -> PrintItems {
+) {
     let (mut front_pos, mut groups, back_pos) = split_arguments(arguments, spec, config);
 
     // Keep option(<NAME> ... ) style in multiline layout for consistency with fixtures.
@@ -2874,7 +2874,7 @@ fn gen_known_multi_line(
         inner.push_signal(Signal::NewLine);
     }
 
-    ir_helpers::with_indent(inner)
+    items.push_indented(inner);
 }
 
 /// Emit a keyword + values group. Tries inline first, expands if needed.
@@ -4161,10 +4161,11 @@ fn compute_keyword_inline_width(keyword: &FormattedArg, values: &[&FormattedArg]
 }
 // ===========================================================================
 fn gen_condition_closer_multi_line(
+    items: &mut PrintItems,
     args: &[FormattedArg],
     config: &Configuration,
     indent_depth: u32,
-) -> PrintItems {
+) {
     let base_indent = (indent_depth as usize + 1) * config.indent_width as usize;
     let mut inner = PrintItems::new();
 
@@ -4226,7 +4227,7 @@ fn gen_condition_closer_multi_line(
         inner.push_signal(Signal::NewLine);
     }
 
-    ir_helpers::with_indent(inner)
+    items.push_indented(inner);
 }
 
 // ===========================================================================
@@ -4487,11 +4488,12 @@ fn cond_expr_has_line_comment(expr: &CondExpr<'_>) -> bool {
 }
 
 fn gen_condition_multi_line(
+    items: &mut PrintItems,
     _cmd_name: &str,
     args: &[FormattedArg],
     config: &Configuration,
     indent_depth: u32,
-) -> PrintItems {
+) {
     let cond_items = parse_condition_items(args);
     let base_indent = (indent_depth as usize + 1) * config.indent_width as usize;
 
@@ -4516,7 +4518,7 @@ fn gen_condition_multi_line(
         inner.push_signal(Signal::NewLine);
     }
 
-    ir_helpers::with_indent(inner)
+    items.push_indented(inner);
 }
 
 /// Emit a logical operator + expression (AND expr, OR expr).
