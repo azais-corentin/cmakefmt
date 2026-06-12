@@ -328,8 +328,16 @@ function makeBarOpts(
   values: number[],
   width: number,
   dark: boolean,
+  logScale = false,
 ): { opts: uPlot.Options; chartData: uPlot.AlignedData } {
   const maxVal = Math.max(...values);
+  // Log scales cannot include 0 or negatives; floor/ceil to enclosing decades.
+  const positives = values.filter((v) => v > 0);
+  const minPositive = positives.length > 0 ? Math.min(...positives) : 1;
+  const logMin = Math.pow(10, Math.floor(Math.log10(minPositive)));
+  const logMax = Math.pow(10, Math.ceil(Math.log10(maxVal)));
+  const rangeMin = logScale ? logMin : 0;
+  const rangeMax = logScale ? logMax : maxVal * 1.25;
   const numTools = toolNames.length;
 
   // Build per-tool series: each tool has a value only at its own index.
@@ -391,7 +399,8 @@ function makeBarOpts(
       y: {
         ori: 0, // values on horizontal axis
         dir: 1, // left-to-right
-        range: [0, maxVal * 1.25], // pad for value labels
+        distr: (logScale ? 3 : 1) as uPlot.Scale.Distr, // 3 = logarithmic
+        range: [rangeMin, rangeMax], // pad for value labels
       },
     },
     axes: [
@@ -414,7 +423,15 @@ function makeBarOpts(
         ticks: { stroke: gridColor(dark) },
         space: 80, // minimum pixels between ticks to avoid overlap
         values: (_u: uPlot, splits: number[]) =>
-          splits.map((v) => formatValue(v, unit)),
+          // On log axes uPlot's filter nulls out minor ticks; keep them blank.
+          // Render ms ticks >= 1s in seconds: "1s", "10s", "100s", ...
+          splits.map((v) =>
+            v == null
+              ? null
+              : unit === "ms" && v >= 1000
+              ? `${msFormatter.format(v / 1000)}s`
+              : formatValue(v, unit)
+          ),
         size: 40,
       },
     ],
@@ -439,7 +456,8 @@ function makeBarOpts(
               const cy = u.valToPos(val, "y", true);
 
               const labelWidth = ctx.measureText(label).width;
-              const chartLeft = u.valToPos(0, "y", true);
+              // Bars draw from the scale min (0 on linear; rangeMin on log).
+              const chartLeft = u.valToPos(logScale ? rangeMin : 0, "y", true);
               const barWidth = Math.abs(cy - chartLeft);
 
               ctx.fillStyle = textColor(dark);
@@ -575,6 +593,7 @@ async function createCharts(dark: boolean) {
         timingValues,
         barWidth,
         dark,
+        true, // logarithmic value (X) axis — timings span orders of magnitude
       );
       timingBarChart = new uPlot(opts, chartData, timingBarContainer.value);
     }
