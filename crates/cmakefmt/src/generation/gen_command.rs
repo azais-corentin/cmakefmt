@@ -519,7 +519,7 @@ pub fn gen_command(
         return gen_unknown_command(cmd, source, config, &formatted_name, indent_depth);
     }
 
-    items.push_string(formatted_name.clone().into_owned());
+    items.push_str(&formatted_name);
 
     // Space before paren
     if config.has_space_before_paren(raw_name) {
@@ -1067,22 +1067,19 @@ fn build_argument_list_from_args<'src>(
     cmd_kind: Option<&CommandKind>,
 ) -> Vec<FormattedArg<'src>> {
     let mut result = Vec::with_capacity(args.len());
-    let arg_ranges: Vec<(usize, usize)> = args.iter().map(arg_source_range).collect();
+    let mut prev_end = 0usize;
     let mut i = 0;
 
     while i < args.len() {
+        let (current_start, current_end) = arg_source_range(&args[i]);
         let preserve_source_blank_lines =
             config.align_arg_groups || !matches!(config.sort_arguments, SortArguments::Disabled);
         let blank_line_before = if preserve_source_blank_lines && i > 0 {
-            let prev_end = arg_ranges[i - 1].1;
-            let current_start = arg_ranges[i].0;
             has_blank_line_between(source, prev_end, current_start)
         } else {
             false
         };
         let new_line_before = if i > 0 {
-            let prev_end = arg_ranges[i - 1].1;
-            let current_start = arg_ranges[i].0;
             source[prev_end..current_start].contains('\n')
         } else {
             false
@@ -1130,7 +1127,6 @@ fn build_argument_list_from_args<'src>(
                 let comment_text = span.text(source).trim_end();
                 // Only attach to previous arg if on the same source line
                 let same_line = if i > 0 {
-                    let prev_end = arg_ranges[i - 1].1;
                     !source[prev_end..span.start].contains('\n')
                 } else {
                     false
@@ -1140,6 +1136,7 @@ fn build_argument_list_from_args<'src>(
                     && last.trailing_comment.is_none()
                 {
                     last.trailing_comment = Some(Cow::Borrowed(comment_text));
+                    prev_end = current_end;
                     i += 1;
                     continue;
                 }
@@ -1153,7 +1150,6 @@ fn build_argument_list_from_args<'src>(
                 let comment_text = span.text(source);
                 // Only attach to previous arg if on the same source line
                 let same_line = if i > 0 {
-                    let prev_end = arg_ranges[i - 1].1;
                     !source[prev_end..span.start].contains('\n')
                 } else {
                     false
@@ -1164,6 +1160,7 @@ fn build_argument_list_from_args<'src>(
                 {
                     last.trailing_comment = Some(Cow::Borrowed(comment_text));
                     last.trailing_is_bracket = true;
+                    prev_end = current_end;
                     i += 1;
                     continue;
                 }
@@ -1174,6 +1171,7 @@ fn build_argument_list_from_args<'src>(
                 });
             }
         }
+        prev_end = current_end;
         i += 1;
     }
 
@@ -4936,9 +4934,10 @@ fn emit_arg_with_case(
         } else {
             Cow::Borrowed(arg.text.as_ref())
         };
-        if text.contains('\n') {
+        if arg.has_newline {
             // Multi-line quoted strings: emit first line normally (gets indent
             // from context), then continuation lines verbatim.
+            // Casing transforms never add newlines, so the cached flag holds.
             let first_nl = text.find('\n').unwrap();
             let first_line = &text[..first_nl];
             let rest = &text[first_nl + 1..];
