@@ -552,18 +552,16 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
                         cmd
                     };
 
-                    let cmd_items =
-                        gen_command(effective_cmd, source, &current_config, indent_level);
                     if indent_level > 0 {
                         for _ in 0..indent_level {
                             items.push_signal(Signal::StartIndent);
                         }
-                        items.extend(cmd_items);
+                        gen_command(&mut items, effective_cmd, source, &current_config, indent_level);
                         for _ in 0..indent_level {
                             items.push_signal(Signal::FinishIndent);
                         }
                     } else {
-                        items.extend(cmd_items);
+                        gen_command(&mut items, effective_cmd, source, &current_config, indent_level);
                     }
                 }
 

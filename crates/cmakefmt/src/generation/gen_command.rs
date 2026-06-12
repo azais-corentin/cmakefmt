@@ -480,12 +480,17 @@ fn push_wrapped_newline(
 // Public entry point
 // ===========================================================================
 
+/// Generate formatting for a command invocation, appending into `items`.
+/// Writing into the caller's buffer avoids a per-command `PrintItems`
+/// allocation plus a full extend/rebase copy when merging into the file
+/// stream.
 pub fn gen_command(
+    items: &mut PrintItems,
     cmd: &CommandInvocation,
     source: &str,
     config: &Configuration,
     indent_depth: u32,
-) -> PrintItems {
+) {
     // Resolve per-command overrides before any formatting decisions
     let raw_name = cmd.name.text(source);
     let command_stage = info_span!(
@@ -500,7 +505,7 @@ pub fn gen_command(
     let effective = config.effective_config_for_command(raw_name);
     let config = effective.as_ref();
 
-    let mut items = PrintItems::with_capacity(cmd.arguments.len() * 4 + 10);
+
 
     // Command name with casing
     let formatted_name = apply_command_case(raw_name, config.command_case);
@@ -508,7 +513,7 @@ pub fn gen_command(
     // Multi-line quoted/bracket arguments are emitted via the raw command path so
     // their internal content and line endings remain byte-preserved.
     if has_multiline_verbatim_argument(&cmd.arguments, source) {
-        return gen_unknown_command(cmd, source, config, &formatted_name, indent_depth);
+        return gen_unknown_command(items, cmd, source, config, &formatted_name, indent_depth);
     }
 
     // Unknown commands without custom keywords: format via the enhanced
@@ -516,7 +521,7 @@ pub fn gen_command(
     // collapsing and keyword-column alignment.
     let cmd_kind = lookup_command(raw_name);
     if cmd_kind.is_none() && config.custom_keywords.is_empty() {
-        return gen_unknown_command(cmd, source, config, &formatted_name, indent_depth);
+        return gen_unknown_command(items, cmd, source, config, &formatted_name, indent_depth);
     }
 
     items.push_str(&formatted_name);
@@ -663,30 +668,28 @@ pub fn gen_command(
 
     items.push_str_runtime_width_computed(")");
     if let Some(comment) = deferred_closing_comment {
-        push_comment_gap(&mut items, config.comment_gap);
+        push_comment_gap(items, config.comment_gap);
         items.push_raw_str(&comment);
     }
 
     // Trailing comment
     if let Some(comment_span) = &cmd.trailing_comment {
-        push_comment_gap(&mut items, config.comment_gap);
+        push_comment_gap(items, config.comment_gap);
         items.push_str(comment_span.text(source));
     }
-
-    items
 }
 
 /// Generate formatting for an unknown command, preserving the original source text.
 /// Only the command name gets case-normalized. All content between parens is preserved as-is,
 /// except that block-level indentation is adjusted.
 fn gen_unknown_command(
+    items: &mut PrintItems,
     cmd: &CommandInvocation,
     source: &str,
     config: &Configuration,
     formatted_name: &str,
     indent_depth: u32,
-) -> PrintItems {
-    let mut items = PrintItems::new();
+) {
 
     items.push_str(formatted_name);
     if config.has_space_before_paren(cmd.name.text(source)) {
@@ -748,7 +751,7 @@ fn gen_unknown_command(
                 for arg in &cmd.arguments {
                     let (start, end) = arg_source_range(arg);
                     let arg_text = &source[start..end];
-                    push_newline_with_visual_indent(&mut items, continuation, config);
+                    push_newline_with_visual_indent(items, continuation, config);
                     items.push_raw_str(arg_text);
                 }
                 if config.closing_paren_newline {
@@ -772,7 +775,7 @@ fn gen_unknown_command(
         };
 
         emit_unknown_args_raw(
-            &mut items,
+            items,
             &cmd.arguments,
             source,
             content_start,
@@ -786,11 +789,9 @@ fn gen_unknown_command(
     items.push_str_runtime_width_computed(")");
 
     if let Some(comment_span) = &cmd.trailing_comment {
-        push_comment_gap(&mut items, config.comment_gap);
+        push_comment_gap(items, config.comment_gap);
         items.push_str(comment_span.text(source));
     }
-
-    items
 }
 
 /// Checks whether `text` looks like a CMake keyword (all uppercase, digits, or
