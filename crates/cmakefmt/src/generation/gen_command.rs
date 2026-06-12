@@ -5367,44 +5367,68 @@ fn text_scan(text: &str) -> (i32, bool, bool) {
 
 /// Group a slice of `FormattedArg` values into genex groups and standalone args.
 /// A genex group is a sequence of consecutive args whose cumulative `$<`/`>`
-/// depth goes above 0 and returns to 0.
-enum GenexArgGroup<'a> {
-    /// A standalone argument (not part of a genex spanning multiple tokens).
-    Single(&'a FormattedArg<'a>),
-    /// A group of consecutive args forming one complete genex.
-    Genex(Vec<&'a FormattedArg<'a>>),
+/// depth goes above 0 and returns to 0. Groups are stored as indices/ranges
+/// into the grouped slice so grouping never allocates per group.
+enum GenexArgGroup {
+    /// A standalone argument (not part of a genex spanning multiple tokens),
+    /// by index into the grouped slice.
+    Single(usize),
+    /// A range of consecutive args forming one complete genex.
+    Genex { start: usize, len: usize },
 }
 
-fn group_args_by_genex<'a>(args: &[&'a FormattedArg]) -> Vec<GenexArgGroup<'a>> {
-    let mut groups: Vec<GenexArgGroup<'a>> = Vec::new();
+fn group_args_by_genex(args: &[&FormattedArg]) -> Vec<GenexArgGroup> {
+    let mut groups: Vec<GenexArgGroup> = Vec::with_capacity(args.len());
     let mut depth: i32 = 0;
-    let mut genex_buf: Vec<&'a FormattedArg> = Vec::new();
+    let mut genex_start: Option<usize> = None;
 
-    for &arg in args {
+    for (i, arg) in args.iter().enumerate() {
         let (delta, has_genex) = (arg.genex_delta, arg.has_genex);
         if depth == 0 && delta == 0 {
             // Standalone arg, not genex.
             // But it might contain a self-contained genex (like LOG_LEVEL=$<IF:...>).
             if has_genex {
-                groups.push(GenexArgGroup::Genex(vec![arg]));
+                groups.push(GenexArgGroup::Genex { start: i, len: 1 });
             } else {
-                groups.push(GenexArgGroup::Single(arg));
+                groups.push(GenexArgGroup::Single(i));
             }
         } else {
-            genex_buf.push(arg);
+            if genex_start.is_none() {
+                genex_start = Some(i);
+            }
             depth += delta;
             if depth <= 0 {
                 // Genex group complete.
-                groups.push(GenexArgGroup::Genex(std::mem::take(&mut genex_buf)));
+                let start = genex_start.take().expect("genex group has a start");
+                groups.push(GenexArgGroup::Genex {
+                    start,
+                    len: i - start + 1,
+                });
                 depth = 0;
             }
         }
     }
     // If there are leftover tokens (unclosed genex), emit them individually.
-    for arg in genex_buf {
-        groups.push(GenexArgGroup::Single(arg));
+    if let Some(start) = genex_start {
+        for i in start..args.len() {
+            groups.push(GenexArgGroup::Single(i));
+        }
     }
     groups
+}
+
+/// Join argument texts with single spaces, sized exactly up front.
+fn join_args_text(args: &[&FormattedArg]) -> String {
+    let cap =
+        args.iter().map(|a| a.text.len()).sum::<usize>() + args.len().saturating_sub(1);
+    let mut joined = String::with_capacity(cap);
+    for (i, arg) in args.iter().enumerate() {
+        if i > 0 {
+            joined.push(' ');
+        }
+        joined.push_str(&arg.text);
+    }
+    joined
 }
 
 /// Emits a generator-expression argument as an atomic token (never split across lines).
@@ -5424,7 +5448,9 @@ enum ValueLayoutLine<'a> {
     Blank,
     Comment(&'a FormattedArg<'a>),
     Genex(String),
-    Tokens(Vec<&'a FormattedArg<'a>>),
+    /// A range into the shared token slab (one allocation per emit call
+    /// instead of one `Vec` per output line).
+    Tokens { start: usize, len: usize },
 }
 
 #[derive(Clone, Default)]
@@ -5516,6 +5542,7 @@ fn compute_keyword_column_width(
 
 fn apply_arg_group_alignment(
     lines: &[ValueLayoutLine<'_>],
+    token_slab: &[&FormattedArg],
     config: &Configuration,
     wrap_indent: bool,
     continuation_indent: usize,
@@ -5528,7 +5555,7 @@ fn apply_arg_group_alignment(
     let mut segment_start = 0usize;
     while segment_start < lines.len() {
         while segment_start < lines.len() {
-            if matches!(lines[segment_start], ValueLayoutLine::Tokens(_)) {
+            if matches!(lines[segment_start], ValueLayoutLine::Tokens { .. }) {
                 break;
             }
             segment_start += 1;
@@ -5539,7 +5566,7 @@ fn apply_arg_group_alignment(
 
         let mut segment_end = segment_start;
         while segment_end < lines.len() {
-            if !matches!(lines[segment_end], ValueLayoutLine::Tokens(_)) {
+            if !matches!(lines[segment_end], ValueLayoutLine::Tokens { .. }) {
                 break;
             }
             segment_end += 1;
@@ -5555,9 +5582,9 @@ fn apply_arg_group_alignment(
             .take(segment_end)
             .skip(segment_start)
         {
-            if let ValueLayoutLine::Tokens(tokens) = line
-                && !tokens.is_empty()
-                && is_keyword_like_value(tokens[0])
+            if let ValueLayoutLine::Tokens { start, len } = line
+                && *len > 0
+                && is_keyword_like_value(token_slab[*start])
             {
                 keyword_line_indices.push(line_idx);
             }
@@ -5570,8 +5597,8 @@ fn apply_arg_group_alignment(
                 keyword_line_indices
                     .iter()
                     .map(|line_idx| {
-                        if let ValueLayoutLine::Tokens(tokens) = &lines[*line_idx] {
-                            token_visual_width(tokens[0])
+                        if let ValueLayoutLine::Tokens { start, .. } = &lines[*line_idx] {
+                            token_visual_width(token_slab[*start])
                         } else {
                             0
                         }
@@ -5587,15 +5614,15 @@ fn apply_arg_group_alignment(
 
         let mut run_start = segment_start;
         while run_start < segment_end {
-            let token_count = if let ValueLayoutLine::Tokens(tokens) = &lines[run_start] {
-                tokens.len()
+            let token_count = if let ValueLayoutLine::Tokens { len, .. } = &lines[run_start] {
+                *len
             } else {
                 0
             };
             let mut run_end = run_start + 1;
             while run_end < segment_end {
-                let next_count = if let ValueLayoutLine::Tokens(tokens) = &lines[run_end] {
-                    tokens.len()
+                let next_count = if let ValueLayoutLine::Tokens { len, .. } = &lines[run_end] {
+                    *len
                 } else {
                     0
                 };
@@ -5609,7 +5636,8 @@ fn apply_arg_group_alignment(
                 // Compute per-column max widths across all lines in the run.
                 let mut column_widths = vec![0usize; token_count];
                 for line in lines.iter().take(run_end).skip(run_start) {
-                    if let ValueLayoutLine::Tokens(tokens) = line {
+                    if let ValueLayoutLine::Tokens { start, len } = line {
+                        let tokens = &token_slab[*start..*start + *len];
                         for (col, token) in tokens.iter().enumerate() {
                             column_widths[col] = column_widths[col].max(token_visual_width(token));
                         }
@@ -5634,9 +5662,12 @@ fn apply_arg_group_alignment(
                         column_widths: Some(uniform_widths.clone()),
                         ..alignment[line_idx].clone()
                     };
-                    if let ValueLayoutLine::Tokens(tokens) = &lines[line_idx]
-                        && aligned_token_line_width(tokens, &test_alignment, indent_width)
-                            > line_width_limit
+                    if let ValueLayoutLine::Tokens { start, len } = &lines[line_idx]
+                        && aligned_token_line_width(
+                            &token_slab[*start..*start + *len],
+                            &test_alignment,
+                            indent_width,
+                        ) > line_width_limit
                     {
                         fits = false;
                         break;
@@ -5685,19 +5716,12 @@ fn emit_values_with_genex_with_indent(
         grouped_values
             .iter()
             .filter_map(|group| {
-                if let GenexArgGroup::Genex(args) = group {
-                    let joined = args
-                        .iter()
-                        .map(|a| a.text.as_ref())
-                        .collect::<Vec<_>>()
-                        .join(" ");
+                if let GenexArgGroup::Genex { start, len } = *group {
+                    let args = &values[start..start + len];
                     Some(FormattedArg {
-                        blank_line_before: args
-                            .first()
-                            .map(|a| a.blank_line_before)
-                            .unwrap_or(false),
-                        new_line_before: args.first().map(|a| a.new_line_before).unwrap_or(false),
-                        ..FormattedArg::new(Cow::Owned(joined))
+                        blank_line_before: args[0].blank_line_before,
+                        new_line_before: args[0].new_line_before,
+                        ..FormattedArg::new(Cow::Owned(join_args_text(args)))
                     })
                 } else {
                     None
@@ -5708,40 +5732,51 @@ fn emit_values_with_genex_with_indent(
         Vec::new()
     };
 
+    // All token lines share one slab; `line_start` marks the open line's
+    // first token. Flushing records a range instead of allocating a Vec.
     let mut lines: Vec<ValueLayoutLine<'_>> = Vec::new();
-    let mut current_tokens: Vec<&FormattedArg> = Vec::new();
+    let mut token_slab: Vec<&FormattedArg> = Vec::with_capacity(values.len());
+    let mut line_start = 0usize;
     let mut current_width = 0usize;
     let mut synthetic_index = 0usize;
 
     fn flush_current_line<'a>(
         lines: &mut Vec<ValueLayoutLine<'a>>,
-        current_tokens: &mut Vec<&'a FormattedArg>,
+        line_start: &mut usize,
+        slab_len: usize,
         current_width: &mut usize,
     ) {
-        if !current_tokens.is_empty() {
-            lines.push(ValueLayoutLine::Tokens(std::mem::take(current_tokens)));
+        if slab_len > *line_start {
+            lines.push(ValueLayoutLine::Tokens {
+                start: *line_start,
+                len: slab_len - *line_start,
+            });
+            *line_start = slab_len;
             *current_width = 0;
         }
     }
 
     for (group_index, group) in grouped_values.into_iter().enumerate() {
-        let group_has_leading_blank = match &group {
-            GenexArgGroup::Single(arg) => arg.blank_line_before,
-            GenexArgGroup::Genex(args) => args
-                .first()
-                .map(|first| first.blank_line_before)
-                .unwrap_or(false),
+        let group_has_leading_blank = match group {
+            GenexArgGroup::Single(idx) => values[idx].blank_line_before,
+            GenexArgGroup::Genex { start, .. } => values[start].blank_line_before,
         };
 
         if group_has_leading_blank && !(skip_first_blank && group_index == 0) {
-            flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
+            flush_current_line(&mut lines, &mut line_start, token_slab.len(), &mut current_width);
             lines.push(ValueLayoutLine::Blank);
         }
 
         match group {
-            GenexArgGroup::Single(arg) => {
+            GenexArgGroup::Single(idx) => {
+                let arg = values[idx];
                 if arg.text.starts_with('#') {
-                    flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
+                    flush_current_line(
+                        &mut lines,
+                        &mut line_start,
+                        token_slab.len(),
+                        &mut current_width,
+                    );
                     lines.push(ValueLayoutLine::Comment(arg));
                     continue;
                 }
@@ -5749,58 +5784,85 @@ fn emit_values_with_genex_with_indent(
                 let token_width = arg_width(arg);
                 if !pack_tokens {
                     // One token per line (original behavior)
-                    flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
-                    current_tokens.push(arg);
+                    flush_current_line(
+                        &mut lines,
+                        &mut line_start,
+                        token_slab.len(),
+                        &mut current_width,
+                    );
+                    token_slab.push(arg);
                     current_width = token_width;
                     if arg.trailing_comment.is_some() && !arg.trailing_is_bracket {
-                        flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
+                        flush_current_line(
+                            &mut lines,
+                            &mut line_start,
+                            token_slab.len(),
+                            &mut current_width,
+                        );
                     }
                 } else {
                     // Pack tokens into lines. When greedy_pack is true,
                     // ignore source newlines and pack purely by width.
                     // Otherwise, respect source newlines as line boundaries.
-                    let source_break =
-                        !greedy_pack && arg.new_line_before && !current_tokens.is_empty();
-                    if current_tokens.is_empty() {
-                        current_tokens.push(arg);
+                    let line_is_empty = token_slab.len() == line_start;
+                    let source_break = !greedy_pack && arg.new_line_before && !line_is_empty;
+                    if line_is_empty {
+                        token_slab.push(arg);
                         current_width = token_width;
                     } else if source_break {
-                        flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
-                        current_tokens.push(arg);
+                        flush_current_line(
+                            &mut lines,
+                            &mut line_start,
+                            token_slab.len(),
+                            &mut current_width,
+                        );
+                        token_slab.push(arg);
                         current_width = token_width;
                     } else {
                         let required = 1 + token_width;
                         let available_width =
                             max_content_width.saturating_sub(column_start + indent_width);
-                        let last_has_line_comment = current_tokens.last().is_some_and(|token| {
+                        let last_has_line_comment = token_slab.last().is_some_and(|token| {
                             token.trailing_comment.is_some() && !token.trailing_is_bracket
                         });
 
                         if last_has_line_comment || current_width + required > available_width {
-                            flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
-                            current_tokens.push(arg);
+                            flush_current_line(
+                                &mut lines,
+                                &mut line_start,
+                                token_slab.len(),
+                                &mut current_width,
+                            );
+                            token_slab.push(arg);
                             current_width = token_width;
                         } else {
-                            current_tokens.push(arg);
+                            token_slab.push(arg);
                             current_width += required;
                         }
                     }
 
                     if arg.trailing_comment.is_some() && !arg.trailing_is_bracket {
-                        flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
+                        flush_current_line(
+                            &mut lines,
+                            &mut line_start,
+                            token_slab.len(),
+                            &mut current_width,
+                        );
                     }
                 }
             }
-            GenexArgGroup::Genex(args) => {
+            GenexArgGroup::Genex { start, len } => {
                 if !pack_tokens {
                     // Non-packing mode: genex gets its own line.
-                    flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
-                    let joined = args
-                        .iter()
-                        .map(|arg| arg.text.as_ref())
-                        .collect::<Vec<_>>()
-                        .join(" ");
-                    lines.push(ValueLayoutLine::Genex(joined));
+                    flush_current_line(
+                        &mut lines,
+                        &mut line_start,
+                        token_slab.len(),
+                        &mut current_width,
+                    );
+                    lines.push(ValueLayoutLine::Genex(join_args_text(
+                        &values[start..start + len],
+                    )));
                 } else {
                     // Packing mode: treat atomic genex like a regular token.
                     // Borrow the pre-built synthetic arg (created in first pass).
@@ -5808,29 +5870,39 @@ fn emit_values_with_genex_with_indent(
                     synthetic_index += 1;
                     let token_width = arg.text.len();
 
-                    let source_break =
-                        !greedy_pack && arg.new_line_before && !current_tokens.is_empty();
-                    if current_tokens.is_empty() {
-                        current_tokens.push(arg);
+                    let line_is_empty = token_slab.len() == line_start;
+                    let source_break = !greedy_pack && arg.new_line_before && !line_is_empty;
+                    if line_is_empty {
+                        token_slab.push(arg);
                         current_width = token_width;
                     } else if source_break {
-                        flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
-                        current_tokens.push(arg);
+                        flush_current_line(
+                            &mut lines,
+                            &mut line_start,
+                            token_slab.len(),
+                            &mut current_width,
+                        );
+                        token_slab.push(arg);
                         current_width = token_width;
                     } else {
                         let required = 1 + token_width;
                         let available_width =
                             max_content_width.saturating_sub(column_start + indent_width);
-                        let last_has_line_comment = current_tokens.last().is_some_and(|token| {
+                        let last_has_line_comment = token_slab.last().is_some_and(|token| {
                             token.trailing_comment.is_some() && !token.trailing_is_bracket
                         });
 
                         if last_has_line_comment || current_width + required > available_width {
-                            flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
-                            current_tokens.push(arg);
+                            flush_current_line(
+                                &mut lines,
+                                &mut line_start,
+                                token_slab.len(),
+                                &mut current_width,
+                            );
+                            token_slab.push(arg);
                             current_width = token_width;
                         } else {
-                            current_tokens.push(arg);
+                            token_slab.push(arg);
                             current_width += required;
                         }
                     }
@@ -5839,11 +5911,12 @@ fn emit_values_with_genex_with_indent(
         }
     }
 
-    flush_current_line(&mut lines, &mut current_tokens, &mut current_width);
+    flush_current_line(&mut lines, &mut line_start, token_slab.len(), &mut current_width);
 
     let alignments = if config.align_arg_groups {
         apply_arg_group_alignment(
             &lines,
+            &token_slab,
             config,
             wrap_indent,
             continuation_indent,
@@ -5863,7 +5936,8 @@ fn emit_values_with_genex_with_indent(
             ValueLayoutLine::Genex(text) => {
                 emit_genex_value(items, &text, config, wrap_indent, continuation_indent);
             }
-            ValueLayoutLine::Tokens(tokens) => {
+            ValueLayoutLine::Tokens { start, len } => {
+                let tokens = &token_slab[start..start + len];
                 let line_alignment = &alignments[line_idx];
                 push_wrapped_newline(items, wrap_indent, continuation_indent, config);
                 for (token_index, token) in tokens.iter().enumerate() {
