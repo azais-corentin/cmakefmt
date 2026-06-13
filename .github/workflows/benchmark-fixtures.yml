@@ -214,7 +214,7 @@ jobs:
         if: steps.plan.outputs.skip != 'true' && steps.check_baselines.outputs.skip != 'true'
         run: |
           set -euo pipefail
-          pip install cmakelang gersemi pytest pytest-benchmark
+          pip install cmakelang==0.6.13 gersemi==0.27.7 pytest pytest-benchmark
 
       - name: Run cmake_format baseline
         if: steps.plan.outputs.skip != 'true' && steps.check_baselines.outputs.skip != 'true'
