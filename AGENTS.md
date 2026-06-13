@@ -203,6 +203,7 @@ bun run preview                          # preview production build
 - Code formatting: `dprint` orchestrates all file types — `rustfmt --edition 2024` for `.rs` via exec plugin
 - No custom `rustfmt.toml` / `clippy.toml`; rely on defaults + `clippy -D warnings`
 - Conventional commits enforced by cocogitto (`cog verify`), changelog via git-cliff
+  - Use the `feat` type only for genuine new features — it drives a minor version bump and a changelog "Features" entry. Default to the precise type for the change (`fix`, `refactor`, `docs`, `test`, `chore`, etc.) and reserve `feat` for when a feature is actually added.
 - Pre-commit hooks: `hk` (Pkl config) — cargo-fmt, cargo-clippy, dprint, actionlint, etc.
 - JS runtime/tooling: use `bun` / `bun x` — never `node`, `npm`, or `npx`
 
