@@ -2,6 +2,49 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [v0.3.0](https://github.com/azais-corentin/cmakefmt/compare/3e0fe349385fe9d0982afd691f625821eb5d6d3f..v0.3.0) - 2026-06-12
+
+
+
+
+### Added
+
+- **website:** use logarithmic axis for timing comparison chart - ([5d39293](https://github.com/azais-corentin/cmakefmt/commit/5d3929370d40388fb0596badf6a5a21aaac7321f))
+- **website:** add CMake syntax highlighting to playground editors - ([3e0fe34](https://github.com/azais-corentin/cmakefmt/commit/3e0fe349385fe9d0982afd691f625821eb5d6d3f))
+
+
+
+### Fixed
+
+- collapse nested if into match guard for clippy - ([3f00254](https://github.com/azais-corentin/cmakefmt/commit/3f00254c9a0df20e62bab101833b0133c126ed10))
+
+
+
+### Performance
+
+- case keyword and literal tokens via stack buffer - ([79d23e8](https://github.com/azais-corentin/cmakefmt/commit/79d23e89a5da5375bf002c1d56f6d2be104d41af))
+- emit single-line layout in place and case command names on the stack - ([cf72703](https://github.com/azais-corentin/cmakefmt/commit/cf72703410eb28912b7a9e55c29eb6ead0529789))
+- append multi-line command IR via push_indented - ([70886ee](https://github.com/azais-corentin/cmakefmt/commit/70886eed2e0cf780b495823ff9bbc54a0cfe64f5))
+- emit commands directly into the file-level print buffer - ([b752b9d](https://github.com/azais-corentin/cmakefmt/commit/b752b9d9e4dcefba4a69740302a2e2c6e17cfe92))
+- use index ranges and a shared token slab in genex value layout - ([6367894](https://github.com/azais-corentin/cmakefmt/commit/6367894b76566d9da93bd30db011a8fec305024c))
+- right-size buffers and skip no-op copies in the format pipeline - ([93b2990](https://github.com/azais-corentin/cmakefmt/commit/93b2990b7dc2b385467120c2acf4ae966cfab8ce))
+- drop per-command clones and rescans in argument building - ([16bc017](https://github.com/azais-corentin/cmakefmt/commit/16bc017d3a877d42702136abac5d0a8320703759))
+- accelerate FormattedArg text scan with memchr3 - ([6a5c2b2](https://github.com/azais-corentin/cmakefmt/commit/6a5c2b29ac3a93711fbf16b5d477280e402c8cf9))
+- cut allocations and redundant scans in the formatting pipeline - ([68a3b10](https://github.com/azais-corentin/cmakefmt/commit/68a3b109a740de471fe7c05b18a6020d5856dd88))
+
+
+
+<details>
+<summary><h3 style="display:inline">Internal Changes</h3></summary>
+
+
+- **miscellaneous chores(nix):** replace devenv with flake dev shell - ([37d475a](https://github.com/azais-corentin/cmakefmt/commit/37d475ae00841d5607067c4a52590e11370d77e8))
+
+</details>
+
+
+- - -
+
 ## [v0.2.0](https://github.com/azais-corentin/cmakefmt/compare/9cf8de673944ba88c2847550f67db55b208a28fc..v0.2.0) - 2026-03-26
 
 
