@@ -369,6 +369,30 @@ fn is_sortable_command(name: &str) -> bool {
 }
 
 fn is_sort_group_keyword(text: &str) -> bool {
+    // O(1) reject before the per-entry scan: the first byte (uppercased) must
+    // be one of {B,C,D,I,O,P,S} and the length one of {6,7,9,10,18}. Most
+    // non-keyword args (paths, libs, flags) miss at least one filter, so they
+    // never reach the case-insensitive comparisons.
+    let bytes = text.as_bytes();
+    let Some(&first) = bytes.first() else {
+        return false;
+    };
+    let upper = first.to_ascii_uppercase();
+    const FIRST_MASK: u32 = (1u32 << (b'B' - b'A'))
+        | (1u32 << (b'C' - b'A'))
+        | (1u32 << (b'D' - b'A'))
+        | (1u32 << (b'I' - b'A'))
+        | (1u32 << (b'O' - b'A'))
+        | (1u32 << (b'P' - b'A'))
+        | (1u32 << (b'S' - b'A'));
+    if !upper.is_ascii_uppercase() || FIRST_MASK & (1u32 << (upper - b'A')) == 0 {
+        return false;
+    }
+    const LEN_MASK: u32 = (1u32 << 6) | (1u32 << 7) | (1u32 << 9) | (1u32 << 10) | (1u32 << 18);
+    let len = bytes.len();
+    if len >= 32 || LEN_MASK & (1u32 << len) == 0 {
+        return false;
+    }
     SORT_GROUP_KEYWORDS
         .iter()
         .any(|&k| k.eq_ignore_ascii_case(text))
