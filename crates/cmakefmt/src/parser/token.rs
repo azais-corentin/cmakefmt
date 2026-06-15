@@ -1,10 +1,8 @@
 use logos::{Lexer, Logos};
 
 #[derive(Logos, Debug, PartialEq, Clone)]
+#[logos(skip r"[ \t]+")]
 pub enum Token {
-    #[regex(r"[ \t]+")]
-    Space,
-
     #[regex(r"\r?\n")]
     Newline,
 
@@ -33,7 +31,6 @@ pub enum Token {
 impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Token::Space => f.write_str("<space>"),
             Token::Newline => f.write_str("<newline>"),
             Token::LParen => f.write_str("'('"),
             Token::RParen => f.write_str("')'"),
@@ -167,9 +164,7 @@ mod tests {
                 Token::UnquotedText, // if
                 Token::LParen,
                 Token::UnquotedText, // A
-                Token::Space,
                 Token::UnquotedText, // AND
-                Token::Space,
                 Token::UnquotedText, // B
                 Token::RParen,
             ]
@@ -177,13 +172,15 @@ mod tests {
     }
 
     #[test]
-    fn spaces_and_tabs_combined_into_single_space_token() {
+    fn spaces_and_tabs_are_skipped() {
+        // Whitespace is a lexer skip, so it produces no tokens; the two words
+        // surface as separate non-adjacent unquoted tokens.
         let tokens = tokenize_with_slices("a  \t  b");
-        assert_eq!(tokens.len(), 3);
+        assert_eq!(tokens.len(), 2);
         assert_eq!(tokens[0].0, Token::UnquotedText);
-        assert_eq!(tokens[1].0, Token::Space);
-        assert_eq!(tokens[1].1, "  \t  ");
-        assert_eq!(tokens[2].0, Token::UnquotedText);
+        assert_eq!(tokens[0].1, "a");
+        assert_eq!(tokens[1].0, Token::UnquotedText);
+        assert_eq!(tokens[1].1, "b");
     }
 
     #[test]
@@ -334,8 +331,7 @@ mod tests {
             vec![
                 Token::UnquotedText, // set
                 Token::LParen,
-                Token::UnquotedText, // VAR
-                Token::Space,
+                Token::UnquotedText,   // VAR
                 Token::QuotedArgument, // "value"
                 Token::RParen,
             ]

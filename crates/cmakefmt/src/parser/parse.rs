@@ -74,12 +74,6 @@ impl<'a> Parser<'a> {
     fn at_end(&self) -> bool {
         self.peeked.is_none()
     }
-
-    fn skip_spaces(&mut self) {
-        while let Some(Token::Space) = self.peek() {
-            self.advance();
-        }
-    }
 }
 
 /// Parse CMake source text into an AST.
@@ -96,11 +90,6 @@ fn parse_file_elements(p: &mut Parser) -> Result<Vec<FileElement>> {
 
     while !p.at_end() {
         match p.peek() {
-            Some(Token::Space) => {
-                p.skip_spaces();
-                // After skipping spaces, check what follows
-                continue;
-            }
             Some(Token::Newline) => {
                 p.advance();
                 elements.push(FileElement::BlankLine);
@@ -144,9 +133,6 @@ fn parse_command_invocation(p: &mut Parser) -> Result<CommandInvocation> {
     // Consume command name (UnquotedText)
     let (_, name_span) = p.advance().unwrap();
 
-    // Skip spaces between name and '('
-    p.skip_spaces();
-
     // Optional space_before_paren handling — just consume '('
     let open_paren_span = match p.peek() {
         Some(Token::LParen) => {
@@ -182,8 +168,7 @@ fn parse_command_invocation(p: &mut Parser) -> Result<CommandInvocation> {
         }
     };
 
-    // Consume optional trailing whitespace + line comment before newline
-    p.skip_spaces();
+    // Consume an optional trailing line comment before the newline.
 
     let trailing_comment = if matches!(p.peek(), Some(Token::LineComment)) {
         let (_, span) = p.advance().unwrap();
@@ -213,10 +198,6 @@ fn parse_arguments(p: &mut Parser) -> Result<Vec<Argument>> {
         // Skip separators (spaces, newlines)
         // But line comments inside arg lists become Argument::LineComment
         match p.peek() {
-            Some(Token::Space) => {
-                p.advance();
-                continue;
-            }
             Some(Token::Newline) => {
                 p.advance();
                 continue;
