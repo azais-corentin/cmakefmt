@@ -175,6 +175,7 @@ fn format_inner(text: &str, config: &Configuration) -> Result<String> {
                 gen_file(&file, parse_text, config)
             },
             print_options,
+            parse_text,
         )
     };
     let result = {
@@ -539,7 +540,6 @@ mod tests {
     fn test_path() -> PathBuf {
         PathBuf::from("CMakeLists.txt")
     }
-
     // -----------------------------------------------------------------------
     // strip_bom
     // -----------------------------------------------------------------------

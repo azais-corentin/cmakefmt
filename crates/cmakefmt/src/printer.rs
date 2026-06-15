@@ -39,6 +39,11 @@ pub enum PrintItem {
     /// A text fragment in `PrintItems::text`. Never contains `\n` — newlines
     /// are always [`Signal::NewLine`].
     Text { start: u32, len: u32 },
+    /// A verbatim fragment referencing a byte range of the *original source*
+    /// (resolved against the `source` passed to [`format`]). Used for tokens
+    /// emitted unchanged — unquoted arguments — so they need not be copied into
+    /// the slab. Offsets are absolute into source and are never rebased on merge.
+    SrcText { start: u32, len: u32 },
     /// A single space character.
     Space,
     /// A printer signal (indent, newline, etc.).
@@ -98,6 +103,17 @@ impl PrintItems {
                 start,
                 len: to_u32(text.len()),
             });
+        }
+    }
+
+    /// Append a verbatim fragment by *source* byte range (no copy into the slab).
+    /// The range must index the `source` later passed to [`format`], and must be
+    /// free of content needing per-line handling (no `\n`; tabs are emitted
+    /// verbatim, which is correct for unquoted CMake arguments). `start`/`len`
+    /// are absolute source offsets and are never rebased when merging streams.
+    pub fn push_src(&mut self, start: u32, len: u32) {
+        if len > 0 {
+            self.items.push(PrintItem::SrcText { start, len });
         }
     }
 
@@ -301,14 +317,18 @@ pub struct PrintOptions {
 ///
 /// Mirrors `dprint_core::formatting::format`: accepts a closure that produces the items and
 /// options that control rendering. The closure form exists for API compatibility.
-pub fn format(get_items: impl FnOnce() -> PrintItems, options: PrintOptions) -> String {
+pub fn format(
+    get_items: impl FnOnce() -> PrintItems,
+    options: PrintOptions,
+    source: &str,
+) -> String {
     let _stage = info_span!(EVENT_PRINTER_FORMAT).entered();
     let items = get_items();
-    render(&items, &options)
+    render(&items, &options, source)
 }
 
 /// Walk the item stream and produce the final formatted text.
-fn render(items: &PrintItems, options: &PrintOptions) -> String {
+fn render(items: &PrintItems, options: &PrintOptions, source: &str) -> String {
     let mut out = String::with_capacity(options.initial_capacity);
     let mut indent_level: u8 = 0;
     let mut ignore_indent_count: u8 = 0;
@@ -362,6 +382,17 @@ fn render(items: &PrintItems, options: &PrintOptions) -> String {
                     &mut indent_cache,
                 );
                 out.push_str(items.resolve(*start, *len));
+            }
+            PrintItem::SrcText { start, len } => {
+                emit_indent_if_needed(
+                    &mut out,
+                    &mut at_line_start,
+                    indent_level,
+                    ignore_indent_count,
+                    options,
+                    &mut indent_cache,
+                );
+                out.push_str(&source[*start as usize..(*start + *len) as usize]);
             }
             PrintItem::Space => {
                 emit_indent_if_needed(
@@ -422,6 +453,12 @@ fn ensure_indent_prefix(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Test shim: these tests build items only via `push_str`/`push_string`
+    /// (never `push_src`), so no `SrcText` items exist and the source is unused.
+    fn format(get_items: impl FnOnce() -> PrintItems, options: PrintOptions) -> String {
+        super::format(get_items, options, "")
+    }
 
     #[test]
     fn empty_items_produce_empty_string() {

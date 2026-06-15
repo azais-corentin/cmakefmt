@@ -473,33 +473,36 @@ fn push_comment_gap(items: &mut PrintItems, gap: u8) {
     }
 }
 
-fn visual_indent_prefix(width: usize, config: &Configuration) -> String {
-    if width == 0 {
-        return String::new();
-    }
+/// 128 spaces; visual indents slice from here so no per-line `String` is
+/// allocated for indentation whitespace (a hot path: every wrapped value line
+/// emits a visual indent).
+const SPACES: &str = "                                                                                                                                ";
 
-    match config.indent_style {
-        IndentStyle::Space => " ".repeat(width),
-        IndentStyle::Tab => {
-            let tab_width = config.indent_width as usize;
-            let tabs = width / tab_width;
-            let spaces = width % tab_width;
-            let mut s = String::with_capacity(tabs + spaces);
-            for _ in 0..tabs {
-                s.push('\t');
-            }
-            for _ in 0..spaces {
-                s.push(' ');
-            }
-            s
-        }
+/// Append `count` spaces to the item stream without allocating, slicing from
+/// the static [`SPACES`] buffer (chunked for the rare `count > SPACES.len()`).
+fn push_spaces(items: &mut PrintItems, mut count: usize) {
+    while count > 0 {
+        let chunk = count.min(SPACES.len());
+        items.push_str(&SPACES[..chunk]);
+        count -= chunk;
     }
 }
 
 fn push_visual_indent(items: &mut PrintItems, width: usize, config: &Configuration) {
-    let prefix = visual_indent_prefix(width, config);
-    if !prefix.is_empty() {
-        items.push_raw_str(&prefix);
+    if width == 0 {
+        return;
+    }
+    match config.indent_style {
+        IndentStyle::Space => push_spaces(items, width),
+        IndentStyle::Tab => {
+            let tab_width = config.indent_width as usize;
+            let tabs = width / tab_width;
+            let spaces = width % tab_width;
+            for _ in 0..tabs {
+                items.push_signal(Signal::Tab);
+            }
+            push_spaces(items, spaces);
+        }
     }
 }
 
@@ -593,7 +596,15 @@ pub fn gen_command(
 
     let single_line_paren_spacing =
         resolve_single_line_paren_spacing(cmd, source, config, !arguments.is_empty());
-    let source_is_multiline = source[cmd.open_paren.end..cmd.close_paren.start].contains('\n');
+    // `source_is_multiline` only matters when sorting reorders keyword sections
+    // (it suppresses collapsing an already-structured multi-line command). With
+    // sorting inactive — the default — the value is unused, so gate the newline
+    // scan behind `sorting_with_keywords` to skip it per command.
+    let sorting_with_keywords = has_keyword_args
+        && (should_sort_for_command(raw_name, config, cmd_kind.as_ref())
+            || config.sort_keyword_sections);
+    let source_is_multiline =
+        sorting_with_keywords && source[cmd.open_paren.end..cmd.close_paren.start].contains('\n');
     command_stage.record("source_is_multiline", source_is_multiline);
 
     let mut deferred_closing_comment = None;
@@ -628,12 +639,6 @@ pub fn gen_command(
         WrapStyle::Cascade => true,
         WrapStyle::Vertical => count_wrap_arguments(&arguments) <= 2,
     };
-    // When sorting is active and the source was already multi-line, preserve
-    // structured layout — sorting reorders sections and collapsing would
-    // discard that structure.
-    let sorting_with_keywords = has_keyword_args
-        && (should_sort_for_command(raw_name, config, cmd_kind.as_ref())
-            || config.sort_keyword_sections);
     let allow_single_line = allow_single_line_by_style
         && !force_one_per_line
         && !(source_is_multiline && sorting_with_keywords);
@@ -1064,6 +1069,11 @@ struct FormattedArg<'src> {
     genex_delta: i32,
     /// Cached "does `text` contain `$<`".
     has_genex: bool,
+    /// For tokens emitted verbatim from the original source (unquoted args),
+    /// the absolute `(start, len)` byte range into source. Lets the renderer
+    /// copy straight from source instead of staging the bytes in the slab.
+    /// `None` for synthesized/quoted/bracket/comment text.
+    src_range: Option<(u32, u32)>,
 }
 
 impl<'src> FormattedArg<'src> {
@@ -1085,6 +1095,7 @@ impl<'src> FormattedArg<'src> {
             has_newline,
             genex_delta,
             has_genex,
+            src_range: None,
         }
     }
 }
@@ -1148,6 +1159,9 @@ fn build_argument_list_from_args<'src>(
                     is_keyword: is_kw,
                     blank_line_before,
                     new_line_before,
+                    // Unquoted args are verbatim source slices (no `\n`), so the
+                    // renderer can copy them straight from source — no slab copy.
+                    src_range: Some((span.start as u32, (span.end - span.start) as u32)),
                     ..FormattedArg::new(Cow::Borrowed(text))
                 });
             }
@@ -1241,6 +1255,16 @@ fn arg_inline_text<'a>(arg: &'a FormattedArg) -> Cow<'a, str> {
         Cow::Owned(format_paren_group_inline(&arg.paren_inner))
     } else {
         Cow::Borrowed(arg.text.as_ref())
+    }
+}
+
+/// Emit an argument's inline text verbatim (no casing). For unquoted args this
+/// renders straight from source (no slab copy) via `SrcText`; otherwise it
+/// falls back to the slab. Drop-in for `push_raw_str(&arg_inline_text(arg))`.
+fn push_arg_verbatim(items: &mut PrintItems, arg: &FormattedArg) {
+    match arg.src_range {
+        Some((start, len)) => items.push_src(start, len),
+        None => items.push_raw_str(&arg_inline_text(arg)),
     }
 }
 
@@ -1399,13 +1423,7 @@ fn try_single_line(
     // Known commands case keywords by spec position; condition syntax and
     // custom-keyword commands use the per-arg flag; otherwise no casing.
     let keyword_positions = match cmd_kind {
-        Some(CommandKind::Known(spec)) => {
-            let mut flags = vec![false; args.len()];
-            for idx in compute_keyword_positions(args, spec) {
-                flags[idx] = true;
-            }
-            Some(flags)
-        }
+        Some(CommandKind::Known(spec)) => Some(compute_keyword_positions(args, spec)),
         _ => None,
     };
     let case_args = cmd_kind.is_some() || !config.custom_keywords.is_empty();
@@ -1413,15 +1431,24 @@ fn try_single_line(
     if space_after_open {
         items.push_space();
     }
+    // `compute_keyword_positions` returns indices in ascending order, so a
+    // monotonic cursor replaces a per-call `vec![bool; args.len()]` flag array.
+    let mut kw_cursor = 0usize;
     for (i, a) in args.iter().enumerate() {
         if i > 0 {
             items.push_space();
         }
         let t = arg_inline_text(a);
         let style = if case_args {
-            let is_kw = keyword_positions
-                .as_ref()
-                .map_or(a.is_keyword, |flags| flags[i]);
+            let is_kw = match &keyword_positions {
+                Some(positions) => {
+                    while kw_cursor < positions.len() && positions[kw_cursor] < i {
+                        kw_cursor += 1;
+                    }
+                    kw_cursor < positions.len() && positions[kw_cursor] == i
+                }
+                None => a.is_keyword,
+            };
             if is_kw {
                 Some(config.keyword_case)
             } else if !a.is_bracket
@@ -1439,7 +1466,10 @@ fn try_single_line(
         };
         match style {
             Some(style) => push_token_cased(items, &t, style),
-            None => items.push_raw_str(&t),
+            None => match a.src_range {
+                Some((start, len)) => items.push_src(start, len),
+                None => items.push_raw_str(&t),
+            },
         }
     }
     if space_before_close {
@@ -1489,6 +1519,10 @@ fn compute_keyword_positions(args: &[FormattedArg], spec: &CommandSpec) -> Vec<u
 
     // Scan remaining args for keywords
     while i < args.len() {
+        if !args[i].is_keyword {
+            i += 1;
+            continue;
+        }
         // Skip command-line keywords (not keyword-cased)
         if is_cmd_line_keyword(&args[i], spec) {
             i += if i + 1 < args.len() { 2 } else { 1 };
@@ -1544,6 +1578,11 @@ fn compute_keyword_positions(args: &[FormattedArg], spec: &CommandSpec) -> Vec<u
                     let mut val_count = 0usize;
                     // Skip until next keyword
                     while i < args.len() {
+                        if !args[i].is_keyword {
+                            i += 1;
+                            val_count += 1;
+                            continue;
+                        }
                         let inner_kw = get_keyword_type(&args[i], spec);
                         let inner_is_blocked_once = inner_kw.is_some()
                             && once_keyword_seen
@@ -1588,6 +1627,10 @@ fn compute_keyword_positions(args: &[FormattedArg], spec: &CommandSpec) -> Vec<u
                         consumed += 1;
                     }
                     while i < args.len() {
+                        if !args[i].is_keyword {
+                            i += 1;
+                            continue;
+                        }
                         let inner_kw = get_keyword_type(&args[i], spec);
                         let inner_is_section = is_section_keyword(&args[i], spec);
                         // Another top-level keyword (including another Group) breaks the group.
@@ -1734,6 +1777,14 @@ fn split_arguments<'a>(
     let mut current_positional: Vec<&'a FormattedArg> = Vec::new();
     let mut once_keyword_seen = false;
     while i < main_args.len() {
+        // Fast path: a non-keyword arg (the common case — values, file paths)
+        // can never match any spec keyword/section/cmd-line check, because
+        // `is_keyword` already covers that superset. Skip the per-arg scans.
+        if !main_args[i].is_keyword {
+            current_positional.push(&main_args[i]);
+            i += 1;
+            continue;
+        }
         // Check command-line keywords first (e.g., debug, optimized, general)
         if is_cmd_line_keyword(&main_args[i], spec) {
             if !current_positional.is_empty() {
@@ -1837,6 +1888,11 @@ fn split_arguments<'a>(
                     // consumed as values (not treated as top-level keywords).
                     let section_sub_kws = get_section_keywords(&kw.text, spec);
                     while i < main_args.len() {
+                        if !main_args[i].is_keyword && !main_args[i].text.starts_with('#') {
+                            values.push(&main_args[i]);
+                            i += 1;
+                            continue;
+                        }
                         if main_args[i].text.starts_with('#') {
                             let next_index = i + 1;
                             if next_index < main_args.len() {
@@ -1915,6 +1971,11 @@ fn split_arguments<'a>(
                         consumed += 1;
                     }
                     while i < main_args.len() {
+                        if !main_args[i].is_keyword {
+                            values.push(&main_args[i]);
+                            i += 1;
+                            continue;
+                        }
                         let inner_kw = get_keyword_type(&main_args[i], spec);
                         let inner_is_section = is_section_keyword(&main_args[i], spec);
                         let inner_is_cmd_line = is_cmd_line_keyword(&main_args[i], spec);
@@ -2657,7 +2718,12 @@ fn gen_known_multi_line(
     let command_indent = indent_depth as usize * config.indent_width as usize;
     let base_indent = (indent_depth as usize + 1) * config.indent_width as usize;
 
-    let mut inner = PrintItems::new();
+    // Emit the command body directly into `items` (wrapped in one structural
+    // indent level) instead of building a throwaway `inner` PrintItems and
+    // merging it. The old approach copied every body item + slab byte a second
+    // time (extend/rebase) for every multi-line command; this avoids that.
+    items.push_signal(Signal::StartIndent);
+    let inner: &mut PrintItems = &mut *items;
     let mut last_on_opening_line = false;
 
     let force_two_install_opening = cmd_name.eq_ignore_ascii_case("install")
@@ -2670,9 +2736,9 @@ fn gen_known_multi_line(
     if first_arg_same_line {
         if let Some((first, rest)) = opening_args.split_first() {
             if first.is_keyword {
-                emit_kw_arg(&mut inner, first, config);
+                emit_kw_arg(&mut *inner, first, config);
             } else {
-                emit_arg(&mut inner, first, config);
+                emit_arg(&mut *inner, first, config);
             }
             last_on_opening_line = true;
 
@@ -2698,9 +2764,9 @@ fn gen_known_multi_line(
                 }
 
                 if arg.is_keyword {
-                    emit_kw_arg(&mut inner, arg, config);
+                    emit_kw_arg(&mut *inner, arg, config);
                 } else {
-                    emit_arg(&mut inner, arg, config);
+                    emit_arg(&mut *inner, arg, config);
                 }
             }
         }
@@ -2719,18 +2785,18 @@ fn gen_known_multi_line(
                     inner.push_space();
                 }
                 if arg.is_keyword {
-                    emit_kw_arg(&mut inner, arg, config);
+                    emit_kw_arg(&mut *inner, arg, config);
                 } else {
-                    emit_arg(&mut inner, arg, config);
+                    emit_arg(&mut *inner, arg, config);
                 }
             }
         } else {
             for arg in &opening_args {
                 inner.push_signal(Signal::NewLine);
                 if arg.is_keyword {
-                    emit_kw_arg(&mut inner, arg, config);
+                    emit_kw_arg(&mut *inner, arg, config);
                 } else {
-                    emit_arg(&mut inner, arg, config);
+                    emit_arg(&mut *inner, arg, config);
                 }
             }
         }
@@ -2738,7 +2804,7 @@ fn gen_known_multi_line(
     }
 
     if let Some(values) = opening_pair_values.as_ref() {
-        emit_pair_values(&mut inner, values.as_slice(), config, base_indent, false);
+        emit_pair_values(&mut *inner, values.as_slice(), config, base_indent, false);
         last_on_opening_line = false;
     }
 
@@ -2766,7 +2832,7 @@ fn gen_known_multi_line(
             ArgGroup::Positional(args) => {
                 if force_one_per_line {
                     emit_values_with_genex_with_indent(
-                        &mut inner,
+                        &mut *inner,
                         args.as_slice(),
                         config,
                         false,
@@ -2779,7 +2845,7 @@ fn gen_known_multi_line(
                     );
                 } else if config.align_arg_groups
                     && cmd_name.eq_ignore_ascii_case("install")
-                    && emit_install_target_rows(&mut inner, args.as_slice(), config)
+                    && emit_install_target_rows(&mut *inner, args.as_slice(), config)
                 {
                     // install(TARGETS ...) artifact rows emitted above.
                 } else if config.align_arg_groups
@@ -2789,7 +2855,7 @@ fn gen_known_multi_line(
                         .is_some_and(|arg| is_section_keyword(arg, spec))
                 {
                     emit_flattened_target_sources_sections(
-                        &mut inner,
+                        &mut *inner,
                         args.as_slice(),
                         config,
                         spec,
@@ -2807,7 +2873,7 @@ fn gen_known_multi_line(
                             // Keyword + values overflow: emit keyword on its
                             // own line with alignment, then pack values below.
                             emit_aligned_overflow_packed(
-                                &mut inner,
+                                &mut *inner,
                                 args.as_slice(),
                                 config,
                                 profile,
@@ -2816,7 +2882,7 @@ fn gen_known_multi_line(
                             );
                         } else {
                             emit_aligned_single_positional_line(
-                                &mut inner,
+                                &mut *inner,
                                 args.as_slice(),
                                 config,
                                 profile,
@@ -2825,10 +2891,10 @@ fn gen_known_multi_line(
                             );
                         }
                     } else if spec.flow_positional {
-                        emit_flow_values(&mut inner, args.as_slice(), config, base_indent, false);
+                        emit_flow_values(&mut *inner, args.as_slice(), config, base_indent, false);
                     } else {
                         emit_values_with_genex_with_indent(
-                            &mut inner,
+                            &mut *inner,
                             args.as_slice(),
                             config,
                             false,
@@ -2850,10 +2916,10 @@ fn gen_known_multi_line(
                         );
                     }
                 } else if spec.flow_positional {
-                    emit_flow_values(&mut inner, args.as_slice(), config, base_indent, false);
+                    emit_flow_values(&mut *inner, args.as_slice(), config, base_indent, false);
                 } else {
                     emit_values_with_genex_with_indent(
-                        &mut inner,
+                        &mut *inner,
                         args.as_slice(),
                         config,
                         false,
@@ -2889,7 +2955,7 @@ fn gen_known_multi_line(
                 let keyword_inline_allowed = allow_keyword_inline
                     && !(disable_inline_after_expansion && expanded_keyword_group_seen);
                 let expanded = emit_keyword_group(
-                    &mut inner,
+                    &mut *inner,
                     keyword,
                     values.as_slice(),
                     spec,
@@ -2908,7 +2974,7 @@ fn gen_known_multi_line(
             }
             ArgGroup::CmdLineKeyword { keyword, value } => {
                 section_index += 1;
-                emit_cmd_line_keyword(&mut inner, keyword, *value, config, base_indent);
+                emit_cmd_line_keyword(&mut *inner, keyword, *value, config, base_indent);
             }
         }
     }
@@ -2918,9 +2984,9 @@ fn gen_known_multi_line(
         last_on_opening_line = false;
         inner.push_signal(Signal::NewLine);
         if arg.is_keyword || get_keyword_type(arg, spec).is_some() {
-            emit_kw_arg(&mut inner, arg, config);
+            emit_kw_arg(&mut *inner, arg, config);
         } else {
-            emit_arg(&mut inner, arg, config);
+            emit_arg(&mut *inner, arg, config);
         }
     }
     // Only add closing paren newline if the last item wasn't on the opening line
@@ -2928,7 +2994,7 @@ fn gen_known_multi_line(
         inner.push_signal(Signal::NewLine);
     }
 
-    items.push_indented(inner);
+    items.push_signal(Signal::FinishIndent);
 }
 
 /// Emit a keyword + values group. Tries inline first, expands if needed.
@@ -3104,7 +3170,7 @@ fn emit_keyword_group(
             items.push_string(kw_text.into_owned());
             for val in values {
                 items.push_space();
-                items.push_raw_str(&arg_inline_text(val));
+                push_arg_verbatim(items, val);
             }
             if let Some(comment) = &keyword.trailing_comment {
                 items.push_space();
@@ -3136,7 +3202,7 @@ fn emit_keyword_group(
                 items.push_string(kw_text.into_owned());
                 for val in &values[..leading_count] {
                     items.push_space();
-                    items.push_raw_str(&arg_inline_text(val));
+                    push_arg_verbatim(items, val);
                 }
                 let wrap_section_tail = values[leading_count..].iter().any(|v| v.has_newline);
                 emit_section_values_inner(
@@ -3320,9 +3386,9 @@ fn emit_property_values(
             if can_inline {
                 let mut val_items = PrintItems::new();
                 val_items.push_signal(Signal::NewLine);
-                val_items.push_raw_str(&arg_inline_text(prop_name));
+                push_arg_verbatim(&mut val_items, prop_name);
                 val_items.push_space();
-                val_items.push_raw_str(&arg_inline_text(val));
+                push_arg_verbatim(&mut val_items, val);
                 if let Some(comment) = &prop_name.trailing_comment {
                     val_items.push_space();
                     val_items.push_raw_str(comment);
@@ -3624,7 +3690,7 @@ fn emit_pair_values(
                     val_items.push_space();
                 }
 
-                val_items.push_raw_str(&arg_inline_text(val));
+                push_arg_verbatim(&mut val_items, val);
 
                 // Key's bracket comment (if any) goes inline
                 if let Some(comment) = &key.trailing_comment {
@@ -3645,12 +3711,12 @@ fn emit_pair_values(
                 // Both have line comments: special layout
                 // KEY alone at L2, key-comment at L3, value at L3, val-comment at L2
                 val_items.push_signal(Signal::NewLine);
-                val_items.push_raw_str(&arg_inline_text(key));
+                push_arg_verbatim(&mut val_items, key);
                 let mut sub = PrintItems::new();
                 sub.push_signal(Signal::NewLine);
                 sub.push_raw_str(key.trailing_comment.as_ref().unwrap());
                 sub.push_signal(Signal::NewLine);
-                sub.push_raw_str(&arg_inline_text(val));
+                push_arg_verbatim(&mut sub, val);
                 val_items.push_indented(sub);
                 // Value's trailing comment at L2
                 val_items.push_signal(Signal::NewLine);
@@ -3741,11 +3807,11 @@ fn emit_aligned_property_pairs(
                 for _ in 0..padding {
                     val_items.push_space();
                 }
-                val_items.push_raw_str(&arg_inline_text(value));
+                push_arg_verbatim(&mut val_items, value);
                 emitted_first_value = true;
             } else {
                 val_items.push_space();
-                val_items.push_raw_str(&arg_inline_text(value));
+                push_arg_verbatim(&mut val_items, value);
             }
             index += 1;
         }
@@ -3825,7 +3891,7 @@ fn emit_cmd_line_keyword(
             items.push_signal(Signal::NewLine);
             items.push_raw_str(&keyword.text);
             items.push_space();
-            items.push_raw_str(&arg_inline_text(val));
+            push_arg_verbatim(items, val);
             if let Some(comment) = &val.trailing_comment {
                 items.push_space();
                 items.push_raw_str(comment);
@@ -3969,7 +4035,7 @@ fn emit_section_values_inner(
                         val_items.push_string(sub_kw_text.into_owned());
                         for sv in &sub_values {
                             val_items.push_space();
-                            val_items.push_raw_str(&arg_inline_text(sv));
+                            push_arg_verbatim(&mut val_items, sv);
                         }
                         if let Some(comment) = &kw.trailing_comment {
                             val_items.push_space();
@@ -4122,7 +4188,7 @@ fn emit_section_values_inner(
                             );
                             for v in front_positionals {
                                 val_items.push_space();
-                                val_items.push_raw_str(&arg_inline_text(v));
+                                push_arg_verbatim(&mut val_items, v);
                             }
                             if let Some(comment) = &kw.trailing_comment {
                                 val_items.push_space();
@@ -4839,7 +4905,7 @@ fn emit_cond_expr_inline(items: &mut PrintItems, expr: &CondExpr<'_>, config: &C
             }
         }
         CondExpr::ParenGroup(arg) => {
-            items.push_raw_str(&arg_inline_text(arg));
+            push_arg_verbatim(items, arg);
             if let Some(comment) = &arg.trailing_comment {
                 items.push_space();
                 items.push_raw_str(comment);
@@ -4980,6 +5046,9 @@ fn emit_arg_with_case(
             items.push_signal(Signal::FinishIgnoringIndent);
         } else if let Some(style) = style {
             push_token_cased(items, &arg.text, style);
+        } else if let Some((start, len)) = arg.src_range {
+            // Verbatim unquoted source slice: render directly from source.
+            items.push_src(start, len);
         } else {
             items.push_raw_str(&arg.text);
         }

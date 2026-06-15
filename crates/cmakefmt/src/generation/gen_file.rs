@@ -515,9 +515,17 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
                     indent_level -= 1;
                 }
 
-                // Track block opener args for endCommandArgs="match"
+                // Track block opener args for endCommandArgs="match". The cloned
+                // args are only read in Match mode, so skip the per-opener clone
+                // for the other policies (the default is Remove).
                 if role == BlockRole::Opener {
-                    block_stack.push_opener(cmd_name, non_comment_args(&cmd.arguments));
+                    let opener_args =
+                        if matches!(current_config.end_command_args, EndCommandArgs::Match) {
+                            non_comment_args(&cmd.arguments)
+                        } else {
+                            Vec::new()
+                        };
+                    block_stack.push_opener(cmd_name, opener_args);
                 }
 
                 let preserve_verbatim =
