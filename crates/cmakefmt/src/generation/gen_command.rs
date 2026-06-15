@@ -1133,6 +1133,29 @@ impl<'src> FormattedArg<'src> {
         }
     }
 
+    /// Build an argument from an unquoted source token. Unquoted CMake tokens
+    /// can never contain a newline (the lexer excludes `\n`), so this skips the
+    /// `\n` arm of the genex scan (a `memchr2` instead of `memchr3`) and pins
+    /// `has_newline = false`. The dominant arg kind, so this is hot.
+    fn new_unquoted(text: Cow<'src, str>) -> Self {
+        let (genex_delta, has_genex) = genex_scan_no_newline(&text);
+        Self {
+            text,
+            is_keyword: false,
+            is_bracket: false,
+            trailing_comment: None,
+            trailing_is_bracket: false,
+            is_paren_group: false,
+            paren_inner: Box::default(),
+            blank_line_before: false,
+            new_line_before: false,
+            has_newline: false,
+            genex_delta,
+            has_genex,
+            src_range: None,
+        }
+    }
+
     /// Inner args of a paren group as a slice (empty when not a group).
     #[inline]
     fn paren_args(&self) -> &[FormattedArg<'src>] {
@@ -1198,7 +1221,7 @@ fn build_argument_list_from_args<'src>(
                     // Unquoted args are verbatim source slices (no `\n`), so the
                     // renderer can copy them straight from source — no slab copy.
                     src_range: Some((span.start as u32, (span.end - span.start) as u32)),
-                    ..FormattedArg::new(Cow::Borrowed(text))
+                    ..FormattedArg::new_unquoted(Cow::Borrowed(text))
                 });
             }
             Argument::ParenGroup { arguments } => {
@@ -5531,6 +5554,32 @@ fn text_scan(text: &str) -> (i32, bool, bool) {
         }
     }
     (depth, has_genex, has_newline)
+}
+
+/// Like [`text_scan`] but for text guaranteed free of newlines (unquoted
+/// tokens): a `memchr2($, >)` pass (one fewer needle than `memchr3`) returning
+/// `(genex_delta, has_genex)`. Hot — runs for every unquoted argument.
+fn genex_scan_no_newline(text: &str) -> (i32, bool) {
+    let bytes = text.as_bytes();
+    let mut depth: i32 = 0;
+    let mut has_genex = false;
+    let mut pos = 0;
+    while let Some(off) = memchr::memchr2(b'$', b'>', &bytes[pos..]) {
+        let i = pos + off;
+        if bytes[i] == b'$' {
+            if bytes.get(i + 1) == Some(&b'<') {
+                depth += 1;
+                has_genex = true;
+                pos = i + 2;
+            } else {
+                pos = i + 1;
+            }
+        } else {
+            depth -= 1;
+            pos = i + 1;
+        }
+    }
+    (depth, has_genex)
 }
 
 /// Group a slice of `FormattedArg` values into genex groups and standalone args.
