@@ -1161,8 +1161,7 @@ impl<'src> FormattedArg<'src> {
     /// can never contain a newline (the lexer excludes `\n`), so this skips the
     /// `\n` arm of the genex scan (a `memchr2` instead of `memchr3`) and pins
     /// `has_newline = false`. The dominant arg kind, so this is hot.
-    fn new_unquoted(text: Cow<'src, str>) -> Self {
-        let (genex_delta, has_genex) = genex_scan_no_newline(&text);
+    fn new_unquoted(text: Cow<'src, str>, genex_delta: i32, has_genex: bool) -> Self {
         Self {
             text,
             is_keyword: false,
@@ -1208,6 +1207,18 @@ fn build_argument_list_from_args<'src>(
 
     let preserve_source_blank_lines =
         config.align_arg_groups || !matches!(config.sort_arguments, SortArguments::Disabled);
+    // Fast path: one `memchr2` over the whole argument region tells us whether
+    // any unquoted arg *could* carry a generator expression. When neither `$`
+    // nor `>` appears, every unquoted token has genex_delta 0 / has_genex false,
+    // so we skip the per-arg `memchr2` scan (saves one call per unquoted arg).
+    let args_have_genex_chars = match (args.first(), args.last()) {
+        (Some(first), Some(last)) => {
+            let start = arg_source_range(first).0.min(source.len());
+            let end = arg_source_range(last).1.min(source.len());
+            start < end && memchr::memchr2(b'$', b'>', &source.as_bytes()[start..end]).is_some()
+        }
+        _ => false,
+    };
     while i < args.len() {
         let (current_start, current_end) = arg_source_range(&args[i]);
         let blank_line_before = if preserve_source_blank_lines && i > 0 {
@@ -1236,6 +1247,11 @@ fn build_argument_list_from_args<'src>(
             Argument::Unquoted(span) => {
                 let text = span.text(source);
                 let is_kw = is_known_keyword(text, cmd_kind, config);
+                let (genex_delta, has_genex) = if args_have_genex_chars {
+                    genex_scan_no_newline(text)
+                } else {
+                    (0, false)
+                };
                 // Store original text — keyword casing is applied during formatting
                 // based on command context, not globally
                 result.push(FormattedArg {
@@ -1245,7 +1261,7 @@ fn build_argument_list_from_args<'src>(
                     // Unquoted args are verbatim source slices (no `\n`), so the
                     // renderer can copy them straight from source — no slab copy.
                     src_range: Some((span.start as u32, (span.end - span.start) as u32)),
-                    ..FormattedArg::new_unquoted(Cow::Borrowed(text))
+                    ..FormattedArg::new_unquoted(Cow::Borrowed(text), genex_delta, has_genex)
                 });
             }
             Argument::ParenGroup { arguments } => {
