@@ -37,6 +37,12 @@ pub struct CommandSpec {
     /// Lets `is_in_command_spec` reject a value argument in O(1) when its first
     /// byte cannot start any keyword. Always built via [`with_mask`].
     pub first_char_mask: u128,
+    /// Precomputed bitset of keyword string lengths: bit `min(len, 31)` is set
+    /// for every keyword this spec checks. Lets `is_in_command_spec` reject a
+    /// value argument in O(1) when its length matches no keyword length
+    /// (lengths ≥ 31 collapse to bit 31, a sound superset). Built via
+    /// [`with_mask`].
+    pub len_mask: u32,
 }
 
 /// ASCII-uppercase a byte (const-evaluable, no stdlib const dependency).
@@ -44,86 +50,122 @@ const fn up(b: u8) -> u8 {
     if b >= b'a' && b <= b'z' { b - 32 } else { b }
 }
 
-/// Bit for a word's uppercased first byte (0 when empty or non-ASCII lead).
-const fn first_char_bit(s: &str) -> u128 {
+/// `(first_char_bit, len_bit)` for a word (both 0 when empty). The first-char
+/// bit is 0 for a non-ASCII lead byte; the length bit saturates at bit 31.
+const fn word_bits(s: &str) -> (u128, u32) {
     let b = s.as_bytes();
     if b.is_empty() {
-        return 0;
+        return (0, 0);
     }
     let u = up(b[0]);
-    if (u as usize) < 128 { 1u128 << u } else { 0 }
+    let fc = if (u as usize) < 128 { 1u128 << u } else { 0 };
+    let l = b.len();
+    let lb = 1u32 << if l < 31 { l as u32 } else { 31 };
+    (fc, lb)
 }
 
-const fn or_words(mut m: u128, ws: &[&str]) -> u128 {
+const fn or_words(fc: u128, len: u32, ws: &[&str]) -> (u128, u32) {
+    let (mut fc, mut len) = (fc, len);
     let mut i = 0;
     while i < ws.len() {
-        m |= first_char_bit(ws[i]);
+        let (f, l) = word_bits(ws[i]);
+        fc |= f;
+        len |= l;
         i += 1;
     }
-    m
+    (fc, len)
 }
 
-const fn or_kws(mut m: u128, kws: &[(&str, KwType)]) -> u128 {
+const fn or_kws(fc: u128, len: u32, kws: &[(&str, KwType)]) -> (u128, u32) {
+    let (mut fc, mut len) = (fc, len);
     let mut i = 0;
     while i < kws.len() {
-        m |= first_char_bit(kws[i].0);
+        let (f, l) = word_bits(kws[i].0);
+        fc |= f;
+        len |= l;
         i += 1;
     }
-    m
+    (fc, len)
 }
 
-const fn or_pairs(mut m: u128, ps: &[(&str, &str)]) -> u128 {
+const fn or_pairs(fc: u128, len: u32, ps: &[(&str, &str)]) -> (u128, u32) {
+    let (mut fc, mut len) = (fc, len);
     let mut i = 0;
     while i < ps.len() {
-        m |= first_char_bit(ps[i].0);
-        m |= first_char_bit(ps[i].1);
+        let (f0, l0) = word_bits(ps[i].0);
+        let (f1, l1) = word_bits(ps[i].1);
+        fc |= f0 | f1;
+        len |= l0 | l1;
         i += 1;
     }
-    m
+    (fc, len)
 }
 
-/// First-byte bits of section keywords + their sub-keywords (and any nested
-/// `Group` sub-keywords), mirroring the `sections` scan in
-/// [`is_in_command_spec`].
-const fn or_sections(mut m: u128, secs: &[SectionDef]) -> u128 {
+/// Bits of section keywords + their sub-keywords (and any nested `Group`
+/// sub-keywords), mirroring the `sections` scan in [`is_in_command_spec`].
+const fn or_sections(fc: u128, len: u32, secs: &[SectionDef]) -> (u128, u32) {
+    let (mut fc, mut len) = (fc, len);
     let mut i = 0;
     while i < secs.len() {
-        m |= first_char_bit(secs[i].0);
+        let (f, l) = word_bits(secs[i].0);
+        fc |= f;
+        len |= l;
         let subs = secs[i].2;
         let mut j = 0;
         while j < subs.len() {
-            m |= first_char_bit(subs[j].0);
+            let (sf, sl) = word_bits(subs[j].0);
+            fc |= sf;
+            len |= sl;
             if let KwType::Group(_, gkw) = subs[j].1 {
-                m = or_kws(m, gkw);
+                let (gf, gl) = or_kws(fc, len, gkw);
+                fc = gf;
+                len = gl;
             }
             j += 1;
         }
         i += 1;
     }
-    m
+    (fc, len)
 }
 
-/// Compute the [`CommandSpec::first_char_mask`] from the spec's keyword arrays.
-/// Mirrors exactly what [`is_in_command_spec`] scans so the mask is a sound
-/// superset (never rejects a real keyword).
-const fn computed_mask(s: &CommandSpec) -> u128 {
-    let mut m = 0u128;
-    m = or_kws(m, s.keywords);
-    m = or_sections(m, s.sections);
-    m = or_words(m, s.command_line_keywords);
-    m = or_words(m, s.pair_keywords);
-    m = or_words(m, s.property_keywords);
-    m = or_words(m, s.flow_keywords);
-    m = or_pairs(m, s.compound_keywords);
-    m = or_words(m, s.once_keywords);
-    m
+/// Compute `(first_char_mask, len_mask)` from the spec's keyword arrays.
+/// Mirrors exactly what [`is_in_command_spec`] scans so both masks are sound
+/// supersets (never reject a real keyword).
+const fn computed_masks(s: &CommandSpec) -> (u128, u32) {
+    let (mut fc, mut len) = (0u128, 0u32);
+    let r = or_kws(fc, len, s.keywords);
+    fc = r.0;
+    len = r.1;
+    let r = or_sections(fc, len, s.sections);
+    fc = r.0;
+    len = r.1;
+    let r = or_words(fc, len, s.command_line_keywords);
+    fc = r.0;
+    len = r.1;
+    let r = or_words(fc, len, s.pair_keywords);
+    fc = r.0;
+    len = r.1;
+    let r = or_words(fc, len, s.property_keywords);
+    fc = r.0;
+    len = r.1;
+    let r = or_words(fc, len, s.flow_keywords);
+    fc = r.0;
+    len = r.1;
+    let r = or_pairs(fc, len, s.compound_keywords);
+    fc = r.0;
+    len = r.1;
+    let r = or_words(fc, len, s.once_keywords);
+    fc = r.0;
+    len = r.1;
+    (fc, len)
 }
 
-/// Finalize a spec by filling in its precomputed `first_char_mask`.
-/// Every spec definition routes through this so the mask can never drift from
-/// the keyword arrays.
+/// Finalize a spec by filling in its precomputed masks. Every spec definition
+/// routes through this so the masks can never drift from the keyword arrays.
 const fn with_mask(mut s: CommandSpec) -> CommandSpec {
-    s.first_char_mask = computed_mask(&s);
+    let (fc, len) = computed_masks(&s);
+    s.first_char_mask = fc;
+    s.len_mask = len;
     s
 }
 
@@ -158,6 +200,7 @@ macro_rules! spec {
             once_keywords: &[],
             property_keywords: &[],
             first_char_mask: 0,
+            len_mask: 0,
         })
     };
     (
@@ -182,6 +225,7 @@ macro_rules! spec {
             once_keywords: &[],
             property_keywords: &[],
             first_char_mask: 0,
+            len_mask: 0,
         })
     };
     (
@@ -204,6 +248,7 @@ macro_rules! spec {
             once_keywords: &[],
             property_keywords: &[],
             first_char_mask: 0,
+            len_mask: 0,
         })
     };
 }
@@ -726,6 +771,7 @@ static SET_PROPERTY_SPEC: CommandSpec = with_mask(CommandSpec {
     compound_keywords: &[],
     once_keywords: &[],
     first_char_mask: 0,
+    len_mask: 0,
 });
 
 // ---------------------------------------------------------------------------
@@ -968,6 +1014,7 @@ static STRING_SPEC: CommandSpec = with_mask(CommandSpec {
     once_keywords: &[],
     property_keywords: &[],
     first_char_mask: 0,
+    len_mask: 0,
 });
 
 // ---------------------------------------------------------------------------
@@ -1164,6 +1211,7 @@ static FILE_SPEC: CommandSpec = with_mask(CommandSpec {
     once_keywords: &["GLOB", "GLOB_RECURSE"],
     property_keywords: &[],
     first_char_mask: 0,
+    len_mask: 0,
 });
 
 // ---------------------------------------------------------------------------
@@ -1286,6 +1334,7 @@ static INSTALL_SPEC: CommandSpec = with_mask(CommandSpec {
     once_keywords: &[],
     property_keywords: &[],
     first_char_mask: 0,
+    len_mask: 0,
 });
 
 // ---------------------------------------------------------------------------
@@ -1627,6 +1676,7 @@ static CMAKE_HOST_SYSTEM_INFORMATION_SPEC: CommandSpec = with_mask(CommandSpec {
     once_keywords: &[],
     property_keywords: &[],
     first_char_mask: 0,
+    len_mask: 0,
 });
 
 // ---------------------------------------------------------------------------
@@ -1666,6 +1716,7 @@ static CMAKE_LANGUAGE_SPEC: CommandSpec = with_mask(CommandSpec {
     once_keywords: &[],
     property_keywords: &[],
     first_char_mask: 0,
+    len_mask: 0,
 });
 
 // ---------------------------------------------------------------------------
@@ -1715,6 +1766,7 @@ static CMAKE_PATH_SPEC: CommandSpec = with_mask(CommandSpec {
     once_keywords: &[],
     property_keywords: &[],
     first_char_mask: 0,
+    len_mask: 0,
 });
 
 // ---------------------------------------------------------------------------
@@ -2218,6 +2270,7 @@ pub static EMPTY_SPEC: CommandSpec = with_mask(CommandSpec {
     compound_keywords: &[],
     once_keywords: &[],
     first_char_mask: 0,
+    len_mask: 0,
 });
 
 // ---------------------------------------------------------------------------

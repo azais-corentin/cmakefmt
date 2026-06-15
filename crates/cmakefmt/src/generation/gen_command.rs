@@ -163,16 +163,27 @@ fn is_keyword_for_command(
 
 /// Check if a token appears as a keyword or section keyword in a CommandSpec.
 fn is_in_command_spec(text: &str, spec: &CommandSpec) -> bool {
-    // O(1) reject: a keyword can only match `text` if some keyword's uppercased
-    // first byte equals `text`'s. The precomputed `first_char_mask` is a sound
-    // superset of those first bytes, so a miss means no keyword can match and we
-    // skip every per-array scan below. Most arguments are values (paths, libs,
-    // genex, flags) whose first byte is not a keyword start.
-    let Some(&first) = text.as_bytes().first() else {
+    // O(1) rejects: a keyword can only match `text` if (a) some keyword's
+    // uppercased first byte equals `text`'s and (b) some keyword has `text`'s
+    // length. `first_char_mask`/`len_mask` are sound supersets of those, so a
+    // miss on either means no keyword can match and we skip every per-array
+    // scan below. Most arguments are values (paths, libs, genex, flags) that
+    // miss at least one filter.
+    let bytes = text.as_bytes();
+    let Some(&first) = bytes.first() else {
         return false;
     };
     let upper = first.to_ascii_uppercase();
     if upper >= 128 || spec.first_char_mask & (1u128 << upper) == 0 {
+        return false;
+    }
+    let len_bit = 1u32
+        << if bytes.len() < 31 {
+            bytes.len() as u32
+        } else {
+            31
+        };
+    if spec.len_mask & len_bit == 0 {
         return false;
     }
     // Check top-level keywords
