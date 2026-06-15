@@ -1353,34 +1353,52 @@ fn try_single_line(
         return false;
     }
 
-    // If any argument has a trailing line comment, force multi-line
-    if args
-        .iter()
-        .any(|a| a.trailing_comment.is_some() && !a.trailing_is_bracket)
-    {
-        return false;
-    }
+    let base_indent = indent_depth as usize * config.indent_width as usize;
+    let close_overhead = 1; // ")"
+    let line_width = config.line_width as usize;
+    let keep_condition_header_inline = cmd_name.eq_ignore_ascii_case("if")
+        || cmd_name.eq_ignore_ascii_case("while")
+        || cmd_name.eq_ignore_ascii_case("elseif");
 
-    // If any argument text contains a newline, force multi-line
-    if args.iter().any(|a| a.has_newline) {
-        return false;
-    }
-
-    // If any argument is a standalone comment (line or bracket), force multi-line.
-    // Standalone comments came from separate source lines (not attached as trailing
-    // comments) and must not be inlined — line comments would comment out following
-    // content, and standalone bracket comments need their own line.
-    if args.iter().any(|a| a.text.starts_with('#')) {
-        return false;
+    // Single pass over the arguments instead of several `any()` scans plus a
+    // separate width sum:
+    //  * force multi-line on any inline-breaking arg (attached trailing
+    //    comment, embedded newline, or standalone `#` comment);
+    //  * accumulate the inline width (ASCII casing preserves length, so the raw
+    //    text length is the final width) and bail the moment it exceeds the
+    //    line limit — over-long commands (the ones that fall through to the
+    //    multi-line path) stop summing early;
+    //  * count keyword args (capped at 2) for the section check below.
+    let mut total = base_indent + cmd_name.len() + 1 + close_overhead;
+    let mut has_keyword_args = false;
+    let mut keyword_count = 0usize;
+    for (i, a) in args.iter().enumerate() {
+        if (a.trailing_comment.is_some() && !a.trailing_is_bracket)
+            || a.has_newline
+            || a.text.starts_with('#')
+        {
+            return false;
+        }
+        if a.is_keyword {
+            has_keyword_args = true;
+            if keyword_count < 2 {
+                keyword_count += 1;
+            }
+        }
+        if i > 0 {
+            total += 1; // separator space
+        }
+        total += arg_width(a);
+        if !keep_condition_header_inline && total > line_width {
+            return false;
+        }
     }
 
     // Only reject single-line if the command actually has section-bearing keywords
     // that would produce blank lines in multi-line layout. Commands like
     // cmake_minimum_required(VERSION 3.28 FATAL_ERROR) have multiple keywords
     // but no section structure, so they should still collapse to a single line.
-    if config.blank_line_between_sections
-        && args.iter().filter(|arg| arg.is_keyword).take(2).count() >= 2
-    {
+    if config.blank_line_between_sections && keyword_count >= 2 {
         let has_sections = match cmd_kind {
             Some(CommandKind::Known(spec)) => {
                 // Command has explicit sections, or has custom keywords
@@ -1405,25 +1423,9 @@ fn try_single_line(
         }
     }
 
-    // Calculate total width including file-level indentation.
-    // Width is computed BEFORE building cased strings — ASCII casing preserves length,
-    // so arg_inline_text().len() is the final width regardless of casing.
-    let base_indent = indent_depth as usize * config.indent_width as usize;
-    let close_overhead = 1; // ")"
-    let line_width = config.line_width as usize;
-
-    // Per-arg widths summed directly — early rejection without allocations.
-    let args_width: usize =
-        args.iter().map(arg_width).sum::<usize>() + if args.len() > 1 { args.len() - 1 } else { 0 };
-    let total = base_indent + cmd_name.len() + 1 + args_width + close_overhead;
-
-    let keep_condition_header_inline = cmd_name.eq_ignore_ascii_case("if")
-        || cmd_name.eq_ignore_ascii_case("while")
-        || cmd_name.eq_ignore_ascii_case("elseif");
-    let has_keyword_args = args.iter().any(|arg| arg.is_keyword);
-    if !keep_condition_header_inline
-        && ((total > line_width) || (!has_keyword_args && total == line_width))
-    {
+    // Width-equals-limit edge: a command with no keywords that exactly fills the
+    // line still wraps (matches the original cascade behavior).
+    if !keep_condition_header_inline && !has_keyword_args && total == line_width {
         return false;
     }
 
