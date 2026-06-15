@@ -43,6 +43,13 @@ pub struct CommandSpec {
     /// (lengths ≥ 31 collapse to bit 31, a sound superset). Built via
     /// [`with_mask`].
     pub len_mask: u32,
+    /// Precomputed bitset of hashed (first byte, length) fingerprints for every
+    /// keyword this spec checks. Lets `is_in_command_spec` reject a value
+    /// argument that passes the independent first-char and length filters yet
+    /// matches no single keyword (combining the two dimensions). Hash collisions
+    /// only cause a correct fall-through to the full scan. Built via
+    /// [`with_mask`].
+    pub combined_mask: u128,
 }
 
 /// ASCII-uppercase a byte (const-evaluable, no stdlib const dependency).
@@ -52,120 +59,140 @@ const fn up(b: u8) -> u8 {
 
 /// `(first_char_bit, len_bit)` for a word (both 0 when empty). The first-char
 /// bit is 0 for a non-ASCII lead byte; the length bit saturates at bit 31.
-const fn word_bits(s: &str) -> (u128, u32) {
+const fn word_bits(s: &str) -> (u128, u32, u128) {
     let b = s.as_bytes();
     if b.is_empty() {
-        return (0, 0);
+        return (0, 0, 0);
     }
     let u = up(b[0]);
     let fc = if (u as usize) < 128 { 1u128 << u } else { 0 };
     let l = b.len();
     let lb = 1u32 << if l < 31 { l as u32 } else { 31 };
-    (fc, lb)
+    // Hashed (first byte, length) fingerprint bit. Set for the keyword's exact
+    // pair so a value arg sharing the pair (or colliding) falls through to the
+    // full scan; everything else is rejected. Sound: a real keyword always sets
+    // its own bit, so it is never wrongly rejected.
+    let cb = 1u128 << (((u as u32).wrapping_mul(31).wrapping_add(l as u32)) & 127);
+    (fc, lb, cb)
 }
 
-const fn or_words(fc: u128, len: u32, ws: &[&str]) -> (u128, u32) {
-    let (mut fc, mut len) = (fc, len);
+const fn or_words(fc: u128, len: u32, comb: u128, ws: &[&str]) -> (u128, u32, u128) {
+    let (mut fc, mut len, mut comb) = (fc, len, comb);
     let mut i = 0;
     while i < ws.len() {
-        let (f, l) = word_bits(ws[i]);
+        let (f, l, c) = word_bits(ws[i]);
         fc |= f;
         len |= l;
+        comb |= c;
         i += 1;
     }
-    (fc, len)
+    (fc, len, comb)
 }
 
-const fn or_kws(fc: u128, len: u32, kws: &[(&str, KwType)]) -> (u128, u32) {
-    let (mut fc, mut len) = (fc, len);
+const fn or_kws(fc: u128, len: u32, comb: u128, kws: &[(&str, KwType)]) -> (u128, u32, u128) {
+    let (mut fc, mut len, mut comb) = (fc, len, comb);
     let mut i = 0;
     while i < kws.len() {
-        let (f, l) = word_bits(kws[i].0);
+        let (f, l, c) = word_bits(kws[i].0);
         fc |= f;
         len |= l;
+        comb |= c;
         i += 1;
     }
-    (fc, len)
+    (fc, len, comb)
 }
 
-const fn or_pairs(fc: u128, len: u32, ps: &[(&str, &str)]) -> (u128, u32) {
-    let (mut fc, mut len) = (fc, len);
+const fn or_pairs(fc: u128, len: u32, comb: u128, ps: &[(&str, &str)]) -> (u128, u32, u128) {
+    let (mut fc, mut len, mut comb) = (fc, len, comb);
     let mut i = 0;
     while i < ps.len() {
-        let (f0, l0) = word_bits(ps[i].0);
-        let (f1, l1) = word_bits(ps[i].1);
+        let (f0, l0, c0) = word_bits(ps[i].0);
+        let (f1, l1, c1) = word_bits(ps[i].1);
         fc |= f0 | f1;
         len |= l0 | l1;
+        comb |= c0 | c1;
         i += 1;
     }
-    (fc, len)
+    (fc, len, comb)
 }
 
 /// Bits of section keywords + their sub-keywords (and any nested `Group`
 /// sub-keywords), mirroring the `sections` scan in [`is_in_command_spec`].
-const fn or_sections(fc: u128, len: u32, secs: &[SectionDef]) -> (u128, u32) {
-    let (mut fc, mut len) = (fc, len);
+const fn or_sections(fc: u128, len: u32, comb: u128, secs: &[SectionDef]) -> (u128, u32, u128) {
+    let (mut fc, mut len, mut comb) = (fc, len, comb);
     let mut i = 0;
     while i < secs.len() {
-        let (f, l) = word_bits(secs[i].0);
+        let (f, l, c) = word_bits(secs[i].0);
         fc |= f;
         len |= l;
+        comb |= c;
         let subs = secs[i].2;
         let mut j = 0;
         while j < subs.len() {
-            let (sf, sl) = word_bits(subs[j].0);
+            let (sf, sl, sc) = word_bits(subs[j].0);
             fc |= sf;
             len |= sl;
+            comb |= sc;
             if let KwType::Group(_, gkw) = subs[j].1 {
-                let (gf, gl) = or_kws(fc, len, gkw);
+                let (gf, gl, gc) = or_kws(fc, len, comb, gkw);
                 fc = gf;
                 len = gl;
+                comb = gc;
             }
             j += 1;
         }
         i += 1;
     }
-    (fc, len)
+    (fc, len, comb)
 }
 
-/// Compute `(first_char_mask, len_mask)` from the spec's keyword arrays.
-/// Mirrors exactly what [`is_in_command_spec`] scans so both masks are sound
-/// supersets (never reject a real keyword).
-const fn computed_masks(s: &CommandSpec) -> (u128, u32) {
-    let (mut fc, mut len) = (0u128, 0u32);
-    let r = or_kws(fc, len, s.keywords);
+/// Compute `(first_char_mask, len_mask, combined_mask)` from the spec's keyword
+/// arrays. Mirrors exactly what [`is_in_command_spec`] scans so all masks are
+/// sound supersets (never reject a real keyword).
+const fn computed_masks(s: &CommandSpec) -> (u128, u32, u128) {
+    let (mut fc, mut len, mut comb) = (0u128, 0u32, 0u128);
+    let r = or_kws(fc, len, comb, s.keywords);
     fc = r.0;
     len = r.1;
-    let r = or_sections(fc, len, s.sections);
+    comb = r.2;
+    let r = or_sections(fc, len, comb, s.sections);
     fc = r.0;
     len = r.1;
-    let r = or_words(fc, len, s.command_line_keywords);
+    comb = r.2;
+    let r = or_words(fc, len, comb, s.command_line_keywords);
     fc = r.0;
     len = r.1;
-    let r = or_words(fc, len, s.pair_keywords);
+    comb = r.2;
+    let r = or_words(fc, len, comb, s.pair_keywords);
     fc = r.0;
     len = r.1;
-    let r = or_words(fc, len, s.property_keywords);
+    comb = r.2;
+    let r = or_words(fc, len, comb, s.property_keywords);
     fc = r.0;
     len = r.1;
-    let r = or_words(fc, len, s.flow_keywords);
+    comb = r.2;
+    let r = or_words(fc, len, comb, s.flow_keywords);
     fc = r.0;
     len = r.1;
-    let r = or_pairs(fc, len, s.compound_keywords);
+    comb = r.2;
+    let r = or_pairs(fc, len, comb, s.compound_keywords);
     fc = r.0;
     len = r.1;
-    let r = or_words(fc, len, s.once_keywords);
+    comb = r.2;
+    let r = or_words(fc, len, comb, s.once_keywords);
     fc = r.0;
     len = r.1;
-    (fc, len)
+    comb = r.2;
+    (fc, len, comb)
 }
 
 /// Finalize a spec by filling in its precomputed masks. Every spec definition
 /// routes through this so the masks can never drift from the keyword arrays.
 const fn with_mask(mut s: CommandSpec) -> CommandSpec {
-    let (fc, len) = computed_masks(&s);
+    let (fc, len, comb) = computed_masks(&s);
     s.first_char_mask = fc;
     s.len_mask = len;
+    s.combined_mask = comb;
     s
 }
 
@@ -201,6 +228,7 @@ macro_rules! spec {
             property_keywords: &[],
             first_char_mask: 0,
             len_mask: 0,
+            combined_mask: 0,
         })
     };
     (
@@ -226,6 +254,7 @@ macro_rules! spec {
             property_keywords: &[],
             first_char_mask: 0,
             len_mask: 0,
+            combined_mask: 0,
         })
     };
     (
@@ -249,6 +278,7 @@ macro_rules! spec {
             property_keywords: &[],
             first_char_mask: 0,
             len_mask: 0,
+            combined_mask: 0,
         })
     };
 }
@@ -772,6 +802,7 @@ static SET_PROPERTY_SPEC: CommandSpec = with_mask(CommandSpec {
     once_keywords: &[],
     first_char_mask: 0,
     len_mask: 0,
+    combined_mask: 0,
 });
 
 // ---------------------------------------------------------------------------
@@ -1015,6 +1046,7 @@ static STRING_SPEC: CommandSpec = with_mask(CommandSpec {
     property_keywords: &[],
     first_char_mask: 0,
     len_mask: 0,
+    combined_mask: 0,
 });
 
 // ---------------------------------------------------------------------------
@@ -1212,6 +1244,7 @@ static FILE_SPEC: CommandSpec = with_mask(CommandSpec {
     property_keywords: &[],
     first_char_mask: 0,
     len_mask: 0,
+    combined_mask: 0,
 });
 
 // ---------------------------------------------------------------------------
@@ -1335,6 +1368,7 @@ static INSTALL_SPEC: CommandSpec = with_mask(CommandSpec {
     property_keywords: &[],
     first_char_mask: 0,
     len_mask: 0,
+    combined_mask: 0,
 });
 
 // ---------------------------------------------------------------------------
@@ -1677,6 +1711,7 @@ static CMAKE_HOST_SYSTEM_INFORMATION_SPEC: CommandSpec = with_mask(CommandSpec {
     property_keywords: &[],
     first_char_mask: 0,
     len_mask: 0,
+    combined_mask: 0,
 });
 
 // ---------------------------------------------------------------------------
@@ -1717,6 +1752,7 @@ static CMAKE_LANGUAGE_SPEC: CommandSpec = with_mask(CommandSpec {
     property_keywords: &[],
     first_char_mask: 0,
     len_mask: 0,
+    combined_mask: 0,
 });
 
 // ---------------------------------------------------------------------------
@@ -1767,6 +1803,7 @@ static CMAKE_PATH_SPEC: CommandSpec = with_mask(CommandSpec {
     property_keywords: &[],
     first_char_mask: 0,
     len_mask: 0,
+    combined_mask: 0,
 });
 
 // ---------------------------------------------------------------------------
@@ -2271,6 +2308,7 @@ pub static EMPTY_SPEC: CommandSpec = with_mask(CommandSpec {
     once_keywords: &[],
     first_char_mask: 0,
     len_mask: 0,
+    combined_mask: 0,
 });
 
 // ---------------------------------------------------------------------------

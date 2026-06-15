@@ -188,6 +188,16 @@ fn is_in_command_spec(text: &str, spec: &CommandSpec) -> bool {
     if spec.len_mask & len_bit == 0 {
         return false;
     }
+    // Combined (first-char, length) reject: catches value args that pass both
+    // independent filters above but match no single keyword (must use the same
+    // hash as `comb_word` in signatures.rs — full length, not the capped bit).
+    let comb_bit = (upper as u32)
+        .wrapping_mul(31)
+        .wrapping_add(bytes.len() as u32)
+        & 127;
+    if spec.combined_mask & (1u128 << comb_bit) == 0 {
+        return false;
+    }
     // Check top-level keywords
     for &(kw, _) in spec.keywords {
         if kw.eq_ignore_ascii_case(text) {
