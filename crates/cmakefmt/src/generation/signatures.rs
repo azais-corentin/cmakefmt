@@ -31,6 +31,100 @@ pub struct CommandSpec {
     /// After their first occurrence, subsequent case-insensitive matches are
     /// treated as regular arguments (not uppercased, not keyword-split).
     pub once_keywords: &'static [&'static str],
+    /// Precomputed bitset of the uppercased first byte of every keyword string
+    /// this spec checks (all arrays below, mirroring `is_in_command_spec`). Bit
+    /// `i` is set when some keyword's first byte uppercases to ASCII value `i`.
+    /// Lets `is_in_command_spec` reject a value argument in O(1) when its first
+    /// byte cannot start any keyword. Always built via [`with_mask`].
+    pub first_char_mask: u128,
+}
+
+/// ASCII-uppercase a byte (const-evaluable, no stdlib const dependency).
+const fn up(b: u8) -> u8 {
+    if b >= b'a' && b <= b'z' { b - 32 } else { b }
+}
+
+/// Bit for a word's uppercased first byte (0 when empty or non-ASCII lead).
+const fn first_char_bit(s: &str) -> u128 {
+    let b = s.as_bytes();
+    if b.is_empty() {
+        return 0;
+    }
+    let u = up(b[0]);
+    if (u as usize) < 128 { 1u128 << u } else { 0 }
+}
+
+const fn or_words(mut m: u128, ws: &[&str]) -> u128 {
+    let mut i = 0;
+    while i < ws.len() {
+        m |= first_char_bit(ws[i]);
+        i += 1;
+    }
+    m
+}
+
+const fn or_kws(mut m: u128, kws: &[(&str, KwType)]) -> u128 {
+    let mut i = 0;
+    while i < kws.len() {
+        m |= first_char_bit(kws[i].0);
+        i += 1;
+    }
+    m
+}
+
+const fn or_pairs(mut m: u128, ps: &[(&str, &str)]) -> u128 {
+    let mut i = 0;
+    while i < ps.len() {
+        m |= first_char_bit(ps[i].0);
+        m |= first_char_bit(ps[i].1);
+        i += 1;
+    }
+    m
+}
+
+/// First-byte bits of section keywords + their sub-keywords (and any nested
+/// `Group` sub-keywords), mirroring the `sections` scan in
+/// [`is_in_command_spec`].
+const fn or_sections(mut m: u128, secs: &[SectionDef]) -> u128 {
+    let mut i = 0;
+    while i < secs.len() {
+        m |= first_char_bit(secs[i].0);
+        let subs = secs[i].2;
+        let mut j = 0;
+        while j < subs.len() {
+            m |= first_char_bit(subs[j].0);
+            if let KwType::Group(_, gkw) = subs[j].1 {
+                m = or_kws(m, gkw);
+            }
+            j += 1;
+        }
+        i += 1;
+    }
+    m
+}
+
+/// Compute the [`CommandSpec::first_char_mask`] from the spec's keyword arrays.
+/// Mirrors exactly what [`is_in_command_spec`] scans so the mask is a sound
+/// superset (never rejects a real keyword).
+const fn computed_mask(s: &CommandSpec) -> u128 {
+    let mut m = 0u128;
+    m = or_kws(m, s.keywords);
+    m = or_sections(m, s.sections);
+    m = or_words(m, s.command_line_keywords);
+    m = or_words(m, s.pair_keywords);
+    m = or_words(m, s.property_keywords);
+    m = or_words(m, s.flow_keywords);
+    m = or_pairs(m, s.compound_keywords);
+    m = or_words(m, s.once_keywords);
+    m
+}
+
+/// Finalize a spec by filling in its precomputed `first_char_mask`.
+/// Every spec definition routes through this so the mask can never drift from
+/// the keyword arrays.
+const fn with_mask(mut s: CommandSpec) -> CommandSpec {
+    s.first_char_mask = computed_mask(&s);
+    s
 }
 
 pub enum CommandKind {
@@ -51,7 +145,7 @@ macro_rules! spec {
         pair: $pair:expr,
         flow: $flow:expr $(,)?
     ) => {
-        CommandSpec {
+        with_mask(CommandSpec {
             front_positional: $fp,
             back_positional: $bp,
             keywords: $kw,
@@ -63,7 +157,8 @@ macro_rules! spec {
             compound_keywords: &[],
             once_keywords: &[],
             property_keywords: &[],
-        }
+            first_char_mask: 0,
+        })
     };
     (
         front: $fp:expr, back: $bp:expr,
@@ -74,7 +169,7 @@ macro_rules! spec {
         flow: $flow:expr,
         flow_positional: $fp2:expr $(,)?
     ) => {
-        CommandSpec {
+        with_mask(CommandSpec {
             front_positional: $fp,
             back_positional: $bp,
             keywords: $kw,
@@ -86,7 +181,8 @@ macro_rules! spec {
             compound_keywords: &[],
             once_keywords: &[],
             property_keywords: &[],
-        }
+            first_char_mask: 0,
+        })
     };
     (
         front: $fp:expr, back: $bp:expr,
@@ -95,7 +191,7 @@ macro_rules! spec {
         cmd_line: $cl:expr,
         pair: $pair:expr $(,)?
     ) => {
-        CommandSpec {
+        with_mask(CommandSpec {
             front_positional: $fp,
             back_positional: $bp,
             keywords: $kw,
@@ -107,7 +203,8 @@ macro_rules! spec {
             compound_keywords: &[],
             once_keywords: &[],
             property_keywords: &[],
-        }
+            first_char_mask: 0,
+        })
     };
 }
 
@@ -616,7 +713,7 @@ static SET_PROPERTY_KW: &[(&str, KwType)] = &[
     ("PROPERTY", KwType::MultiValue),
 ];
 
-static SET_PROPERTY_SPEC: CommandSpec = CommandSpec {
+static SET_PROPERTY_SPEC: CommandSpec = with_mask(CommandSpec {
     front_positional: 0,
     back_positional: 0,
     keywords: SET_PROPERTY_KW,
@@ -628,7 +725,8 @@ static SET_PROPERTY_SPEC: CommandSpec = CommandSpec {
     flow_positional: false,
     compound_keywords: &[],
     once_keywords: &[],
-};
+    first_char_mask: 0,
+});
 
 // ---------------------------------------------------------------------------
 // 26. export
@@ -852,7 +950,7 @@ static STRING_KW: &[(&str, KwType)] = &[
     ("FILTER", KwType::OneValue),
 ];
 
-static STRING_SPEC: CommandSpec = CommandSpec {
+static STRING_SPEC: CommandSpec = with_mask(CommandSpec {
     front_positional: 0,
     back_positional: 0,
     keywords: STRING_KW,
@@ -869,7 +967,8 @@ static STRING_SPEC: CommandSpec = CommandSpec {
     ],
     once_keywords: &[],
     property_keywords: &[],
-};
+    first_char_mask: 0,
+});
 
 // ---------------------------------------------------------------------------
 // 36. list (merged)
@@ -1052,7 +1151,7 @@ static FILE_KW: &[(&str, KwType)] = &[
     ("GENERATE", KwType::MultiValue),
 ];
 
-static FILE_SPEC: CommandSpec = CommandSpec {
+static FILE_SPEC: CommandSpec = with_mask(CommandSpec {
     front_positional: 0,
     back_positional: 0,
     keywords: FILE_KW,
@@ -1064,7 +1163,8 @@ static FILE_SPEC: CommandSpec = CommandSpec {
     compound_keywords: &[("GENERATE", "OUTPUT")],
     once_keywords: &["GLOB", "GLOB_RECURSE"],
     property_keywords: &[],
-};
+    first_char_mask: 0,
+});
 
 // ---------------------------------------------------------------------------
 // 38. install (merged)
@@ -1173,7 +1273,7 @@ static INSTALL_SECTIONS: &[SectionDef] = &[
     ("VERSION", 1, INSTALL_VERSION_SEC_SUB),
 ];
 
-static INSTALL_SPEC: CommandSpec = CommandSpec {
+static INSTALL_SPEC: CommandSpec = with_mask(CommandSpec {
     front_positional: 0,
     back_positional: 0,
     keywords: INSTALL_KW,
@@ -1185,7 +1285,8 @@ static INSTALL_SPEC: CommandSpec = CommandSpec {
     compound_keywords: &[("INCLUDES", "DESTINATION")],
     once_keywords: &[],
     property_keywords: &[],
-};
+    first_char_mask: 0,
+});
 
 // ---------------------------------------------------------------------------
 // 39. add_custom_command
@@ -1513,7 +1614,7 @@ static CMAKE_HOST_SYSTEM_INFORMATION_KW: &[(&str, KwType)] = &[
     ("QUERY", KwType::MultiValue),
 ];
 
-static CMAKE_HOST_SYSTEM_INFORMATION_SPEC: CommandSpec = CommandSpec {
+static CMAKE_HOST_SYSTEM_INFORMATION_SPEC: CommandSpec = with_mask(CommandSpec {
     front_positional: 0,
     back_positional: 0,
     keywords: CMAKE_HOST_SYSTEM_INFORMATION_KW,
@@ -1525,7 +1626,8 @@ static CMAKE_HOST_SYSTEM_INFORMATION_SPEC: CommandSpec = CommandSpec {
     compound_keywords: &[("QUERY", "WINDOWS_REGISTRY")],
     once_keywords: &[],
     property_keywords: &[],
-};
+    first_char_mask: 0,
+});
 
 // ---------------------------------------------------------------------------
 // 54. cmake_language (merged)
@@ -1551,7 +1653,7 @@ static CMAKE_LANGUAGE_KW: &[(&str, KwType)] = &[
     ("EVAL", KwType::MultiValue),
 ];
 
-static CMAKE_LANGUAGE_SPEC: CommandSpec = CommandSpec {
+static CMAKE_LANGUAGE_SPEC: CommandSpec = with_mask(CommandSpec {
     front_positional: 0,
     back_positional: 0,
     keywords: CMAKE_LANGUAGE_KW,
@@ -1563,7 +1665,8 @@ static CMAKE_LANGUAGE_SPEC: CommandSpec = CommandSpec {
     compound_keywords: &[("EVAL", "CODE")],
     once_keywords: &[],
     property_keywords: &[],
-};
+    first_char_mask: 0,
+});
 
 // ---------------------------------------------------------------------------
 // 55. cmake_path (merged)
@@ -1599,7 +1702,7 @@ static CMAKE_PATH_KW: &[(&str, KwType)] = &[
     ("TO_NATIVE_PATH_LIST", KwType::OneValue),
 ];
 
-static CMAKE_PATH_SPEC: CommandSpec = CommandSpec {
+static CMAKE_PATH_SPEC: CommandSpec = with_mask(CommandSpec {
     front_positional: 0,
     back_positional: 0,
     keywords: CMAKE_PATH_KW,
@@ -1611,7 +1714,8 @@ static CMAKE_PATH_SPEC: CommandSpec = CommandSpec {
     compound_keywords: &[("EXTENSION", "LAST_ONLY"), ("STEM", "LAST_ONLY")],
     once_keywords: &[],
     property_keywords: &[],
-};
+    first_char_mask: 0,
+});
 
 // ---------------------------------------------------------------------------
 // 56. cmake_pkg_config
@@ -2101,7 +2205,7 @@ static REMOVE_DEFINITIONS_SPEC: CommandSpec = spec! {
 
 /// Empty spec used for unknown commands that have customKeywords applied.
 /// Allows the formatting engine to treat them as keyword-structured commands.
-pub static EMPTY_SPEC: CommandSpec = CommandSpec {
+pub static EMPTY_SPEC: CommandSpec = with_mask(CommandSpec {
     front_positional: 0,
     back_positional: 0,
     keywords: &[],
@@ -2113,7 +2217,8 @@ pub static EMPTY_SPEC: CommandSpec = CommandSpec {
     flow_positional: false,
     compound_keywords: &[],
     once_keywords: &[],
-};
+    first_char_mask: 0,
+});
 
 // ---------------------------------------------------------------------------
 // lookup_command
