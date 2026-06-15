@@ -1070,7 +1070,10 @@ struct FormattedArg<'src> {
     trailing_comment: Option<Cow<'src, str>>,
     trailing_is_bracket: bool,
     is_paren_group: bool,
-    paren_inner: Vec<FormattedArg<'src>>,
+    /// Inner args for a paren group; a boxed slice so the common (non-group)
+    /// arg keeps `FormattedArg` smaller (paren groups are rare). Empty ⟺ not a
+    /// group (an empty boxed slice does not allocate).
+    paren_inner: Box<[FormattedArg<'src>]>,
     blank_line_before: bool,
     /// Whether a source newline separates this arg from the previous one.
     /// Used by `alignArgGroups` to preserve source-level token grouping.
@@ -1101,7 +1104,7 @@ impl<'src> FormattedArg<'src> {
             trailing_comment: None,
             trailing_is_bracket: false,
             is_paren_group: false,
-            paren_inner: Vec::new(),
+            paren_inner: Box::default(),
             blank_line_before: false,
             new_line_before: false,
             has_newline,
@@ -1109,6 +1112,12 @@ impl<'src> FormattedArg<'src> {
             has_genex,
             src_range: None,
         }
+    }
+
+    /// Inner args of a paren group as a slice (empty when not a group).
+    #[inline]
+    fn paren_args(&self) -> &[FormattedArg<'src>] {
+        &self.paren_inner
     }
 }
 
@@ -1131,20 +1140,16 @@ fn build_argument_list_from_args<'src>(
     let mut prev_end = 0usize;
     let mut i = 0;
 
+    let preserve_source_blank_lines =
+        config.align_arg_groups || !matches!(config.sort_arguments, SortArguments::Disabled);
     while i < args.len() {
         let (current_start, current_end) = arg_source_range(&args[i]);
-        let preserve_source_blank_lines =
-            config.align_arg_groups || !matches!(config.sort_arguments, SortArguments::Disabled);
         let blank_line_before = if preserve_source_blank_lines && i > 0 {
             has_blank_line_between(source, prev_end, current_start)
         } else {
             false
         };
-        let new_line_before = if i > 0 {
-            source[prev_end..current_start].contains('\n')
-        } else {
-            false
-        };
+        let new_line_before = i > 0 && source[prev_end..current_start].contains('\n');
 
         match &args[i] {
             Argument::Bracket(span) => {
@@ -1181,7 +1186,7 @@ fn build_argument_list_from_args<'src>(
                 let inner = build_argument_list_from_args(arguments, source, config, cmd_kind);
                 result.push(FormattedArg {
                     is_paren_group: true,
-                    paren_inner: inner,
+                    paren_inner: inner.into_boxed_slice(),
                     blank_line_before,
                     new_line_before,
                     ..FormattedArg::new(Cow::Borrowed(""))
@@ -1253,7 +1258,7 @@ fn format_paren_group_inline(args: &[FormattedArg]) -> String {
             s.push(' ');
         }
         if arg.is_paren_group {
-            s.push_str(&format_paren_group_inline(&arg.paren_inner));
+            s.push_str(&format_paren_group_inline(arg.paren_args()));
         } else {
             s.push_str(&arg.text);
         }
@@ -1264,7 +1269,7 @@ fn format_paren_group_inline(args: &[FormattedArg]) -> String {
 
 fn arg_inline_text<'a>(arg: &'a FormattedArg) -> Cow<'a, str> {
     if arg.is_paren_group {
-        Cow::Owned(format_paren_group_inline(&arg.paren_inner))
+        Cow::Owned(format_paren_group_inline(arg.paren_args()))
     } else {
         Cow::Borrowed(arg.text.as_ref())
     }
@@ -1283,7 +1288,7 @@ fn push_arg_verbatim(items: &mut PrintItems, arg: &FormattedArg) {
 /// Width of an argument's text (handling paren groups).
 fn arg_width(arg: &FormattedArg) -> usize {
     if arg.is_paren_group {
-        paren_group_inline_width(&arg.paren_inner)
+        paren_group_inline_width(arg.paren_args())
     } else {
         arg.text.len()
     }
@@ -1295,7 +1300,7 @@ fn paren_group_inline_width(args: &[FormattedArg]) -> usize {
     let mut width = 2 + args.len().saturating_sub(1);
     for arg in args {
         width += if arg.is_paren_group {
-            paren_group_inline_width(&arg.paren_inner)
+            paren_group_inline_width(arg.paren_args())
         } else {
             arg.text.len()
         };
@@ -4753,7 +4758,7 @@ fn emit_cond_expr(
                 // Expanded paren group
                 items.push_str_runtime_width_computed("(");
                 let sub_indent = base_indent + config.indent_width as usize;
-                let inner_items = parse_condition_items(&arg.paren_inner);
+                let inner_items = parse_condition_items(arg.paren_args());
                 let mut paren_inner = PrintItems::new();
                 for sub_item in &inner_items {
                     paren_inner.push_signal(Signal::NewLine);
@@ -4959,7 +4964,7 @@ fn emit_cond_expr_inline(items: &mut PrintItems, expr: &CondExpr<'_>, config: &C
 }
 
 fn has_line_comment_in_paren(arg: &FormattedArg) -> bool {
-    for inner in &arg.paren_inner {
+    for inner in arg.paren_args() {
         if inner.trailing_comment.is_some() && !inner.trailing_is_bracket {
             return true;
         }
@@ -5008,8 +5013,8 @@ fn emit_arg_with_case(
 ) {
     if arg.is_paren_group {
         items.push_str_runtime_width_computed("(");
-        if !arg.paren_inner.is_empty() {
-            let paren_items = gen_flat_paren_inner(&arg.paren_inner, literal_case);
+        if !arg.paren_args().is_empty() {
+            let paren_items = gen_flat_paren_inner(arg.paren_args(), literal_case);
             items.extend(paren_items);
         }
         items.push_str_runtime_width_computed(")");
