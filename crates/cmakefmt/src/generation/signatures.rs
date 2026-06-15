@@ -2288,6 +2288,14 @@ pub fn lookup_command(name: &str) -> Option<CommandKind> {
     buf[..len].make_ascii_lowercase();
     // SAFETY: input was valid UTF-8 and make_ascii_lowercase preserves UTF-8
     let lower = std::str::from_utf8(&buf[..len]).unwrap();
+    lookup_command_lower(lower)
+}
+
+/// Like [`lookup_command`] but for a name already lowercased by the caller,
+/// skipping the buffer copy + `make_ascii_lowercase`. Callers that have an
+/// already-lowercased name (e.g. under `commandCase=lower`) use this to avoid
+/// lowercasing the same name twice per command.
+pub fn lookup_command_lower(lower: &str) -> Option<CommandKind> {
     match lower {
         // Condition syntax
         "if" | "while" | "elseif" | "else" | "endif" | "endwhile" => {

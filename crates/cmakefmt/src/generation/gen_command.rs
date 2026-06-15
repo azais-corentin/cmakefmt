@@ -10,7 +10,9 @@ use crate::parser::ast::{Argument, CommandInvocation};
 use crate::printer::ir_helpers;
 use crate::printer::{PrintItems, Signal};
 
-use super::signatures::{CommandKind, CommandSpec, EMPTY_SPEC, KwType, lookup_command};
+use super::signatures::{
+    CommandKind, CommandSpec, EMPTY_SPEC, KwType, lookup_command, lookup_command_lower,
+};
 // ---------------------------------------------------------------------------
 // Literal tokens: boolean values and comparison operators subject to literalCase.
 // Keyword-vs-literal precedence: if a token is a keyword for the current
@@ -589,7 +591,13 @@ pub fn gen_command(
     // Unknown commands without custom keywords: format via the enhanced
     // gen_unknown_command path which preserves raw layout while applying space
     // collapsing and keyword-column alignment.
-    let cmd_kind = lookup_command(raw_name);
+    // Reuse the already-lowercased command name for spec lookup under
+    // commandCase=lower (the default) so the name isn't lowercased twice.
+    let cmd_kind = if matches!(config.command_case, CaseStyle::Lower) {
+        lookup_command_lower(&formatted_name)
+    } else {
+        lookup_command(raw_name)
+    };
     if cmd_kind.is_none() && config.custom_keywords.is_empty() {
         return gen_unknown_command(items, cmd, source, config, &formatted_name, indent_depth);
     }
