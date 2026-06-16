@@ -19,16 +19,20 @@ use crate::instrumentation::{
 /// - `commentPreservation = reflow`: reflow standalone `# ...` comment blocks.
 /// - `alignConsecutiveSet`: column-align values in consecutive `set()` calls.
 /// - `alignTrailingComments`: column-align trailing `#` comments on consecutive lines.
-pub fn post_process_alignments<'a>(text: &'a str, base_config: &Configuration) -> Cow<'a, str> {
+pub fn post_process_alignments<'a>(
+    text: &'a str,
+    base_config: &Configuration,
+    has_pragma_marker: bool,
+) -> Cow<'a, str> {
     let _stage = info_span!(EVENT_POST_PROCESS, input_bytes = text.len()).entered();
 
     // Fast path: when no post-processing features are enabled and no pragmas
-    // could change that, return the input unchanged.
+    // could change that, return the input unchanged. `has_pragma_marker` is
+    // computed once by the caller (shared with finalize_whitespace) so the
+    // rendered output is scanned for the pragma prefix at most once per format.
     let needs_reflow = base_config.comment_preservation == CommentPreservation::Reflow;
     let needs_set_align = base_config.align_consecutive_set;
     let needs_comment_align = base_config.align_trailing_comments;
-    let has_pragma_marker =
-        memchr::memmem::find(text.as_bytes(), PRAGMA_PREFIX.as_bytes()).is_some();
     if !needs_reflow && !needs_set_align && !needs_comment_align && !has_pragma_marker {
         return Cow::Borrowed(text);
     }
@@ -864,6 +868,12 @@ mod tests {
         }
     }
 
+    /// Mirror the production pragma-marker scan that `format_inner` performs
+    /// once and passes into `post_process_alignments`.
+    fn has_pragma_marker(text: &str) -> bool {
+        memchr::memmem::find(text.as_bytes(), PRAGMA_PREFIX.as_bytes()).is_some()
+    }
+
     // -----------------------------------------------------------------------
     // Fast path
     // -----------------------------------------------------------------------
@@ -872,7 +882,7 @@ mod tests {
     fn fast_path_no_features_returns_borrowed() {
         let input = "set(VAR val)\nset(B value)\n";
         let config = default_config();
-        let result = post_process_alignments(input, &config);
+        let result = post_process_alignments(input, &config, has_pragma_marker(input));
         assert!(matches!(result, Cow::Borrowed(_)));
         assert_eq!(&*result, input);
     }
@@ -1146,7 +1156,7 @@ mod tests {
     fn set_alignment_two_consecutive() {
         let config = config_with_set_align();
         let input = "set(A value)\nset(LONGVAR value)\n";
-        let result = post_process_alignments(input, &config);
+        let result = post_process_alignments(input, &config, has_pragma_marker(input));
         let lines: Vec<&str> = result.lines().collect();
         assert_eq!(lines.len(), 2);
         // Both values should be at the same column
@@ -1159,7 +1169,7 @@ mod tests {
     fn set_alignment_broken_by_blank_line() {
         let config = config_with_set_align();
         let input = "set(A value)\n\nset(LONGVAR value)\n";
-        let result = post_process_alignments(input, &config);
+        let result = post_process_alignments(input, &config, has_pragma_marker(input));
         let lines: Vec<&str> = result.lines().collect();
         // Groups should NOT be aligned together (blank line breaks the group)
         let v1_pos = lines[0].find("value").unwrap();
@@ -1176,7 +1186,7 @@ mod tests {
     fn trailing_comment_alignment_two_lines() {
         let config = config_with_trailing_comment_align();
         let input = "set(A val) # comment1\nset(LONGVAR val) # comment2\n";
-        let result = post_process_alignments(input, &config);
+        let result = post_process_alignments(input, &config, has_pragma_marker(input));
         let lines: Vec<&str> = result.lines().collect();
         assert_eq!(lines.len(), 2);
         // Comments should be aligned
@@ -1195,7 +1205,7 @@ mod tests {
         config.line_width = 30;
         config.comment_width = Some(30);
         let input = "# This is a very long comment that should be reflowed to a shorter width\n";
-        let result = post_process_alignments(input, &config);
+        let result = post_process_alignments(input, &config, has_pragma_marker(input));
         // All lines should be <= 30 chars
         for line in result.lines() {
             assert!(
@@ -1210,7 +1220,7 @@ mod tests {
     fn reflow_preserves_fence_blocks() {
         let config = config_with_reflow();
         let input = "# ```\n# code inside fence block that should not be reflowed at all\n# ```\n";
-        let result = post_process_alignments(input, &config);
+        let result = post_process_alignments(input, &config, has_pragma_marker(input));
         // Fence blocks should be preserved verbatim
         assert!(result.contains("code inside fence block"));
     }
@@ -1219,7 +1229,7 @@ mod tests {
     fn reflow_preserves_blank_comment_lines() {
         let config = config_with_reflow();
         let input = "# paragraph one\n#\n# paragraph two\n";
-        let result = post_process_alignments(input, &config);
+        let result = post_process_alignments(input, &config, has_pragma_marker(input));
         // Blank comment line should be preserved as paragraph separator
         assert!(result.contains("#\n"));
     }

@@ -178,11 +178,16 @@ fn format_inner(text: &str, config: &Configuration) -> Result<String> {
             parse_text,
         )
     };
+    // Scan the rendered output for the pragma prefix exactly once; both the
+    // post-process and whitespace-finalization passes reuse this flag instead
+    // of each running their own full-buffer memmem scan.
+    let has_pragma = memchr::memmem::find(result.as_bytes(), PRAGMA_PREFIX.as_bytes()).is_some();
     let result = {
         let _stage = info_span!(EVENT_FORMAT_POST_PROCESS).entered();
         // Keep the rendered String when the stage made no changes; converting
         // a borrowed Cow with into_owned() would copy the whole buffer.
-        let owned = match crate::post_process::post_process_alignments(&result, config) {
+        let owned = match crate::post_process::post_process_alignments(&result, config, has_pragma)
+        {
             Cow::Owned(s) => Some(s),
             Cow::Borrowed(_) => None,
         };
@@ -193,7 +198,7 @@ fn format_inner(text: &str, config: &Configuration) -> Result<String> {
     // collapseSpaces) by comparing formatted output with original input.
     let result = {
         let _stage = info_span!(EVENT_FORMAT_FINALIZE_WHITESPACE).entered();
-        let owned = match finalize_whitespace(&result, parse_text, config, newline) {
+        let owned = match finalize_whitespace(&result, parse_text, config, newline, has_pragma) {
             Cow::Owned(s) => Some(s),
             Cow::Borrowed(_) => None,
         };
@@ -420,13 +425,12 @@ fn finalize_whitespace<'a>(
     original: &str,
     config: &Configuration,
     newline: &str,
+    has_pragma: bool,
 ) -> Cow<'a, str> {
     // Quick exit: if both options are true at the base level and no pragmas
-    // could override them, skip the pass entirely.
-    if config.trim_trailing_whitespace
-        && config.collapse_spaces
-        && memchr::memmem::find(formatted.as_bytes(), PRAGMA_PREFIX.as_bytes()).is_none()
-    {
+    // could override them, skip the pass entirely. The pragma flag is computed
+    // once by the caller and shared with post_process_alignments.
+    if config.trim_trailing_whitespace && config.collapse_spaces && !has_pragma {
         return Cow::Borrowed(formatted);
     }
 
