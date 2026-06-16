@@ -1,7 +1,7 @@
 use tracing::info_span;
 
 use crate::configuration::{Configuration, EndCommandArgs, apply_inline_overrides};
-use crate::instrumentation::{EVENT_GEN_FILE, EVENT_GEN_FILE_COMMAND};
+use crate::instrumentation::EVENT_GEN_FILE;
 use crate::parser::ast::{Argument, CommandInvocation, File, FileElement};
 use crate::printer::{PrintItems, Signal};
 
@@ -500,14 +500,6 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
         match element {
             FileElement::Command(cmd) => {
                 let cmd_name = cmd.name.text(source);
-                let command_stage = info_span!(
-                    EVENT_GEN_FILE_COMMAND,
-                    command = cmd_name,
-                    indent_level,
-                    argument_count = cmd.arguments.len(),
-                    preserve_verbatim = tracing::field::Empty
-                );
-                let _command_entered = command_stage.enter();
 
                 // Adjust indent BEFORE emitting the command for middles/closers
                 let was_in_block = indent_level > 0;
@@ -530,7 +522,6 @@ pub fn gen_file(file: &File, source: &str, config: &Configuration) -> PrintItems
 
                 let preserve_verbatim =
                     skip_next_command || is_ignored_command(cmd_name, &current_config);
-                command_stage.record("preserve_verbatim", preserve_verbatim);
                 if skip_next_command {
                     skip_next_command = false;
                 }

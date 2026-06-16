@@ -1,11 +1,8 @@
 use std::borrow::Cow;
 
-use tracing::info_span;
-
 use crate::configuration::{
     CaseStyle, Configuration, IndentStyle, SortArguments, SpaceInsideParen, WrapStyle,
 };
-use crate::instrumentation::EVENT_GEN_COMMAND;
 use crate::parser::ast::{Argument, CommandInvocation};
 use crate::printer::ir_helpers;
 use crate::printer::{PrintItems, Signal};
@@ -600,14 +597,6 @@ pub fn gen_command(
 ) {
     // Resolve per-command overrides before any formatting decisions
     let raw_name = cmd.name.text(source);
-    let command_stage = info_span!(
-        EVENT_GEN_COMMAND,
-        command = raw_name,
-        indent_depth,
-        source_is_multiline = tracing::field::Empty,
-        argument_count = cmd.arguments.len()
-    );
-    let _command_entered = command_stage.enter();
 
     let effective = config.effective_config_for_command(raw_name);
     let config = effective.as_ref();
@@ -670,7 +659,6 @@ pub fn gen_command(
             || config.sort_keyword_sections);
     let source_is_multiline =
         sorting_with_keywords && source[cmd.open_paren.end..cmd.close_paren.start].contains('\n');
-    command_stage.record("source_is_multiline", source_is_multiline);
 
     let mut deferred_closing_comment = None;
     if !config.closing_paren_newline {

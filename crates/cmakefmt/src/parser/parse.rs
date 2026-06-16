@@ -4,7 +4,7 @@ use tracing::info_span;
 
 use super::ast::{Argument, CommandInvocation, File, FileElement, Span};
 use super::token::Token;
-use crate::instrumentation::{EVENT_PARSER_COMMAND, EVENT_PARSER_FILE};
+use crate::instrumentation::EVENT_PARSER_FILE;
 
 /// Convert a byte offset into a 1-based (line, column) pair.
 fn byte_offset_to_line_col(source: &str, offset: usize) -> (usize, usize) {
@@ -128,8 +128,6 @@ fn parse_file_elements(p: &mut Parser) -> Result<Vec<FileElement>> {
 }
 
 fn parse_command_invocation(p: &mut Parser) -> Result<CommandInvocation> {
-    let _stage = info_span!(EVENT_PARSER_COMMAND).entered();
-
     // Consume command name (UnquotedText)
     let (_, name_span) = p.advance().unwrap();
 
