@@ -515,11 +515,11 @@ fn extract_deferred_closing_comment<'src>(
     arguments: &mut [FormattedArg<'src>],
 ) -> Option<Cow<'src, str>> {
     arguments.iter_mut().rev().find_map(|arg| {
-        if arg.text.starts_with('#') || arg.trailing_is_bracket {
+        if arg.text.starts_with('#') || arg.trailing_is_bracket() {
             return None;
         }
 
-        arg.trailing_comment.take()
+        arg.take_trailing_comment()
     })
 }
 
@@ -1108,13 +1108,7 @@ struct FormattedArg<'src> {
     text: Cow<'src, str>,
     is_keyword: bool,
     is_bracket: bool,
-    trailing_comment: Option<Cow<'src, str>>,
-    trailing_is_bracket: bool,
     is_paren_group: bool,
-    /// Inner args for a paren group; a boxed slice so the common (non-group)
-    /// arg keeps `FormattedArg` smaller (paren groups are rare). Empty ⟺ not a
-    /// group (an empty boxed slice does not allocate).
-    paren_inner: Box<[FormattedArg<'src>]>,
     blank_line_before: bool,
     /// Whether a source newline separates this arg from the previous one.
     /// Used by `alignArgGroups` to preserve source-level token grouping.
@@ -1130,6 +1124,23 @@ struct FormattedArg<'src> {
     /// copy straight from source instead of staging the bytes in the slab.
     /// `None` for synthesized/quoted/bracket/comment text.
     src_range: Option<(u32, u32)>,
+    /// Rarely-populated fields (trailing comment, paren-group children) kept
+    /// out of line so the dominant argument — an unquoted value with no comment
+    /// and no paren group — stays small. The per-command `Vec<FormattedArg>` is
+    /// built and re-scanned several times during IR generation, so shrinking the
+    /// common element improves cache density on the hot path.
+    rare: Option<Box<RareArgFields<'src>>>,
+}
+
+/// Out-of-line `FormattedArg` fields used by only a small fraction of args.
+#[derive(Debug, Clone, Default)]
+struct RareArgFields<'src> {
+    /// Comment trailing this argument on the same source line, if any.
+    comment: Option<Cow<'src, str>>,
+    /// Whether [`Self::comment`] is a bracket comment (`#[[ ]]`).
+    is_bracket_comment: bool,
+    /// Inner args for a paren group; empty boxed slice when not a group.
+    paren_inner: Box<[FormattedArg<'src>]>,
 }
 
 impl<'src> FormattedArg<'src> {
@@ -1142,16 +1153,14 @@ impl<'src> FormattedArg<'src> {
             text,
             is_keyword: false,
             is_bracket: false,
-            trailing_comment: None,
-            trailing_is_bracket: false,
             is_paren_group: false,
-            paren_inner: Box::default(),
             blank_line_before: false,
             new_line_before: false,
             has_newline,
             genex_delta,
             has_genex,
             src_range: None,
+            rare: None,
         }
     }
 
@@ -1164,23 +1173,48 @@ impl<'src> FormattedArg<'src> {
             text,
             is_keyword: false,
             is_bracket: false,
-            trailing_comment: None,
-            trailing_is_bracket: false,
             is_paren_group: false,
-            paren_inner: Box::default(),
             blank_line_before: false,
             new_line_before: false,
             has_newline: false,
             genex_delta,
             has_genex,
             src_range: None,
+            rare: None,
         }
     }
 
     /// Inner args of a paren group as a slice (empty when not a group).
     #[inline]
     fn paren_args(&self) -> &[FormattedArg<'src>] {
-        &self.paren_inner
+        match &self.rare {
+            Some(r) => &r.paren_inner,
+            None => &[],
+        }
+    }
+
+    /// The comment trailing this argument, if any.
+    #[inline]
+    fn trailing_comment(&self) -> Option<&Cow<'src, str>> {
+        self.rare.as_ref().and_then(|r| r.comment.as_ref())
+    }
+
+    /// Whether the trailing comment (if any) is a bracket comment.
+    #[inline]
+    fn trailing_is_bracket(&self) -> bool {
+        self.rare.as_ref().is_some_and(|r| r.is_bracket_comment)
+    }
+
+    /// Attach a trailing comment, allocating the rare-fields box on first use.
+    fn set_trailing_comment(&mut self, comment: Cow<'src, str>, is_bracket: bool) {
+        let r = self.rare.get_or_insert_with(Default::default);
+        r.comment = Some(comment);
+        r.is_bracket_comment = is_bracket;
+    }
+
+    /// Take the trailing comment, leaving none in its place.
+    fn take_trailing_comment(&mut self) -> Option<Cow<'src, str>> {
+        self.rare.as_mut().and_then(|r| r.comment.take())
     }
 }
 
@@ -1266,7 +1300,10 @@ fn build_argument_list_from_args<'src>(
                 let inner = build_argument_list_from_args(arguments, source, config, cmd_kind);
                 result.push(FormattedArg {
                     is_paren_group: true,
-                    paren_inner: inner.into_boxed_slice(),
+                    rare: Some(Box::new(RareArgFields {
+                        paren_inner: inner.into_boxed_slice(),
+                        ..Default::default()
+                    })),
                     blank_line_before,
                     new_line_before,
                     ..FormattedArg::new(Cow::Borrowed(""))
@@ -1282,9 +1319,9 @@ fn build_argument_list_from_args<'src>(
                 };
                 if same_line
                     && let Some(last) = result.last_mut()
-                    && last.trailing_comment.is_none()
+                    && last.trailing_comment().is_none()
                 {
-                    last.trailing_comment = Some(Cow::Borrowed(comment_text));
+                    last.set_trailing_comment(Cow::Borrowed(comment_text), false);
                     prev_end = current_end;
                     i += 1;
                     continue;
@@ -1305,10 +1342,9 @@ fn build_argument_list_from_args<'src>(
                 };
                 if same_line
                     && let Some(last) = result.last_mut()
-                    && last.trailing_comment.is_none()
+                    && last.trailing_comment().is_none()
                 {
-                    last.trailing_comment = Some(Cow::Borrowed(comment_text));
-                    last.trailing_is_bracket = true;
+                    last.set_trailing_comment(Cow::Borrowed(comment_text), true);
                     prev_end = current_end;
                     i += 1;
                     continue;
@@ -1404,7 +1440,7 @@ fn can_pack_args_on_line(
     if args.iter().any(|arg| {
         arg.text.starts_with('#')
             || arg.has_newline
-            || (arg.trailing_comment.is_some() && !arg.trailing_is_bracket)
+            || (arg.trailing_comment().is_some() && !arg.trailing_is_bracket())
     }) {
         return false;
     }
@@ -1458,7 +1494,7 @@ fn try_single_line(
     let mut has_keyword_args = false;
     let mut keyword_count = 0usize;
     for (i, a) in args.iter().enumerate() {
-        if (a.trailing_comment.is_some() && !a.trailing_is_bracket)
+        if (a.trailing_comment().is_some() && !a.trailing_is_bracket())
             || a.has_newline
             || a.text.starts_with('#')
         {
@@ -3212,8 +3248,8 @@ fn emit_keyword_group(
     let can_inline_content = !values.iter().any(|v| v.has_newline)
         && values
             .iter()
-            .all(|v| v.trailing_comment.is_none() || v.trailing_is_bracket)
-        && (keyword.trailing_comment.is_none() || keyword.trailing_is_bracket)
+            .all(|v| v.trailing_comment().is_none() || v.trailing_is_bracket())
+        && (keyword.trailing_comment().is_none() || keyword.trailing_is_bracket())
         && !values.iter().any(|v| v.text.starts_with('#'));
     if !force_one_per_line
         && allow_keyword_inline
@@ -3235,7 +3271,7 @@ fn emit_keyword_group(
             let val_text = arg_inline_text(val);
             items.push_raw_str(&val_text);
         }
-        if let Some(comment) = &keyword.trailing_comment {
+        if let Some(comment) = keyword.trailing_comment() {
             items.push_space();
             items.push_raw_str(comment);
         }
@@ -3271,7 +3307,7 @@ fn emit_keyword_group(
                 items.push_space();
                 push_arg_verbatim(items, val);
             }
-            if let Some(comment) = &keyword.trailing_comment {
+            if let Some(comment) = keyword.trailing_comment() {
                 items.push_space();
                 items.push_raw_str(comment);
             }
@@ -3333,7 +3369,7 @@ fn emit_keyword_group(
                     && !values.iter().any(|v| v.text.starts_with('#'))
                     && values
                         .iter()
-                        .all(|v| v.trailing_comment.is_none() || v.trailing_is_bracket)
+                        .all(|v| v.trailing_comment().is_none() || v.trailing_is_bracket())
             };
         if packed_section {
             let cont = config.effective_continuation_indent_width() as usize;
@@ -3474,8 +3510,9 @@ fn emit_property_values(
         if let Some(&val) = single_val {
             let inline_width = arg_width(prop_name) + 1 + arg_width(val);
             let name_has_line_comment =
-                prop_name.trailing_comment.is_some() && !prop_name.trailing_is_bracket;
-            let val_has_line_comment = val.trailing_comment.is_some() && !val.trailing_is_bracket;
+                prop_name.trailing_comment().is_some() && !prop_name.trailing_is_bracket();
+            let val_has_line_comment =
+                val.trailing_comment().is_some() && !val.trailing_is_bracket();
             let can_inline = prop_indent + inline_width <= config.line_width as usize
                 && !prop_name.has_newline
                 && !val.has_newline
@@ -3488,11 +3525,11 @@ fn emit_property_values(
                 push_arg_verbatim(&mut val_items, prop_name);
                 val_items.push_space();
                 push_arg_verbatim(&mut val_items, val);
-                if let Some(comment) = &prop_name.trailing_comment {
+                if let Some(comment) = prop_name.trailing_comment() {
                     val_items.push_space();
                     val_items.push_raw_str(comment);
                 }
-                if let Some(comment) = &val.trailing_comment {
+                if let Some(comment) = val.trailing_comment() {
                     val_items.push_signal(Signal::NewLine);
                     val_items.push_raw_str(comment);
                 }
@@ -3634,8 +3671,8 @@ fn emit_flow_values(
             val_items.push_raw_str(&val_text);
             current_line_width += needed;
             // Emit trailing comment if present
-            if let Some(comment) = &val.trailing_comment {
-                if val.trailing_is_bracket {
+            if let Some(comment) = val.trailing_comment() {
+                if val.trailing_is_bracket() {
                     // Bracket comments stay inline
                     val_items.push_space();
                     val_items.push_raw_str(comment);
@@ -3693,8 +3730,8 @@ fn emit_aligned_keyword_values(
         }
 
         // Handle trailing comments
-        if let Some(comment) = &val.trailing_comment {
-            if val.trailing_is_bracket {
+        if let Some(comment) = val.trailing_comment() {
+            if val.trailing_is_bracket() {
                 items.push_space();
                 items.push_raw_str(comment);
             } else {
@@ -3763,8 +3800,10 @@ fn emit_pair_values(
 
         if let Some(val) = value {
             let has_intervening_comments = !intervening_comments.is_empty();
-            let key_has_line_comment = key.trailing_comment.is_some() && !key.trailing_is_bracket;
-            let val_has_line_comment = val.trailing_comment.is_some() && !val.trailing_is_bracket;
+            let key_has_line_comment =
+                key.trailing_comment().is_some() && !key.trailing_is_bracket();
+            let val_has_line_comment =
+                val.trailing_comment().is_some() && !val.trailing_is_bracket();
 
             // Try inline: KEY VALUE at L2 (only if no intervening comments)
             let inline_width = arg_width(key) + 1 + arg_width(val);
@@ -3792,12 +3831,12 @@ fn emit_pair_values(
                 push_arg_verbatim(&mut val_items, val);
 
                 // Key's bracket comment (if any) goes inline
-                if let Some(comment) = &key.trailing_comment {
+                if let Some(comment) = key.trailing_comment() {
                     val_items.push_space();
                     val_items.push_raw_str(comment);
                 }
                 // Value's trailing comment goes on its own line at L2
-                if let Some(comment) = &val.trailing_comment {
+                if let Some(comment) = val.trailing_comment() {
                     val_items.push_signal(Signal::NewLine);
                     val_items.push_raw_str(comment);
                 }
@@ -3813,13 +3852,13 @@ fn emit_pair_values(
                 push_arg_verbatim(&mut val_items, key);
                 let mut sub = PrintItems::new();
                 sub.push_signal(Signal::NewLine);
-                sub.push_raw_str(key.trailing_comment.as_ref().unwrap());
+                sub.push_raw_str(key.trailing_comment().unwrap());
                 sub.push_signal(Signal::NewLine);
                 push_arg_verbatim(&mut sub, val);
                 val_items.push_indented(sub);
                 // Value's trailing comment at L2
                 val_items.push_signal(Signal::NewLine);
-                val_items.push_raw_str(val.trailing_comment.as_ref().unwrap());
+                val_items.push_raw_str(val.trailing_comment().unwrap());
             } else {
                 // Key at L2 (with trailing comment inline if present)
                 val_items.push_signal(Signal::NewLine);
@@ -3991,7 +4030,7 @@ fn emit_cmd_line_keyword(
             items.push_raw_str(&keyword.text);
             items.push_space();
             push_arg_verbatim(items, val);
-            if let Some(comment) = &val.trailing_comment {
+            if let Some(comment) = val.trailing_comment() {
                 items.push_space();
                 items.push_raw_str(comment);
             }
@@ -4075,7 +4114,7 @@ fn emit_section_values_inner(
                             val_items.push_space();
                             let sv_text = arg_inline_text(sv);
                             val_items.push_raw_str(&sv_text);
-                            if let Some(comment) = &values[i].trailing_comment {
+                            if let Some(comment) = values[i].trailing_comment() {
                                 val_items.push_space();
                                 val_items.push_raw_str(comment);
                             }
@@ -4120,8 +4159,8 @@ fn emit_section_values_inner(
                         && (sub_values.len() == 1 || config.align_arg_groups)
                         && sub_values
                             .iter()
-                            .all(|v| v.trailing_comment.is_none() || v.trailing_is_bracket)
-                        && (kw.trailing_comment.is_none() || kw.trailing_is_bracket)
+                            .all(|v| v.trailing_comment().is_none() || v.trailing_is_bracket())
+                        && (kw.trailing_comment().is_none() || kw.trailing_is_bracket())
                         && !sub_values.iter().any(|v| v.text.starts_with('#'));
                     if can_inline {
                         push_wrapped_newline(
@@ -4136,7 +4175,7 @@ fn emit_section_values_inner(
                             val_items.push_space();
                             push_arg_verbatim(&mut val_items, sv);
                         }
-                        if let Some(comment) = &kw.trailing_comment {
+                        if let Some(comment) = kw.trailing_comment() {
                             val_items.push_space();
                             val_items.push_raw_str(comment);
                         }
@@ -4231,8 +4270,8 @@ fn emit_section_values_inner(
                     let all_inlineable = !all_group_values.iter().any(|v| v.has_newline)
                         && all_group_values
                             .iter()
-                            .all(|v| v.trailing_comment.is_none() || v.trailing_is_bracket)
-                        && (kw.trailing_comment.is_none() || kw.trailing_is_bracket)
+                            .all(|v| v.trailing_comment().is_none() || v.trailing_is_bracket())
+                        && (kw.trailing_comment().is_none() || kw.trailing_is_bracket())
                         && !all_group_values.iter().any(|v| v.text.starts_with('#'));
 
                     if sub_indent + total_iw <= config.line_width as usize && all_inlineable {
@@ -4254,7 +4293,7 @@ fn emit_section_values_inner(
                             };
                             val_items.push_raw_str(&vt);
                         }
-                        if let Some(comment) = &kw.trailing_comment {
+                        if let Some(comment) = kw.trailing_comment() {
                             val_items.push_space();
                             val_items.push_raw_str(comment);
                         }
@@ -4270,8 +4309,8 @@ fn emit_section_values_inner(
                             && !front_positionals.iter().any(|v| v.has_newline)
                             && front_positionals
                                 .iter()
-                                .all(|v| v.trailing_comment.is_none() || v.trailing_is_bracket)
-                            && (kw.trailing_comment.is_none() || kw.trailing_is_bracket)
+                                .all(|v| v.trailing_comment().is_none() || v.trailing_is_bracket())
+                            && (kw.trailing_comment().is_none() || kw.trailing_is_bracket())
                             && !front_positionals.iter().any(|v| v.text.starts_with('#'));
 
                         if can_inline_front {
@@ -4289,7 +4328,7 @@ fn emit_section_values_inner(
                                 val_items.push_space();
                                 push_arg_verbatim(&mut val_items, v);
                             }
-                            if let Some(comment) = &kw.trailing_comment {
+                            if let Some(comment) = kw.trailing_comment() {
                                 val_items.push_space();
                                 val_items.push_raw_str(comment);
                             }
@@ -4373,7 +4412,7 @@ fn compute_keyword_inline_width(keyword: &FormattedArg, values: &[&FormattedArg]
     for val in values {
         w += 1 + arg_width(val); // space + value
     }
-    if let Some(comment) = &keyword.trailing_comment {
+    if let Some(comment) = keyword.trailing_comment() {
         w += 1 + comment.len();
     }
     w
@@ -4659,21 +4698,21 @@ fn cond_expr_inline_width(expr: &CondExpr<'_>) -> usize {
     match expr {
         CondExpr::Atom(arg) => {
             let mut w = arg_width(arg);
-            if let Some(c) = &arg.trailing_comment {
+            if let Some(c) = arg.trailing_comment() {
                 w += 1 + c.len();
             }
             w
         }
         CondExpr::ParenGroup(arg) => {
             let mut w = arg_width(arg);
-            if let Some(c) = &arg.trailing_comment {
+            if let Some(c) = arg.trailing_comment() {
                 w += 1 + c.len();
             }
             w
         }
         CondExpr::Unary { op, operand } => {
             let mut w = op.text.len() + 1 + cond_expr_inline_width(operand);
-            if let Some(c) = &op.trailing_comment {
+            if let Some(c) = op.trailing_comment() {
                 w += 1 + c.len();
             }
             w
@@ -4681,7 +4720,7 @@ fn cond_expr_inline_width(expr: &CondExpr<'_>) -> usize {
         CondExpr::Binary { lhs, op, rhs } => {
             let mut w =
                 cond_expr_inline_width(lhs) + 1 + op.text.len() + 1 + cond_expr_inline_width(rhs);
-            if let Some(c) = &op.trailing_comment {
+            if let Some(c) = op.trailing_comment() {
                 w += 1 + c.len();
             }
             w
@@ -4692,15 +4731,15 @@ fn cond_expr_inline_width(expr: &CondExpr<'_>) -> usize {
 /// Check if expression has line comments that force multi-line.
 fn cond_expr_has_line_comment(expr: &CondExpr<'_>) -> bool {
     match expr {
-        CondExpr::Atom(arg) => arg.trailing_comment.is_some() && !arg.trailing_is_bracket,
-        CondExpr::ParenGroup(arg) => arg.trailing_comment.is_some() && !arg.trailing_is_bracket,
+        CondExpr::Atom(arg) => arg.trailing_comment().is_some() && !arg.trailing_is_bracket(),
+        CondExpr::ParenGroup(arg) => arg.trailing_comment().is_some() && !arg.trailing_is_bracket(),
         CondExpr::Unary { op, operand } => {
-            (op.trailing_comment.is_some() && !op.trailing_is_bracket)
+            (op.trailing_comment().is_some() && !op.trailing_is_bracket())
                 || cond_expr_has_line_comment(operand)
         }
         CondExpr::Binary { lhs, op, rhs } => {
             cond_expr_has_line_comment(lhs)
-                || (op.trailing_comment.is_some() && !op.trailing_is_bracket)
+                || (op.trailing_comment().is_some() && !op.trailing_is_bracket())
                 || cond_expr_has_line_comment(rhs)
         }
     }
@@ -4749,7 +4788,7 @@ fn emit_cond_logical_op(
     config: &Configuration,
     base_indent: usize,
 ) {
-    let op_has_comment = op.trailing_comment.is_some() && !op.trailing_is_bracket;
+    let op_has_comment = op.trailing_comment().is_some() && !op.trailing_is_bracket();
     let has_interleaved_comments = !comments.is_empty();
 
     // Try inline: "AND expr" on one line (not possible with interleaved comments)
@@ -4766,7 +4805,7 @@ fn emit_cond_logical_op(
             Cow::Borrowed(op.text.as_ref())
         };
         items.push_string(op_text.into_owned());
-        if let Some(comment) = &op.trailing_comment {
+        if let Some(comment) = op.trailing_comment() {
             items.push_space();
             items.push_raw_str(comment);
         }
@@ -4782,7 +4821,7 @@ fn emit_cond_logical_op(
         Cow::Borrowed(op.text.as_ref())
     };
     items.push_string(op_text.into_owned());
-    if let Some(comment) = &op.trailing_comment {
+    if let Some(comment) = op.trailing_comment() {
         items.push_space();
         items.push_raw_str(comment);
     }
@@ -4830,7 +4869,7 @@ fn emit_cond_expr(
                 && !has_line_comment_in_paren(arg)
             {
                 items.push_raw_str(&inline);
-                if let Some(comment) = &arg.trailing_comment {
+                if let Some(comment) = arg.trailing_comment() {
                     items.push_space();
                     items.push_raw_str(comment);
                 }
@@ -4868,14 +4907,14 @@ fn emit_cond_expr(
                 paren_inner.push_signal(Signal::NewLine);
                 items.push_indented(paren_inner);
                 items.push_str_runtime_width_computed(")");
-                if let Some(comment) = &arg.trailing_comment {
+                if let Some(comment) = arg.trailing_comment() {
                     items.push_space();
                     items.push_raw_str(comment);
                 }
             }
         }
         CondExpr::Unary { op, operand } => {
-            let op_has_comment = op.trailing_comment.is_some() && !op.trailing_is_bracket;
+            let op_has_comment = op.trailing_comment().is_some() && !op.trailing_is_bracket();
             let inline_width = op.text.len() + 1 + cond_expr_inline_width(operand);
             let can_inline = base_indent + inline_width <= config.line_width as usize
                 && !cond_expr_has_line_comment(operand)
@@ -4890,7 +4929,7 @@ fn emit_cond_expr(
                     }
                     .into_owned(),
                 );
-                if let Some(comment) = &op.trailing_comment {
+                if let Some(comment) = op.trailing_comment() {
                     items.push_space();
                     items.push_raw_str(comment);
                 }
@@ -4908,7 +4947,7 @@ fn emit_cond_expr(
                 }
                 .into_owned(),
             );
-            if let Some(comment) = &op.trailing_comment {
+            if let Some(comment) = op.trailing_comment() {
                 items.push_space();
                 items.push_raw_str(comment);
             }
@@ -4931,7 +4970,7 @@ fn emit_cond_expr(
             }
         }
         CondExpr::Binary { lhs, op, rhs } => {
-            let op_has_comment = op.trailing_comment.is_some() && !op.trailing_is_bracket;
+            let op_has_comment = op.trailing_comment().is_some() && !op.trailing_is_bracket();
             let inline_width =
                 cond_expr_inline_width(lhs) + 1 + op.text.len() + 1 + cond_expr_inline_width(rhs);
             let can_inline = base_indent + inline_width <= config.line_width as usize
@@ -4950,7 +4989,7 @@ fn emit_cond_expr(
                     }
                     .into_owned(),
                 );
-                if let Some(comment) = &op.trailing_comment {
+                if let Some(comment) = op.trailing_comment() {
                     items.push_space();
                     items.push_raw_str(comment);
                 }
@@ -4971,7 +5010,7 @@ fn emit_cond_expr(
                 }
                 .into_owned(),
             );
-            if let Some(comment) = &op.trailing_comment {
+            if let Some(comment) = op.trailing_comment() {
                 sub.push_space();
                 sub.push_raw_str(comment);
             }
@@ -4998,14 +5037,14 @@ fn emit_cond_expr_inline(items: &mut PrintItems, expr: &CondExpr<'_>, config: &C
                 t
             };
             items.push_raw_str(&t);
-            if let Some(comment) = &arg.trailing_comment {
+            if let Some(comment) = arg.trailing_comment() {
                 items.push_space();
                 items.push_raw_str(comment);
             }
         }
         CondExpr::ParenGroup(arg) => {
             push_arg_verbatim(items, arg);
-            if let Some(comment) = &arg.trailing_comment {
+            if let Some(comment) = arg.trailing_comment() {
                 items.push_space();
                 items.push_raw_str(comment);
             }
@@ -5017,7 +5056,7 @@ fn emit_cond_expr_inline(items: &mut PrintItems, expr: &CondExpr<'_>, config: &C
                 Cow::Borrowed(op.text.as_ref())
             };
             items.push_string(op_text.into_owned());
-            if let Some(comment) = &op.trailing_comment {
+            if let Some(comment) = op.trailing_comment() {
                 items.push_space();
                 items.push_raw_str(comment);
             }
@@ -5033,7 +5072,7 @@ fn emit_cond_expr_inline(items: &mut PrintItems, expr: &CondExpr<'_>, config: &C
                 Cow::Borrowed(op.text.as_ref())
             };
             items.push_string(op_text.into_owned());
-            if let Some(comment) = &op.trailing_comment {
+            if let Some(comment) = op.trailing_comment() {
                 items.push_space();
                 items.push_raw_str(comment);
             }
@@ -5045,7 +5084,7 @@ fn emit_cond_expr_inline(items: &mut PrintItems, expr: &CondExpr<'_>, config: &C
 
 fn has_line_comment_in_paren(arg: &FormattedArg) -> bool {
     for inner in arg.paren_args() {
-        if inner.trailing_comment.is_some() && !inner.trailing_is_bracket {
+        if inner.trailing_comment().is_some() && !inner.trailing_is_bracket() {
             return true;
         }
         if inner.text.starts_with('#') {
@@ -5075,9 +5114,9 @@ fn emit_kw_arg(items: &mut PrintItems, arg: &FormattedArg, config: &Configuratio
 /// which lack the `is_keyword` flag.
 fn emit_sub_kw_arg(items: &mut PrintItems, arg: &FormattedArg, config: &Configuration) {
     push_token_cased(items, &arg.text, config.keyword_case);
-    if let Some(comment) = &arg.trailing_comment {
+    if let Some(comment) = arg.trailing_comment() {
         items.push_space();
-        if arg.trailing_is_bracket {
+        if arg.trailing_is_bracket() {
             emit_bracket_verbatim(items, comment);
         } else {
             items.push_raw_str(comment);
@@ -5153,9 +5192,9 @@ fn emit_arg_with_case(
         }
     }
 
-    if let Some(comment) = &arg.trailing_comment {
+    if let Some(comment) = arg.trailing_comment() {
         items.push_space();
-        if arg.trailing_is_bracket {
+        if arg.trailing_is_bracket() {
             emit_bracket_verbatim(items, comment);
         } else {
             items.push_raw_str(comment);
@@ -6054,7 +6093,7 @@ fn emit_values_with_genex_with_indent(
                     );
                     token_slab.push(arg);
                     current_width = token_width;
-                    if arg.trailing_comment.is_some() && !arg.trailing_is_bracket {
+                    if arg.trailing_comment().is_some() && !arg.trailing_is_bracket() {
                         flush_current_line(
                             &mut lines,
                             &mut line_start,
@@ -6085,7 +6124,7 @@ fn emit_values_with_genex_with_indent(
                         let available_width =
                             max_content_width.saturating_sub(column_start + indent_width);
                         let last_has_line_comment = token_slab.last().is_some_and(|token| {
-                            token.trailing_comment.is_some() && !token.trailing_is_bracket
+                            token.trailing_comment().is_some() && !token.trailing_is_bracket()
                         });
 
                         if last_has_line_comment || current_width + required > available_width {
@@ -6103,7 +6142,7 @@ fn emit_values_with_genex_with_indent(
                         }
                     }
 
-                    if arg.trailing_comment.is_some() && !arg.trailing_is_bracket {
+                    if arg.trailing_comment().is_some() && !arg.trailing_is_bracket() {
                         flush_current_line(
                             &mut lines,
                             &mut line_start,
@@ -6151,7 +6190,7 @@ fn emit_values_with_genex_with_indent(
                         let available_width =
                             max_content_width.saturating_sub(column_start + indent_width);
                         let last_has_line_comment = token_slab.last().is_some_and(|token| {
-                            token.trailing_comment.is_some() && !token.trailing_is_bracket
+                            token.trailing_comment().is_some() && !token.trailing_is_bracket()
                         });
 
                         if last_has_line_comment || current_width + required > available_width {
