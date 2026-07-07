@@ -37,3 +37,7 @@ serde_json.workspace = true
 [[bench]]
 name = "formatter_fixtures_bench"
 harness = false
+
+[[bench]]
+name = "autoresearch_bench"
+harness = false
