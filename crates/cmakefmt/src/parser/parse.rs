@@ -1,8 +1,8 @@
 use anyhow::{Result, bail};
-use logos::Logos;
 use tracing::info_span;
 
 use super::ast::{Argument, CommandInvocation, File, FileElement, Span};
+use super::lexer::RawLexer;
 use super::token::Token;
 use crate::instrumentation::EVENT_PARSER_FILE;
 
@@ -22,21 +22,21 @@ fn describe_token(tok: Option<&Token>) -> String {
     }
 }
 
-/// Streaming parser that pulls tokens from the logos lexer on demand.
+/// Streaming parser that pulls tokens from the lexer on demand.
 ///
 /// Uses a single-element lookahead (`peeked`) instead of collecting all tokens
 /// into a Vec. This eliminates a ~50K-element intermediate allocation for large
 /// files and improves cache locality.
 struct Parser<'a> {
     source: &'a str,
-    lexer: logos::Lexer<'a, Token>,
+    lexer: RawLexer<'a>,
     /// One-element lookahead: `Some((token, span))` if peeked, `None` if exhausted.
     peeked: Option<(Token, std::ops::Range<usize>)>,
 }
 
 impl<'a> Parser<'a> {
     fn new(source: &'a str) -> Self {
-        let mut lexer = Token::lexer(source);
+        let mut lexer = RawLexer::new(source);
         let peeked = Self::next_token(&mut lexer);
         Parser {
             source,
@@ -46,9 +46,8 @@ impl<'a> Parser<'a> {
     }
 
     /// Pull the next token from the lexer, converting errors to UnquotedText.
-    fn next_token(lexer: &mut logos::Lexer<'a, Token>) -> Option<(Token, std::ops::Range<usize>)> {
-        lexer.next().map(|result| {
-            let span = lexer.span();
+    fn next_token(lexer: &mut RawLexer<'a>) -> Option<(Token, std::ops::Range<usize>)> {
+        lexer.next_token().map(|(result, span)| {
             match result {
                 Ok(tok) => (tok, span),
                 // Unknown byte — treat as unquoted text so we don't lose content
