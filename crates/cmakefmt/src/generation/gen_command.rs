@@ -1100,7 +1100,7 @@ fn has_multiline_verbatim_argument(arguments: &[Argument], source: &str) -> bool
 fn gap_has_newline(gap: &str) -> bool {
     let bytes = gap.as_bytes();
     if bytes.len() <= 16 {
-        bytes.iter().any(|&b| b == b'\n')
+        bytes.contains(&b'\n')
     } else {
         memchr::memchr(b'\n', bytes).is_some()
     }

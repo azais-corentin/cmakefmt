@@ -95,15 +95,24 @@ impl PrintItems {
     }
 
     /// Append a borrowed string fragment (copied into the slab buffer).
+    /// Contiguous slab fragments fuse into the previous `Text` item, so
+    /// keyword/space/punctuation chains cost one item instead of several.
     pub fn push_str(&mut self, text: &str) {
-        if !text.is_empty() {
-            let start = to_u32(self.text.len());
-            self.text.push_str(text);
-            self.items.push(PrintItem::Text {
-                start,
-                len: to_u32(text.len()),
-            });
+        if text.is_empty() {
+            return;
         }
+        let start = to_u32(self.text.len());
+        self.text.push_str(text);
+        if let Some(PrintItem::Text { start: s, len }) = self.items.last_mut()
+            && *s + *len == start
+        {
+            *len += to_u32(text.len());
+            return;
+        }
+        self.items.push(PrintItem::Text {
+            start,
+            len: to_u32(text.len()),
+        });
     }
 
     /// Append a verbatim fragment by *source* byte range (no copy into the slab).
@@ -130,8 +139,17 @@ impl PrintItems {
         self.push_str(text);
     }
 
-    /// Append a single space.
+    /// Append a single space. When the previous item is a slab fragment ending
+    /// at the slab tail, the space fuses into it (same render semantics: a
+    /// space never begins a line's indentation handling on its own).
     pub fn push_space(&mut self) {
+        if let Some(PrintItem::Text { start, len }) = self.items.last_mut()
+            && *start + *len == to_u32(self.text.len())
+        {
+            self.text.push(' ');
+            *len += 1;
+            return;
+        }
         self.items.push(PrintItem::Space);
     }
 
@@ -337,8 +355,11 @@ fn render(items: &PrintItems, options: &PrintOptions, source: &str) -> String {
     // This avoids rebuilding the same N-space or N-tab prefixes for every line.
     let mut indent_cache = vec![String::new()];
 
-    for item in &items.items {
-        match item {
+    let item_list = &items.items;
+    let src_bytes = source.as_bytes();
+    let mut i = 0;
+    while i < item_list.len() {
+        match &item_list[i] {
             PrintItem::Signal(signal) => match signal {
                 Signal::NewLine => {
                     out.push_str(options.new_line_text);
@@ -392,7 +413,31 @@ fn render(items: &PrintItems, options: &PrintOptions, source: &str) -> String {
                     options,
                     &mut indent_cache,
                 );
-                out.push_str(&source[*start as usize..(*start + *len) as usize]);
+                let range_start = *start as usize;
+                let mut range_end = range_start + *len as usize;
+                // Fuse following `Space, SrcText` pairs that sit adjacent in the
+                // source with a single-space gap: the whole run renders as one
+                // copy straight from the source (common for already-formatted
+                // argument lists).
+                while i + 2 < item_list.len() {
+                    if let (
+                        PrintItem::Space,
+                        PrintItem::SrcText {
+                            start: next_start,
+                            len: next_len,
+                        },
+                    ) = (&item_list[i + 1], &item_list[i + 2])
+                    {
+                        let next_start = *next_start as usize;
+                        if next_start == range_end + 1 && src_bytes[range_end] == b' ' {
+                            range_end = next_start + *next_len as usize;
+                            i += 2;
+                            continue;
+                        }
+                    }
+                    break;
+                }
+                out.push_str(&source[range_start..range_end]);
             }
             PrintItem::Space => {
                 emit_indent_if_needed(
@@ -406,6 +451,7 @@ fn render(items: &PrintItems, options: &PrintOptions, source: &str) -> String {
                 out.push(' ');
             }
         }
+        i += 1;
     }
 
     out
