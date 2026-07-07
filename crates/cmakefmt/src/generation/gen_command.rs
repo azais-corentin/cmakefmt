@@ -1078,12 +1078,32 @@ fn arg_source_range(arg: &Argument) -> (usize, usize) {
 fn has_multiline_verbatim_argument(arguments: &[Argument], source: &str) -> bool {
     arguments.iter().any(|arg| match arg {
         Argument::Bracket(span) | Argument::Quoted(span) => {
-            // One SIMD scan for either byte instead of two full passes.
-            memchr::memchr2(b'\n', b'\r', span.text(source).as_bytes()).is_some()
+            let bytes = span.text(source).as_bytes();
+            if bytes.len() <= 24 {
+                // Typical quoted args are short; a scalar scan beats the
+                // vectorized searcher's setup cost.
+                bytes.iter().any(|&b| b == b'\n' || b == b'\r')
+            } else {
+                // One SIMD scan for either byte instead of two full passes.
+                memchr::memchr2(b'\n', b'\r', bytes).is_some()
+            }
         }
         Argument::ParenGroup { arguments } => has_multiline_verbatim_argument(arguments, source),
         Argument::Unquoted(_) | Argument::LineComment(_) | Argument::BracketComment(_) => false,
     })
+}
+
+/// `gap.contains('\n')` tuned for the tiny stretches between argument spans
+/// (usually one space or a newline plus indentation), where generic searcher
+/// setup costs more than the scan itself.
+#[inline]
+fn gap_has_newline(gap: &str) -> bool {
+    let bytes = gap.as_bytes();
+    if bytes.len() <= 16 {
+        bytes.iter().any(|&b| b == b'\n')
+    } else {
+        memchr::memchr(b'\n', bytes).is_some()
+    }
 }
 
 fn strip_base_indent(line: &str, base_indent_len: usize) -> &str {
@@ -1258,7 +1278,7 @@ fn build_argument_list_from_args<'src>(
         } else {
             false
         };
-        let new_line_before = i > 0 && source[prev_end..current_start].contains('\n');
+        let new_line_before = i > 0 && gap_has_newline(&source[prev_end..current_start]);
 
         match &args[i] {
             Argument::Bracket(span) => {
@@ -1313,7 +1333,7 @@ fn build_argument_list_from_args<'src>(
                 let comment_text = span.text(source).trim_end();
                 // Only attach to previous arg if on the same source line
                 let same_line = if i > 0 {
-                    !source[prev_end..span.start].contains('\n')
+                    !gap_has_newline(&source[prev_end..span.start])
                 } else {
                     false
                 };
@@ -1336,7 +1356,7 @@ fn build_argument_list_from_args<'src>(
                 let comment_text = span.text(source);
                 // Only attach to previous arg if on the same source line
                 let same_line = if i > 0 {
-                    !source[prev_end..span.start].contains('\n')
+                    !gap_has_newline(&source[prev_end..span.start])
                 } else {
                     false
                 };
