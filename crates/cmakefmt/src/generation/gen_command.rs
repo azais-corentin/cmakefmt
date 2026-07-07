@@ -1078,8 +1078,8 @@ fn arg_source_range(arg: &Argument) -> (usize, usize) {
 fn has_multiline_verbatim_argument(arguments: &[Argument], source: &str) -> bool {
     arguments.iter().any(|arg| match arg {
         Argument::Bracket(span) | Argument::Quoted(span) => {
-            let text = span.text(source);
-            text.contains('\n') || text.contains('\r')
+            // One SIMD scan for either byte instead of two full passes.
+            memchr::memchr2(b'\n', b'\r', span.text(source).as_bytes()).is_some()
         }
         Argument::ParenGroup { arguments } => has_multiline_verbatim_argument(arguments, source),
         Argument::Unquoted(_) | Argument::LineComment(_) | Argument::BracketComment(_) => false,
@@ -6030,7 +6030,7 @@ fn emit_values_with_genex_with_indent(
 
     // All token lines share one slab; `line_start` marks the open line's
     // first token. Flushing records a range instead of allocating a Vec.
-    let mut lines: Vec<ValueLayoutLine<'_>> = Vec::new();
+    let mut lines: Vec<ValueLayoutLine<'_>> = Vec::with_capacity(values.len());
     let mut token_slab: Vec<&FormattedArg> = Vec::with_capacity(values.len());
     let mut line_start = 0usize;
     let mut current_width = 0usize;
@@ -6219,6 +6219,8 @@ fn emit_values_with_genex_with_indent(
         &mut current_width,
     );
 
+    // `alignments` stays empty when alignArgGroups is off (the default); lines
+    // then fall back to one shared default instead of a per-line filled Vec.
     let alignments = if config.align_arg_groups {
         apply_arg_group_alignment(
             &lines,
@@ -6229,8 +6231,9 @@ fn emit_values_with_genex_with_indent(
             keyword_column_width,
         )
     } else {
-        vec![TokenLineAlignment::default(); lines.len()]
+        Vec::new()
     };
+    let default_alignment = TokenLineAlignment::default();
 
     for (line_idx, line) in lines.into_iter().enumerate() {
         match line {
@@ -6244,7 +6247,7 @@ fn emit_values_with_genex_with_indent(
             }
             ValueLayoutLine::Tokens { start, len } => {
                 let tokens = &token_slab[start..start + len];
-                let line_alignment = &alignments[line_idx];
+                let line_alignment = alignments.get(line_idx).unwrap_or(&default_alignment);
                 push_wrapped_newline(items, wrap_indent, continuation_indent, config);
                 for (token_index, token) in tokens.iter().enumerate() {
                     emit_arg(items, token, config);
